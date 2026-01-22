@@ -1,7 +1,7 @@
 import { useAuth } from '@/lib/AuthContext';
 import { useI18n } from '@/lib/i18n';
 import { supabase } from '@/lib/supabase';
-import * as FileSystem from 'expo-file-system';
+import * as FileSystem from 'expo-file-system/legacy';
 import * as ImagePicker from 'expo-image-picker';
 import * as Location from 'expo-location';
 import { useRouter } from 'expo-router';
@@ -20,6 +20,7 @@ import {
   TouchableOpacity,
   View,
 } from 'react-native';
+import MapView, { Marker } from 'react-native-maps';
 
 type Appointment = {
   id: string;
@@ -187,6 +188,18 @@ export default function DoctorDashboardScreen() {
   // Location Picker Modal
   const [showLocationPickerModal, setShowLocationPickerModal] = useState(false);
   const [locationSearchAddress, setLocationSearchAddress] = useState('');
+  const [mapRegion, setMapRegion] = useState<{
+    latitude: number;
+    longitude: number;
+    latitudeDelta: number;
+    longitudeDelta: number;
+  } | null>(null);
+  const [mapMarker, setMapMarker] = useState<{ latitude: number; longitude: number } | null>(null);
+  const [mapSelection, setMapSelection] = useState<{
+    latitude: number;
+    longitude: number;
+    address: string;
+  } | null>(null);
   
   // Chat State
   const [chatConversations, setChatConversations] = useState<any[]>([]);
@@ -429,10 +442,10 @@ export default function DoctorDashboardScreen() {
     }
 
     try {
+      const mediaTypes = ['images'] as any;
       const result = await ImagePicker.launchImageLibraryAsync({
-        mediaTypes: ImagePicker.MediaTypeOptions.Images,
-        allowsEditing: true,
-        aspect: [1, 1],
+        mediaTypes,
+        allowsEditing: false,
         quality: 0.8,
         allowsMultipleSelection: false,
       });
@@ -450,7 +463,8 @@ export default function DoctorDashboardScreen() {
         return;
       }
       console.log('Selected image URI:', selectedUri);
-      await uploadProfileImage(selectedUri);
+      setSelectedImageUri(selectedUri);
+      setShowAvatarConfirmModal(true);
     } catch (error) {
       console.error('Image picker error:', error);
       Alert.alert(t.common.error, isRTL ? 'حدث خطأ في اختيار الصورة' : 'Error selecting image');
@@ -488,7 +502,7 @@ export default function DoctorDashboardScreen() {
         .from('avatars')
         .upload(filePath, bytes, {
           contentType: 'image/jpeg',
-          upsert: true,
+          upsert: false,
         });
 
       if (uploadError) {
@@ -547,43 +561,91 @@ export default function DoctorDashboardScreen() {
 
   const openLocationPicker = async () => {
     setLocationSearchAddress('');
+    setMapSelection(null);
+    setMapMarker(null);
+    setMapRegion(null);
     setShowLocationPickerModal(true);
+    const fallbackLat = newClinic.latitude;
+    const fallbackLng = newClinic.longitude;
+    if (fallbackLat !== null && fallbackLng !== null) {
+      await setSelectionFromCoords(fallbackLat, fallbackLng);
+      return;
+    }
+    await getCurrentLocationAndSet(true);
+  };
+
+  const buildAddressString = (address: Location.LocationGeocodedAddress) =>
+    [address.street, address.district, address.city, address.region, address.country]
+      .filter(Boolean)
+      .join(', ');
+
+  const setSelectionFromCoords = async (latitude: number, longitude: number) => {
+    try {
+      const [address] = await Location.reverseGeocodeAsync({ latitude, longitude });
+      const addressString = address
+        ? buildAddressString(address)
+        : `${latitude.toFixed(5)}, ${longitude.toFixed(5)}`;
+      setMapSelection({ latitude, longitude, address: addressString });
+      setMapMarker({ latitude, longitude });
+      setMapRegion({
+        latitude,
+        longitude,
+        latitudeDelta: 0.01,
+        longitudeDelta: 0.01,
+      });
+    } catch (error) {
+      setMapSelection({ latitude, longitude, address: `${latitude.toFixed(5)}, ${longitude.toFixed(5)}` });
+      setMapMarker({ latitude, longitude });
+      setMapRegion({
+        latitude,
+        longitude,
+        latitudeDelta: 0.01,
+        longitudeDelta: 0.01,
+      });
+    }
+  };
+
+  const handleMapPress = (event: any) => {
+    const { latitude, longitude } = event.nativeEvent.coordinate;
+    setSelectionFromCoords(latitude, longitude);
+  };
+
+  const applySelectedLocation = () => {
+    if (!mapSelection) {
+      Alert.alert(t.common.error, 'Please choose a location on the map');
+      return;
+    }
+    setNewClinic(prev => ({
+      ...prev,
+      latitude: mapSelection.latitude,
+      longitude: mapSelection.longitude,
+      address: mapSelection.address,
+    }));
+    setShowLocationPickerModal(false);
+    Alert.alert(t.common.success, 'Location selected successfully');
   };
 
   const searchLocation = async () => {
     if (!locationSearchAddress.trim()) {
-      Alert.alert(t.common.error, isRTL ? 'أدخل عنواناً للبحث' : 'Please enter an address to search');
+      Alert.alert(t.common.error, isRTL ? 'Please enter an address to search' : 'Please enter an address to search');
       return;
     }
 
     try {
       const results = await Location.geocodeAsync(locationSearchAddress);
       if (results.length === 0) {
-        Alert.alert(t.common.error, isRTL ? 'لم يتم العثور على العنوان' : 'Address not found');
+        Alert.alert(t.common.error, isRTL ? 'Address not found' : 'Address not found');
         return;
       }
 
       const { latitude, longitude } = results[0];
-      const [address] = await Location.reverseGeocodeAsync({ latitude, longitude });
-
-      const addressString = [address.street, address.district, address.city, address.region, address.country]
-        .filter(Boolean).join(', ');
-
-      setNewClinic(prev => ({
-        ...prev,
-        latitude,
-        longitude,
-        address: addressString,
-      }));
-
-      setShowLocationPickerModal(false);
-      Alert.alert(t.common.success, isRTL ? 'تم تحديد الموقع بنجاح' : 'Location selected successfully');
+      await setSelectionFromCoords(latitude, longitude);
     } catch (error) {
-      Alert.alert(t.common.error, isRTL ? 'حدث خطأ في البحث عن الموقع' : 'Error searching for location');
+      Alert.alert(t.common.error, isRTL ? 'Error searching for location' : 'Error searching for location');
     }
   };
 
-  const getCurrentLocationAndSet = async () => {
+  const getCurrentLocationAndSet = async (keepOpen = false) => {
     try {
       const servicesEnabled = await Location.hasServicesEnabledAsync();
       if (!servicesEnabled) {
@@ -598,23 +660,12 @@ export default function DoctorDashboardScreen() {
       }
 
       const location = await Location.getCurrentPositionAsync({});
-      const [address] = await Location.reverseGeocodeAsync({
-        latitude: location.coords.latitude,
-        longitude: location.coords.longitude,
-      });
+      await setSelectionFromCoords(location.coords.latitude, location.coords.longitude);
 
-      const addressString = [address.street, address.district, address.city, address.region, address.country]
-        .filter(Boolean).join(', ');
-
-      setNewClinic(prev => ({
-        ...prev,
-        latitude: location.coords.latitude,
-        longitude: location.coords.longitude,
-        address: addressString,
-      }));
-
-      setShowLocationPickerModal(false);
-      Alert.alert(t.common.success, isRTL ? 'تم تحديد الموقع الحالي' : 'Current location set successfully');
+      if (!keepOpen) {
+        setShowLocationPickerModal(false);
+        Alert.alert(t.common.success, isRTL ? 'Current location set successfully' : 'Current location set successfully');
+      }
     } catch (error) {
       Alert.alert(t.common.error, t.doctorApp.locationError);
     }
@@ -1793,6 +1844,43 @@ export default function DoctorDashboardScreen() {
         <View style={{ height: 100 }} />
       </ScrollView>
 
+      {/* Avatar Confirm Modal */}
+      <Modal visible={showAvatarConfirmModal} transparent animationType="slide">
+        <View style={styles.modalOverlay}>
+          <View style={styles.avatarConfirmContent}>
+            <Text style={styles.modalTitle}>Confirm Photo</Text>
+            {selectedImageUri ? (
+              <Image source={{ uri: selectedImageUri }} style={styles.previewImage} />
+            ) : (
+              <Text style={styles.emptyText}>{t.doctorDashboard.failedReadImage}</Text>
+            )}
+            <View style={styles.modalButtons}>
+              <TouchableOpacity
+                style={styles.modalButtonSecondary}
+                onPress={() => {
+                  setShowAvatarConfirmModal(false);
+                  setSelectedImageUri(null);
+                }}
+                disabled={uploadingImage}
+              >
+                <Text style={styles.modalButtonSecondaryText}>{t.common.cancel}</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[styles.modalButtonPrimary, uploadingImage && styles.buttonDisabled]}
+                onPress={() => {
+                  if (selectedImageUri) uploadProfileImage(selectedImageUri);
+                }}
+                disabled={uploadingImage || !selectedImageUri}
+              >
+                {uploadingImage ? <ActivityIndicator color="white" size="small" /> : (
+                  <Text style={styles.modalButtonPrimaryText}>{t.common.confirm}</Text>
+                )}
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
+
       {/* Add Clinic Modal */}
       <Modal visible={showAddClinicModal} transparent animationType="slide">
         <View style={styles.modalOverlay}>
@@ -2221,30 +2309,48 @@ export default function DoctorDashboardScreen() {
                 placeholderTextColor="#9CA3AF"
                 value={locationSearchAddress}
                 onChangeText={setLocationSearchAddress}
+                returnKeyType="search"
+                onSubmitEditing={searchLocation}
               />
             </View>
 
-            <View style={styles.modalButtons}>
-              <TouchableOpacity 
-                style={styles.modalButtonSecondary}
-                onPress={getCurrentLocationAndSet}
-              >
-                <Text style={styles.modalButtonSecondaryText}>
-                  {isRTL ? '📍 الموقع الحالي' : '📍 Current Location'}
-                </Text>
-              </TouchableOpacity>
-              <TouchableOpacity 
-                style={styles.modalButtonPrimary}
-                onPress={searchLocation}
-              >
-                <Text style={styles.modalButtonPrimaryText}>
-                  {isRTL ? '🔍 بحث' : '🔍 Search'}
-                </Text>
-              </TouchableOpacity>
+            <View style={styles.mapContainer}>
+              {mapRegion ? (
+                <MapView
+                  style={styles.mapView}
+                  region={mapRegion}
+                  onPress={handleMapPress}
+                >
+                  {mapMarker && <Marker coordinate={mapMarker} />}
+                </MapView>
+              ) : (
+                <View style={styles.mapPlaceholder}>
+                  <ActivityIndicator size="small" color="#2563EB" />
+                  <Text style={styles.helperText}>Loading map...</Text>
+                </View>
+              )}
             </View>
+            {mapSelection?.address && (
+              <Text style={styles.helperText}>{mapSelection.address}</Text>
+            )}
 
+
+            <TouchableOpacity
+              style={[styles.modalButtonSecondary, styles.fullWidthButton]}
+              onPress={() => getCurrentLocationAndSet(true)}
+            >
+              <Text style={styles.modalButtonSecondaryText}>Current Location</Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              style={[styles.modalButtonPrimary, styles.fullWidthButton, !mapSelection && styles.buttonDisabled]}
+              onPress={applySelectedLocation}
+              disabled={!mapSelection}
+            >
+              <Text style={styles.modalButtonPrimaryText}>Set Location</Text>
+            </TouchableOpacity>
             <TouchableOpacity 
-              style={[styles.modalButtonSecondary, { marginTop: 10 }]}
+              style={[styles.modalButtonSecondary, styles.fullWidthButton]}
               onPress={() => setShowLocationPickerModal(false)}
             >
               <Text style={styles.modalButtonSecondaryText}>{t.common.cancel}</Text>
@@ -2403,6 +2509,10 @@ const styles = StyleSheet.create({
   rescheduleOldDate: { fontSize: 14, color: '#6B7280', marginTop: 5 },
 
   helperText: { fontSize: 12, color: '#6B7280', marginTop: 6 },
+  mapContainer: { height: 200, borderRadius: 12, overflow: 'hidden', borderWidth: 1, borderColor: '#E5E7EB', marginTop: 10 },
+  mapView: { flex: 1 },
+  mapPlaceholder: { height: 200, alignItems: 'center', justifyContent: 'center', backgroundColor: '#F9FAFB' },
+  fullWidthButton: { marginTop: 10, alignSelf: 'stretch', width: '100%', flex: 0 },
   scheduleInfoText: { fontSize: 13, color: '#6B7280', marginTop: 6 },
   sectionSubtitle: { fontSize: 14, fontWeight: '600', color: '#1F2937', marginBottom: 8 },
   scheduleSection: { marginBottom: 15 },

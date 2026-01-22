@@ -72,7 +72,6 @@ export default function DoctorProfileScreen() {
   };
 
   const handleBookAppointment = () => {
- = () => {
     router.push({
       pathname: '/booking',
       params: {

@@ -29,7 +29,6 @@ type Appointment = {
   specialty_icon: string;
   clinic_name: string;
   clinic_address: string;
-          has_review: reviewsMap.has(apt.id),
   has_review: boolean;
 };
 
@@ -315,6 +314,84 @@ export default function AppointmentsTab() {
     }
   });
 
+  const renderAppointmentsList = () => {
+    let lastMonth = '';
+    return filteredAppointments.map((apt) => {
+      const monthLabel = getMonthLabel(apt.appointment_date);
+      const showMonth = monthLabel !== lastMonth;
+      lastMonth = monthLabel;
+      return (
+        <View key={apt.id}>
+          {showMonth && (
+            <Text style={[styles.monthHeader, isRTL && styles.textRight]}>
+              {monthLabel}
+            </Text>
+          )}
+          <View style={styles.appointmentCard}>
+            <View style={[styles.appointmentHeader, isRTL && styles.rowReverse]}>
+              <View style={styles.doctorIconContainer}>
+                <Text style={styles.doctorIcon}>{apt.specialty_icon}</Text>
+              </View>
+              <View style={[styles.appointmentInfo, isRTL && styles.alignRight]}>
+                <Text style={[styles.doctorName, isRTL && styles.textRight]}>
+                  {isRTL ? apt.doctor_name_ar : apt.doctor_name}
+                </Text>
+                <Text style={[styles.specialty, isRTL && styles.textRight]}>
+                  {isRTL ? apt.specialty_ar : apt.specialty}
+                </Text>
+              </View>
+              <View style={[styles.statusBadge, { backgroundColor: getStatusStyle(apt.status).bg }]}>
+                <Text style={[styles.statusText, { color: getStatusStyle(apt.status).text }]}>
+                  {getStatusText(apt.status)}
+                </Text>
+              </View>
+            </View>
+
+            <View style={[styles.appointmentDetails, isRTL && styles.rowReverse]}>
+              <View style={[styles.detailItem, isRTL && styles.rowReverse]}>
+                <Text style={styles.detailIcon}>?Y".</Text>
+                <Text style={styles.detailText}>{formatDate(apt.appointment_date)}</Text>
+              </View>
+              <View style={[styles.detailItem, isRTL && styles.rowReverse]}>
+                <Text style={styles.detailIcon}>?Y?</Text>
+                <Text style={styles.detailText}>{formatTime(apt.appointment_time)}</Text>
+              </View>
+            </View>
+
+            <View style={[styles.clinicInfo, isRTL && styles.rowReverse]}>
+              <Text style={styles.clinicIcon}>?Y??</Text>
+              <Text style={[styles.clinicName, isRTL && styles.textRight]}>{apt.clinic_name}</Text>
+            </View>
+
+            {(apt.status === 'pending' || apt.status === 'confirmed') && (
+              <TouchableOpacity 
+                style={styles.cancelButton}
+                onPress={() => handleCancelAppointment(apt.id)}
+              >
+                <Text style={styles.cancelButtonText}>{t.appointments.cancelAppointment}</Text>
+              </TouchableOpacity>
+            )}
+
+            {(apt.status === 'confirmed' || apt.status === 'completed') && !apt.has_review && (
+              <TouchableOpacity
+                style={styles.reviewButton}
+                onPress={() => openReviewModal(apt)}
+              >
+                <Text style={styles.reviewButtonText}>{t.appointments.leaveReview}</Text>
+              </TouchableOpacity>
+            )}
+
+            {(apt.status === 'confirmed' || apt.status === 'completed') && apt.has_review && (
+              <View style={styles.reviewedBadge}>
+                <Text style={styles.reviewedText}>{t.appointments.reviewed}</Text>
+              </View>
+            )}
+          </View>
+        </View>
+      );
+    });
+  };
+
   if (loading) {
     return (
       <View style={[styles.container, styles.centered]}>
@@ -377,83 +454,7 @@ export default function AppointmentsTab() {
             )}
           </View>
         ) : (
-          (() => {
-            let lastMonth = '';
-            return filteredAppointments.map((apt) => {
-              const monthLabel = getMonthLabel(apt.appointment_date);
-              const showMonth = monthLabel !== lastMonth;
-              lastMonth = monthLabel;
-              return (
-                <View key={apt.id}>
-                  {showMonth && (
-                    <Text style={[styles.monthHeader, isRTL && styles.textRight]}>
-                      {monthLabel}
-                    </Text>
-                  )}
-                  <View style={styles.appointmentCard}>
-                    <View style={[styles.appointmentHeader, isRTL && styles.rowReverse]}>
-                      <View style={styles.doctorIconContainer}>
-                        <Text style={styles.doctorIcon}>{apt.specialty_icon}</Text>
-                      </View>
-                      <View style={[styles.appointmentInfo, isRTL && styles.alignRight]}>
-                        <Text style={[styles.doctorName, isRTL && styles.textRight]}>
-                          {isRTL ? apt.doctor_name_ar : apt.doctor_name}
-                        </Text>
-                        <Text style={[styles.specialty, isRTL && styles.textRight]}>
-                          {isRTL ? apt.specialty_ar : apt.specialty}
-                        </Text>
-                      </View>
-                      <View style={[styles.statusBadge, { backgroundColor: getStatusStyle(apt.status).bg }]}>
-                        <Text style={[styles.statusText, { color: getStatusStyle(apt.status).text }]}>
-                          {getStatusText(apt.status)}
-                        </Text>
-                      </View>
-                    </View>
-
-                    <View style={[styles.appointmentDetails, isRTL && styles.rowReverse]}>
-                      <View style={[styles.detailItem, isRTL && styles.rowReverse]}>
-                        <Text style={styles.detailIcon}>?Y".</Text>
-                        <Text style={styles.detailText}>{formatDate(apt.appointment_date)}</Text>
-                      </View>
-                      <View style={[styles.detailItem, isRTL && styles.rowReverse]}>
-                        <Text style={styles.detailIcon}>?Y?</Text>
-                        <Text style={styles.detailText}>{formatTime(apt.appointment_time)}</Text>
-                      </View>
-                    </View>
-
-                    <View style={[styles.clinicInfo, isRTL && styles.rowReverse]}>
-                      <Text style={styles.clinicIcon}>?Y??</Text>
-                      <Text style={[styles.clinicName, isRTL && styles.textRight]}>{apt.clinic_name}</Text>
-                    </View>
-
-                    {(apt.status === 'pending' || apt.status === 'confirmed') && (
-                      <TouchableOpacity 
-                        style={styles.cancelButton}
-                        onPress={() => handleCancelAppointment(apt.id)}
-                      >
-                        <Text style={styles.cancelButtonText}>{t.appointments.cancelAppointment}</Text>
-                      </TouchableOpacity>
-                    )}
-
-                    {(apt.status === 'confirmed' || apt.status === 'completed') && !apt.has_review && (
-                      <TouchableOpacity
-                        style={styles.reviewButton}
-                        onPress={() => openReviewModal(apt)}
-                      >
-                        <Text style={styles.reviewButtonText}>{t.appointments.leaveReview}</Text>
-                      </TouchableOpacity>
-                    )}
-
-                    {(apt.status === 'confirmed' || apt.status === 'completed') && apt.has_review && (
-                      <View style={styles.reviewedBadge}>
-                        <Text style={styles.reviewedText}>{t.appointments.reviewed}</Text>
-                      </View>
-                    )}
-                  </View>
-                </View>
-              );
-            });
-          })()        ))
+          renderAppointmentsList()
         )}
 
         {activeTab === 'past' && filteredAppointments.length > 0 && (
