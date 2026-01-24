@@ -21,6 +21,7 @@ import {
   View,
 } from 'react-native';
 import MapView, { Marker } from 'react-native-maps';
+import { Ionicons } from '@expo/vector-icons';
 
 type Appointment = {
   id: string;
@@ -61,6 +62,7 @@ type Profile = {
   full_name: string;
   full_name_ar: string;
   avatar_url: string | null;
+  phone?: string | null;
 };
 
 type BlockedSlot = {
@@ -124,7 +126,7 @@ const DAY_LABELS: Record<DayKey, string> = {
 export default function DoctorDashboardScreen() {
   const router = useRouter();
   const { user, signOut } = useAuth();
-  const { t, isRTL } = useI18n();
+  const { t, isRTL, language, setLanguage } = useI18n();
   
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
@@ -161,11 +163,27 @@ export default function DoctorDashboardScreen() {
   const [holidayDate, setHolidayDate] = useState<string | null>(null);
   const [holidayReason, setHolidayReason] = useState('');
   const [savingHoliday, setSavingHoliday] = useState(false);
+  const [showEditClinicModal, setShowEditClinicModal] = useState(false);
+  const [editClinicId, setEditClinicId] = useState<string | null>(null);
+  const [editClinicDraft, setEditClinicDraft] = useState({
+    clinic_name: '',
+    address: '',
+    consultation_fee: '',
+    latitude: null as number | null,
+    longitude: null as number | null,
+  });
+  const [savingClinicEdit, setSavingClinicEdit] = useState(false);
   
   // Block Time Modal
   const [showBlockTimeModal, setShowBlockTimeModal] = useState(false);
   const [selectedBlockDate, setSelectedBlockDate] = useState<string | null>(null);
   const [selectedBlockSlots, setSelectedBlockSlots] = useState<string[]>([]);
+  
+  // Edit Profile Modal
+  const [showEditProfileModal, setShowEditProfileModal] = useState(false);
+  const [editName, setEditName] = useState('');
+  const [editNameAr, setEditNameAr] = useState('');
+  const [savingProfile, setSavingProfile] = useState(false);
   const [selectedBlockClinicId, setSelectedBlockClinicId] = useState<string | null>(null);
   const [blockReason, setBlockReason] = useState('');
   const [blockingSlots, setBlockingSlots] = useState(false);
@@ -187,6 +205,7 @@ export default function DoctorDashboardScreen() {
   
   // Location Picker Modal
   const [showLocationPickerModal, setShowLocationPickerModal] = useState(false);
+  const [locationPickerTarget, setLocationPickerTarget] = useState<'new' | 'edit'>('new');
   const [locationSearchAddress, setLocationSearchAddress] = useState('');
   const [mapRegion, setMapRegion] = useState<{
     latitude: number;
@@ -243,7 +262,7 @@ export default function DoctorDashboardScreen() {
       // Fetch profile
       const { data: profileData, error: profileError } = await supabase
         .from('profiles')
-        .select('full_name, full_name_ar, avatar_url')
+        .select('full_name, full_name_ar, avatar_url, phone')
         .eq('id', user.id)
         .single();
 
@@ -559,14 +578,18 @@ export default function DoctorDashboardScreen() {
     }
   };
 
-  const openLocationPicker = async () => {
+  const openLocationPicker = async (
+    target: 'new' | 'edit',
+    fallback?: { latitude: number | null; longitude: number | null }
+  ) => {
+    setLocationPickerTarget(target);
     setLocationSearchAddress('');
     setMapSelection(null);
     setMapMarker(null);
     setMapRegion(null);
     setShowLocationPickerModal(true);
-    const fallbackLat = newClinic.latitude;
-    const fallbackLng = newClinic.longitude;
+    const fallbackLat = fallback?.latitude ?? null;
+    const fallbackLng = fallback?.longitude ?? null;
     if (fallbackLat !== null && fallbackLng !== null) {
       await setSelectionFromCoords(fallbackLat, fallbackLng);
       return;
@@ -615,12 +638,21 @@ export default function DoctorDashboardScreen() {
       Alert.alert(t.common.error, 'Please choose a location on the map');
       return;
     }
-    setNewClinic(prev => ({
-      ...prev,
-      latitude: mapSelection.latitude,
-      longitude: mapSelection.longitude,
-      address: mapSelection.address,
-    }));
+    if (locationPickerTarget === 'edit') {
+      setEditClinicDraft(prev => ({
+        ...prev,
+        latitude: mapSelection.latitude,
+        longitude: mapSelection.longitude,
+        address: mapSelection.address,
+      }));
+    } else {
+      setNewClinic(prev => ({
+        ...prev,
+        latitude: mapSelection.latitude,
+        longitude: mapSelection.longitude,
+        address: mapSelection.address,
+      }));
+    }
     setShowLocationPickerModal(false);
     Alert.alert(t.common.success, 'Location selected successfully');
   };
@@ -867,6 +899,57 @@ export default function DoctorDashboardScreen() {
       setShowAddClinicModal(false);
       setNewClinic({ clinic_name: '', address: '', consultation_fee: '', latitude: null, longitude: null });
       fetchData();
+    }
+  };
+
+  const openEditClinicModal = (clinic: Clinic) => {
+    setEditClinicId(clinic.id);
+    setEditClinicDraft({
+      clinic_name: clinic.clinic_name || '',
+      address: clinic.address || '',
+      consultation_fee: clinic.consultation_fee || '',
+      latitude: clinic.latitude ?? null,
+      longitude: clinic.longitude ?? null,
+    });
+    setShowEditClinicModal(true);
+  };
+
+  const handleSaveClinicEdit = async () => {
+    if (!editClinicId) return;
+    setSavingClinicEdit(true);
+    try {
+      const { error } = await supabase
+        .from('clinics')
+        .update({
+          clinic_name: editClinicDraft.clinic_name.trim(),
+          address: editClinicDraft.address.trim(),
+          consultation_fee: editClinicDraft.consultation_fee.trim() || null,
+          latitude: editClinicDraft.latitude,
+          longitude: editClinicDraft.longitude,
+        })
+        .eq('id', editClinicId);
+
+      if (error) {
+        Alert.alert(t.common.error, error.message);
+      } else {
+        setClinics(prev =>
+          prev.map(c =>
+            c.id === editClinicId
+              ? {
+                  ...c,
+                  clinic_name: editClinicDraft.clinic_name.trim(),
+                  address: editClinicDraft.address.trim(),
+                  consultation_fee: editClinicDraft.consultation_fee.trim(),
+                  latitude: editClinicDraft.latitude ?? c.latitude,
+                  longitude: editClinicDraft.longitude ?? c.longitude,
+                }
+              : c
+          )
+        );
+        setShowEditClinicModal(false);
+      }
+    } finally {
+      setSavingClinicEdit(false);
     }
   };
 
@@ -1295,6 +1378,58 @@ export default function DoctorDashboardScreen() {
     return baseDate.toLocaleDateString(isRTL ? 'ar-SA' : 'en-US', { weekday: 'short' });
   };
 
+  const getDoctorDisplayName = (isRTL: boolean, profile: Profile | null, fallback: string) => {
+    const arabicName = profile?.full_name_ar?.trim();
+    const englishName = profile?.full_name?.trim();
+    if (isRTL) {
+      return arabicName || englishName || fallback;
+    }
+    return englishName || arabicName || fallback;
+  };
+
+  const getDoctorPhone = (profile: Profile | null, fallback: string) => {
+    return profile?.phone?.trim() || fallback;
+  };
+
+  const handleOpenEditProfileModal = () => {
+    setEditName(profile?.full_name || '');
+    setEditNameAr(profile?.full_name_ar || '');
+    setShowEditProfileModal(true);
+  };
+
+  const handleSaveProfile = async () => {
+    if (!user || !editName.trim()) {
+      Alert.alert(t.common.error, 'Name is required');
+      return;
+    }
+
+    setSavingProfile(true);
+    try {
+      const { error } = await supabase
+        .from('profiles')
+        .update({
+          full_name: editName.trim(),
+          full_name_ar: editNameAr.trim() || null,
+        })
+        .eq('id', user.id);
+
+      if (error) throw error;
+
+      setProfile({
+        ...profile!,
+        full_name: editName.trim(),
+        full_name_ar: editNameAr.trim(),
+      });
+
+      setShowEditProfileModal(false);
+      Alert.alert(t.common.success, 'Profile updated successfully');
+    } catch (error: any) {
+      Alert.alert(t.common.error, error.message);
+    } finally {
+      setSavingProfile(false);
+    }
+  };
+
   const renderClinicWorkingHours = (clinic: Clinic) => {
     const schedule = clinic.schedule?.default;
     const weeklyOff = clinic.schedule?.weekly_off || [];
@@ -1350,13 +1485,34 @@ export default function DoctorDashboardScreen() {
     <View style={styles.container}>
       <StatusBar style="light" />
       
-      {/* Header */}
+                  {/* Header */}
       <View style={styles.header}>
+        <View style={styles.headerTopRow}>
+          <View style={styles.languageToggleRow}>
+            <TouchableOpacity
+              style={styles.languageButton}
+              onPress={() => setLanguage(language === 'en' ? 'ar' : 'en')}
+              accessibilityLabel="Toggle Language"
+            >
+              <Text style={styles.languageIcon}>{language === 'en' ? 'AR' : 'EN'}</Text>
+            </TouchableOpacity>
+          </View>
+          <TouchableOpacity
+            style={styles.signOutIconButton}
+            onPress={handleSignOut}
+            accessibilityLabel={t.profile.signOut}
+          >
+            <Ionicons name="log-out-outline" size={18} color="#fff" />
+          </TouchableOpacity>
+        </View>
         <TouchableOpacity 
           style={styles.switchButton}
           onPress={() => router.replace('/(patient-tabs)/home')}
         >
-          <Text style={styles.switchButtonText}>👤 {t.doctorDashboard.patientMode}</Text>
+          <View style={styles.switchButtonContent}>
+            <Ionicons name="person-outline" size={14} color="#fff" />
+            <Text style={styles.switchButtonText}>{t.doctorDashboard.patientMode}</Text>
+          </View>
         </TouchableOpacity>
 
         <Text style={styles.greeting}>{t.doctorDashboard.title}</Text>
@@ -1369,7 +1525,7 @@ export default function DoctorDashboardScreen() {
 
         {!doctorData?.is_approved && (
           <View style={styles.pendingBanner}>
-            <Text style={styles.pendingBannerText}>⏳ {t.doctorDashboard.accountPendingApproval}</Text>
+            <Text style={styles.pendingBannerText}>⚠️ {t.doctorDashboard.accountPendingApproval}</Text>
           </View>
         )}
 
@@ -1383,17 +1539,19 @@ export default function DoctorDashboardScreen() {
           </View>
           <View style={styles.statCard}>
             <Text style={styles.statNumber}>{appointments.filter(a => a.status === 'pending').length}</Text>
-            <Text style={styles.statLabel}>{isRTL ? 'معلق' : 'Pending'}</Text>
+            <Text style={styles.statLabel}>{t.doctorDashboard.pendingAppointments}</Text>
           </View>
           <View style={styles.statCard}>
             <Text style={styles.statNumber}>{clinics.filter(c => c.is_active).length}</Text>
-            <Text style={styles.statLabel}>{isRTL ? 'عيادات' : 'Clinics'}</Text>
+            <Text style={styles.statLabel}>{t.doctorDashboard.activeClinics}</Text>
           </View>
         </View>
       </View>
 
       {/* Tab Switcher */}
       <View style={styles.tabContainer}>
+
+
         <TouchableOpacity 
           style={[styles.tab, activeTab === 'appointments' && styles.tabActive]}
           onPress={() => setActiveTab('appointments')}
@@ -1602,11 +1760,22 @@ export default function DoctorDashboardScreen() {
                 <View key={holiday.id} style={styles.blockedSlotCard}>
                   <View style={[styles.blockedSlotInfo, isRTL && styles.rowReverse]}>
                     <View>
-                      <Text style={styles.blockedDate}>?? {formatDate(holiday.holiday_date)}</Text>
+                      <View style={styles.inlineIconRow}>
+                        <Ionicons name="calendar-outline" size={14} color="#6B7280" />
+                        <Text style={styles.blockedDate}>{formatDate(holiday.holiday_date)}</Text>
+                      </View>
                       {getClinicName(holiday.clinic_id) && (
-                        <Text style={styles.blockedReason}>?? {getClinicName(holiday.clinic_id)}</Text>
+                        <View style={styles.inlineIconRow}>
+                          <Ionicons name="business-outline" size={14} color="#9CA3AF" />
+                          <Text style={styles.blockedReason}>{getClinicName(holiday.clinic_id)}</Text>
+                        </View>
                       )}
-                      {holiday.reason && <Text style={styles.blockedReason}>?? {holiday.reason}</Text>}
+                      {holiday.reason && (
+                        <View style={styles.inlineIconRow}>
+                          <Ionicons name="information-circle-outline" size={14} color="#9CA3AF" />
+                          <Text style={styles.blockedReason}>{holiday.reason}</Text>
+                        </View>
+                      )}
                     </View>
                     <TouchableOpacity style={styles.unblockBtn} onPress={() => handleRemoveHoliday(holiday.id)}>
                       <Text style={styles.unblockBtnText}>{t.doctorDashboard.removeHoliday}</Text>
@@ -1637,7 +1806,12 @@ export default function DoctorDashboardScreen() {
               </View>
             ) : (
               clinics.map((clinic) => (
-                <View key={clinic.id} style={styles.clinicCard}>
+                <TouchableOpacity
+                  key={clinic.id}
+                  style={styles.clinicCard}
+                  activeOpacity={0.9}
+                  onPress={() => openEditClinicModal(clinic)}
+                >
                   <View style={[styles.clinicHeader, isRTL && styles.rowReverse]}>
                     <Text style={[styles.clinicName, isRTL && styles.textRight]}>{clinic.clinic_name}</Text>
                     <View style={[styles.statusBadge, clinic.is_active ? styles.activeBadge : styles.inactiveBadge]}>
@@ -1650,23 +1824,32 @@ export default function DoctorDashboardScreen() {
                   {clinic.consultation_fee && (
                     <Text style={styles.clinicFee}>💰 {clinic.consultation_fee}</Text>
                   )}
-                  {clinic.is_active && (
-                    <>
-                      <TouchableOpacity 
-                        style={styles.scheduleBtn}
-                        onPress={() => openScheduleModal(clinic)}
-                      >
-                        <Text style={styles.scheduleBtnText}>{t.doctorDashboard.scheduleClinic}</Text>
-                      </TouchableOpacity>
-                      <TouchableOpacity 
-                        style={styles.deactivateBtn}
-                        onPress={() => handleDeactivateClinic(clinic.id)}
-                      >
-                        <Text style={styles.deactivateBtnText}>{t.doctorDashboard.deactivateClinic}</Text>
-                      </TouchableOpacity>
-                    </>
-                  )}
-                </View>
+                  <View style={[styles.clinicActionRow, isRTL && styles.rowReverse]}>
+                    <TouchableOpacity
+                      style={styles.clinicIconButton}
+                      onPress={() => openEditClinicModal(clinic)}
+                      accessibilityLabel={t.common.edit}
+                    >
+                      <Ionicons name="create-outline" size={16} color="#1E40AF" />
+                    </TouchableOpacity>
+                    <TouchableOpacity
+                      style={[styles.clinicIconButton, !clinic.is_active && styles.clinicIconDisabled]}
+                      onPress={() => openScheduleModal(clinic)}
+                      disabled={!clinic.is_active}
+                      accessibilityLabel={t.doctorDashboard.scheduleClinic}
+                    >
+                      <Ionicons name="calendar-outline" size={16} color={clinic.is_active ? '#1E40AF' : '#9CA3AF'} />
+                    </TouchableOpacity>
+                    <TouchableOpacity
+                      style={[styles.clinicIconButton, styles.clinicIconDanger, !clinic.is_active && styles.clinicIconDisabled]}
+                      onPress={() => handleDeactivateClinic(clinic.id)}
+                      disabled={!clinic.is_active}
+                      accessibilityLabel={t.doctorDashboard.deactivateClinic}
+                    >
+                      <Ionicons name="power-outline" size={16} color={clinic.is_active ? '#DC2626' : '#9CA3AF'} />
+                    </TouchableOpacity>
+                  </View>
+                </TouchableOpacity>
               ))
             )}
           </>
@@ -1832,6 +2015,38 @@ export default function DoctorDashboardScreen() {
               </View>
             </View>
 
+            <View style={[styles.infoCard, isRTL && styles.alignRight]}>
+              <Text style={[styles.infoTitle, isRTL && styles.textRight]}>{t.profile.personalInfo}</Text>
+
+              <TouchableOpacity style={styles.infoRow} onPress={handleOpenEditProfileModal}>
+                <Text style={styles.infoLabel}>{t.profile.fullNameLabel}</Text>
+                <View style={styles.infoValueContainer}>
+                  <Text style={[styles.infoValue, isRTL && styles.textRight]}>
+                    {getDoctorDisplayName(isRTL, profile, t.profile.notProvided)}
+                  </Text>
+                  <Text style={styles.editIcon}>✏️</Text>
+                </View>
+              </TouchableOpacity>
+
+              <View style={styles.infoDivider} />
+
+              <View style={styles.infoRow}>
+                <Text style={styles.infoLabel}>{t.profile.emailLabel}</Text>
+                <Text style={[styles.infoValue, isRTL && styles.textRight]}>
+                  {user?.email || t.profile.notProvided}
+                </Text>
+              </View>
+
+              <View style={styles.infoDivider} />
+
+              <View style={styles.infoRow}>
+                <Text style={styles.infoLabel}>{t.profile.phoneLabel}</Text>
+                <Text style={[styles.infoValue, isRTL && styles.textRight]}>
+                  {getDoctorPhone(profile, t.profile.notProvided)}
+                </Text>
+              </View>
+            </View>
+
             <TouchableOpacity style={styles.scheduleBtn} onPress={openDoctorSocialModal}>
               <Text style={styles.scheduleBtnText}>Social Media</Text>
             </TouchableOpacity>
@@ -1900,7 +2115,10 @@ export default function DoctorDashboardScreen() {
 
             <View style={styles.inputGroup}>
               <Text style={styles.label}>{t.doctorApp.clinicLocation} *</Text>
-              <TouchableOpacity style={styles.locationButton} onPress={openLocationPicker}>
+              <TouchableOpacity
+                style={styles.locationButton}
+                onPress={() => openLocationPicker('new', { latitude: newClinic.latitude, longitude: newClinic.longitude })}
+              >
                 <Text style={styles.locationIcon}>📍</Text>
                 <Text style={newClinic.address ? styles.locationText : styles.locationPlaceholder}>
                   {newClinic.address || t.doctorApp.selectLocation}
@@ -1929,6 +2147,64 @@ export default function DoctorDashboardScreen() {
                 disabled={addingClinic}
               >
                 {addingClinic ? <ActivityIndicator color="white" size="small" /> : (
+                  <Text style={styles.modalButtonPrimaryText}>{t.common.save}</Text>
+                )}
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
+
+      {/* Edit Clinic Modal */}
+      <Modal visible={showEditClinicModal} transparent animationType="slide">
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalContent}>
+            <Text style={styles.modalTitle}>{t.common.edit}</Text>
+
+            <View style={styles.inputGroup}>
+              <Text style={styles.label}>{t.doctorApp.clinicName}</Text>
+              <TextInput
+                style={styles.input}
+                placeholder={t.doctorApp.clinicNamePlaceholder}
+                placeholderTextColor="#9CA3AF"
+                value={editClinicDraft.clinic_name}
+                onChangeText={(text) => setEditClinicDraft(prev => ({ ...prev, clinic_name: text }))}
+              />
+            </View>
+
+            <View style={styles.inputGroup}>
+              <Text style={styles.label}>{t.doctorApp.clinicLocation}</Text>
+              <TouchableOpacity
+                style={styles.locationButton}
+                onPress={() => openLocationPicker('edit', { latitude: editClinicDraft.latitude, longitude: editClinicDraft.longitude })}
+              >
+                <Text style={editClinicDraft.address ? styles.locationText : styles.locationPlaceholder}>
+                  {editClinicDraft.address || t.doctorApp.selectLocation}
+                </Text>
+              </TouchableOpacity>
+            </View>
+
+            <View style={styles.inputGroup}>
+              <Text style={styles.label}>{t.doctorApp.consultationFee}</Text>
+              <TextInput
+                style={styles.input}
+                placeholder={t.doctorApp.feePlaceholder}
+                placeholderTextColor="#9CA3AF"
+                value={editClinicDraft.consultation_fee}
+                onChangeText={(text) => setEditClinicDraft(prev => ({ ...prev, consultation_fee: text }))}
+              />
+            </View>
+
+            <View style={styles.modalButtons}>
+              <TouchableOpacity style={styles.modalButtonSecondary} onPress={() => setShowEditClinicModal(false)}>
+                <Text style={styles.modalButtonSecondaryText}>{t.common.cancel}</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[styles.modalButtonPrimary, savingClinicEdit && styles.buttonDisabled]}
+                onPress={handleSaveClinicEdit}
+                disabled={savingClinicEdit}
+              >
+                {savingClinicEdit ? <ActivityIndicator color="white" size="small" /> : (
                   <Text style={styles.modalButtonPrimaryText}>{t.common.save}</Text>
                 )}
               </TouchableOpacity>
@@ -2155,6 +2431,59 @@ export default function DoctorDashboardScreen() {
           </View>
         </View>
       </Modal>
+
+      {/* Edit Profile Modal */}
+      <Modal visible={showEditProfileModal} transparent animationType="fade" onRequestClose={() => setShowEditProfileModal(false)}>
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalContent}>
+            <Text style={[styles.modalTitle, isRTL && styles.textRight]}>Edit Profile</Text>
+            
+            <View style={styles.inputGroup}>
+              <Text style={[styles.label, isRTL && styles.textRight]}>Full Name (English)</Text>
+              <TextInput
+                style={[styles.input, isRTL && styles.textRight]}
+                value={editName}
+                onChangeText={setEditName}
+                placeholder="Enter your full name"
+                placeholderTextColor="#9CA3AF"
+              />
+            </View>
+
+            <View style={styles.inputGroup}>
+              <Text style={[styles.label, isRTL && styles.textRight]}>Full Name (Arabic)</Text>
+              <TextInput
+                style={[styles.input, isRTL && styles.textRight]}
+                value={editNameAr}
+                onChangeText={setEditNameAr}
+                placeholder="أدخل اسمك الكامل"
+                placeholderTextColor="#9CA3AF"
+              />
+            </View>
+
+            <View style={styles.modalButtons}>
+              <TouchableOpacity
+                style={styles.modalButtonSecondary}
+                onPress={() => setShowEditProfileModal(false)}
+                disabled={savingProfile}
+              >
+                <Text style={styles.modalButtonSecondaryText}>{t.common.cancel}</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[styles.modalButtonPrimary, savingProfile && styles.buttonDisabled]}
+                onPress={handleSaveProfile}
+                disabled={savingProfile}
+              >
+                {savingProfile ? (
+                  <ActivityIndicator color="white" />
+                ) : (
+                  <Text style={styles.modalButtonPrimaryText}>{t.common.save}</Text>
+                )}
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
+
       <Modal visible={showBlockTimeModal} transparent animationType="slide">
         <View style={styles.modalOverlay}>
           <View style={[styles.modalContent, { maxHeight: '80%' }]}>
@@ -2335,26 +2664,36 @@ export default function DoctorDashboardScreen() {
             )}
 
 
-            <TouchableOpacity
-              style={[styles.modalButtonSecondary, styles.fullWidthButton]}
-              onPress={() => getCurrentLocationAndSet(true)}
-            >
-              <Text style={styles.modalButtonSecondaryText}>Current Location</Text>
-            </TouchableOpacity>
+            <View style={styles.locationActionRow}>
+              <TouchableOpacity
+                style={[styles.locationActionButton, styles.locationActionSecondary]}
+                onPress={() => getCurrentLocationAndSet(true)}
+                accessibilityLabel="Current Location"
+              >
+                <Ionicons name="locate-outline" size={18} color="#2563EB" />
+              </TouchableOpacity>
 
-            <TouchableOpacity
-              style={[styles.modalButtonPrimary, styles.fullWidthButton, !mapSelection && styles.buttonDisabled]}
-              onPress={applySelectedLocation}
-              disabled={!mapSelection}
-            >
-              <Text style={styles.modalButtonPrimaryText}>Set Location</Text>
-            </TouchableOpacity>
-            <TouchableOpacity 
-              style={[styles.modalButtonSecondary, styles.fullWidthButton]}
-              onPress={() => setShowLocationPickerModal(false)}
-            >
-              <Text style={styles.modalButtonSecondaryText}>{t.common.cancel}</Text>
-            </TouchableOpacity>
+              <TouchableOpacity
+                style={[
+                  styles.locationActionButton,
+                  styles.locationActionPrimary,
+                  !mapSelection && styles.buttonDisabled,
+                ]}
+                onPress={applySelectedLocation}
+                disabled={!mapSelection}
+                accessibilityLabel="Set Location"
+              >
+                <Ionicons name="checkmark-circle-outline" size={18} color="white" />
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                style={[styles.locationActionButton, styles.locationActionSecondary]}
+                onPress={() => setShowLocationPickerModal(false)}
+                accessibilityLabel={t.common.cancel}
+              >
+                <Ionicons name="close-circle-outline" size={18} color="#374151" />
+              </TouchableOpacity>
+            </View>
           </View>
         </View>
       </Modal>
@@ -2382,7 +2721,14 @@ const styles = StyleSheet.create({
   alignRight: { alignItems: 'flex-end' },
   
   header: { backgroundColor: '#2563EB', paddingTop: 50, paddingBottom: 20, paddingHorizontal: 20, borderBottomLeftRadius: 25, borderBottomRightRadius: 25 },
+  headerTopRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12 },
+  languageToggleRow: { flexDirection: 'row', alignItems: 'center' },
+  languageButton: { backgroundColor: 'rgba(255,255,255,0.18)', height: 32, paddingHorizontal: 10, borderRadius: 16, alignItems: 'center', justifyContent: 'center', marginRight: 8 },
+  languageButtonActive: { backgroundColor: 'rgba(255,255,255,0.32)' },
+  languageIcon: { fontSize: 18 },
+  signOutIconButton: { backgroundColor: 'rgba(255,255,255,0.2)', width: 36, height: 36, borderRadius: 18, alignItems: 'center', justifyContent: 'center' },
   switchButton: { alignSelf: 'flex-start', backgroundColor: 'rgba(255,255,255,0.2)', paddingHorizontal: 12, paddingVertical: 6, borderRadius: 15, marginBottom: 10 },
+  switchButtonContent: { flexDirection: 'row', alignItems: 'center', gap: 6 },
   switchButtonText: { color: 'white', fontSize: 12, fontWeight: '600' },
   greeting: { fontSize: 14, color: '#BFDBFE' },
   doctorName: { fontSize: 24, fontWeight: 'bold', color: 'white', marginTop: 5 },
@@ -2433,6 +2779,7 @@ const styles = StyleSheet.create({
   blockedDate: { fontSize: 15, fontWeight: '600', color: '#1F2937' },
   blockedTime: { fontSize: 14, color: '#6B7280', marginTop: 3 },
   blockedReason: { fontSize: 13, color: '#9CA3AF', marginTop: 3 },
+  inlineIconRow: { flexDirection: 'row', alignItems: 'center', gap: 6 },
   unblockBtn: { backgroundColor: '#FEE2E2', paddingHorizontal: 15, paddingVertical: 8, borderRadius: 8 },
   unblockBtnText: { color: '#DC2626', fontWeight: '600', fontSize: 13 },
   
@@ -2447,6 +2794,10 @@ const styles = StyleSheet.create({
   clinicFee: { fontSize: 13, color: '#6B7280' },
   scheduleBtn: { marginTop: 10, backgroundColor: '#EFF6FF', paddingVertical: 8, borderRadius: 8, alignItems: 'center' },
   scheduleBtnText: { color: '#1E40AF', fontWeight: '600', fontSize: 13 },
+  clinicActionRow: { flexDirection: 'row', alignItems: 'center', gap: 10, marginTop: 12 },
+  clinicIconButton: { width: 34, height: 34, borderRadius: 17, backgroundColor: '#EFF6FF', alignItems: 'center', justifyContent: 'center' },
+  clinicIconDanger: { backgroundColor: '#FEE2E2' },
+  clinicIconDisabled: { backgroundColor: '#E5E7EB' },
   deactivateBtn: { marginTop: 12, backgroundColor: '#FEE2E2', paddingVertical: 8, borderRadius: 8, alignItems: 'center' },
   deactivateBtnText: { color: '#DC2626', fontWeight: '600', fontSize: 13 },
   addButton: { backgroundColor: '#2563EB', paddingHorizontal: 15, paddingVertical: 8, borderRadius: 8 },
@@ -2466,6 +2817,14 @@ const styles = StyleSheet.create({
   ratingContainer: { flexDirection: 'row', alignItems: 'center', marginTop: 10 },
   ratingText: { fontSize: 16, fontWeight: '600', color: '#F59E0B' },
   reviewCount: { fontSize: 13, color: '#6B7280', marginLeft: 5 },
+  infoCard: { backgroundColor: 'white', borderRadius: 16, padding: 20, marginBottom: 20 },
+  infoTitle: { fontSize: 16, fontWeight: '600', color: '#111827', marginBottom: 12 },
+  infoRow: { marginBottom: 12 },
+  infoLabel: { fontSize: 13, color: '#6B7280', marginBottom: 2 },
+  infoValue: { fontSize: 15, color: '#111827', fontWeight: '500' },
+  infoValueContainer: { flexDirection: 'row', alignItems: 'center', gap: 8 },
+  editIcon: { fontSize: 16 },
+  infoDivider: { height: 1, backgroundColor: '#E5E7EB', marginBottom: 12 },
   signOutButton: { backgroundColor: '#FEE2E2', paddingVertical: 15, borderRadius: 12, alignItems: 'center' },
   signOutText: { color: '#DC2626', fontSize: 16, fontWeight: '600' },
   
@@ -2485,6 +2844,10 @@ const styles = StyleSheet.create({
   modalButtonPrimary: { flex: 1, backgroundColor: '#2563EB', paddingVertical: 12, borderRadius: 10, alignItems: 'center' },
   modalButtonPrimaryText: { color: 'white', fontWeight: '600' },
   buttonDisabled: { opacity: 0.7 },
+  locationActionRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 10, marginTop: 12 },
+  locationActionButton: { flex: 1, height: 44, borderRadius: 12, alignItems: 'center', justifyContent: 'center' },
+  locationActionSecondary: { backgroundColor: '#F3F4F6' },
+  locationActionPrimary: { backgroundColor: '#2563EB' },
   
   daysScroll: { marginVertical: 10 },
   dayCard: { width: 60, padding: 10, marginRight: 10, borderRadius: 12, backgroundColor: '#F3F4F6', alignItems: 'center' },

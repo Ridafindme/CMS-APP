@@ -1,7 +1,6 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import React, { createContext, useContext, useEffect, useState, ReactNode } from 'react';
-import { I18nManager, Alert } from 'react-native';
-import * as Updates from 'expo-updates';
+import { I18nManager } from 'react-native';
 import { en, TranslationKeys } from './en';
 import { ar } from './ar';
 
@@ -64,24 +63,6 @@ export function I18nProvider(props: I18nProviderProps) {
       if (I18nManager.isRTL !== shouldBeRTL) {
         I18nManager.allowRTL(shouldBeRTL);
         I18nManager.forceRTL(shouldBeRTL);
-        
-        // Show alert and reload
-        Alert.alert(
-          lang === 'ar' ? 'تم تغيير اللغة' : 'Language Changed',
-          lang === 'ar' ? 'سيتم إعادة تشغيل التطبيق' : 'App will restart to apply changes',
-          [
-            {
-              text: lang === 'ar' ? 'حسناً' : 'OK',
-              onPress: async () => {
-                try {
-                  await Updates.reloadAsync();
-                } catch (e) {
-                  console.log('Could not reload:', e);
-                }
-              }
-            }
-          ]
-        );
       }
     } catch (error) {
       console.error('Error saving language:', error);

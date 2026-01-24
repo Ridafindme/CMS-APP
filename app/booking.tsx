@@ -168,12 +168,12 @@ export default function BookingScreen() {
     }
   };
 
-  // Generate next 14 days
+  // Generate next 14 days starting from tomorrow
   const getNextDays = () => {
     const days = [];
     const today = new Date();
     
-    for (let i = 0; i < 14; i++) {
+    for (let i = 1; i < 15; i++) {
       const date = new Date(today);
       date.setDate(today.getDate() + i);
       
@@ -182,7 +182,7 @@ export default function BookingScreen() {
         dayName: date.toLocaleDateString(isRTL ? 'ar-SA' : 'en-US', { weekday: 'short' }),
         dayNum: date.getDate(),
         month: date.toLocaleDateString(isRTL ? 'ar-SA' : 'en-US', { month: 'short' }),
-        isToday: i === 0,
+        isToday: false,
       });
     }
     return days;

@@ -7,9 +7,12 @@ import { StatusBar } from 'expo-status-bar';
 import React, { useEffect, useState } from 'react';
 import {
   ActivityIndicator,
+  Linking,
+  Platform,
   ScrollView,
   StyleSheet,
   Text,
+  TextInput,
   TouchableOpacity,
   View,
   I18nManager,
@@ -38,6 +41,7 @@ type Clinic = {
   doctor_id: string;
   doctor_name: string;
   doctor_name_ar: string;
+  doctor_avatar_url: string;
   specialty: string;
   specialty_ar: string;
   specialty_code: string;
@@ -61,7 +65,7 @@ type UserLocation = {
 export default function PatientHomeTab() {
   const router = useRouter();
   const { user } = useAuth();
-  const { t, language, isRTL } = useI18n();
+  const { t, language, isRTL, toggleLanguage } = useI18n();
   
   const [profile, setProfile] = useState<Profile | null>(null);
   const [specialties, setSpecialties] = useState<Specialty[]>([]);
@@ -71,6 +75,7 @@ export default function PatientHomeTab() {
   const [error, setError] = useState<string | null>(null);
   const [selectedSpecialty, setSelectedSpecialty] = useState<string | null>(null);
   const [userLocation, setUserLocation] = useState<UserLocation | null>(null);
+  const [searchQuery, setSearchQuery] = useState('');
 
   useEffect(() => {
     getUserLocation();
@@ -79,7 +84,7 @@ export default function PatientHomeTab() {
 
   useEffect(() => {
     filterClinics();
-  }, [selectedSpecialty, clinics]);
+  }, [selectedSpecialty, clinics, searchQuery]);
 
   const getUserLocation = async () => {
     try {
@@ -160,7 +165,7 @@ export default function PatientHomeTab() {
       
       const { data: profilesData } = await supabase
         .from('profiles')
-        .select('id, full_name, full_name_ar')
+        .select('id, full_name, full_name_ar, avatar_url')
         .in('id', userIds);
 
       const profilesMap = new Map(profilesData?.map((p: any) => [p.id, p]) || []);
@@ -191,6 +196,7 @@ export default function PatientHomeTab() {
           doctor_id: doctor?.id,
           doctor_name: doctorProfile?.full_name ? `Dr. ${doctorProfile.full_name}` : 'Doctor',
           doctor_name_ar: doctorProfile?.full_name_ar ? `د. ${doctorProfile.full_name_ar}` : 'طبيب',
+          doctor_avatar_url: doctorProfile?.avatar_url || '',
           specialty: specialty?.name_en || doctor?.specialty_code || 'General',
           specialty_ar: specialty?.name_ar || 'عام',
           specialty_code: doctor?.specialty_code || '',
@@ -220,11 +226,41 @@ export default function PatientHomeTab() {
   };
 
   const filterClinics = () => {
-    if (!selectedSpecialty) {
-      setFilteredClinics(clinics);
-    } else {
-      setFilteredClinics(clinics.filter(c => c.specialty_code === selectedSpecialty));
+    let filtered = clinics;
+
+    // Filter by specialty
+    if (selectedSpecialty) {
+      filtered = filtered.filter(c => c.specialty_code === selectedSpecialty);
     }
+
+    // Filter by search query
+    if (searchQuery.trim()) {
+      const query = searchQuery.toLowerCase().trim();
+      
+      // Detect if the query contains Arabic characters
+      const isArabicQuery = /[\u0600-\u06FF]/.test(query);
+      
+      filtered = filtered.filter(clinic => {
+        if (isArabicQuery) {
+          // Search in Arabic fields
+          return (
+            clinic.clinic_name.toLowerCase().includes(query) ||
+            clinic.specialty_ar.toLowerCase().includes(query) ||
+            clinic.doctor_name_ar.toLowerCase().includes(query)
+          );
+        } else {
+          // Search in English fields
+          return (
+            clinic.clinic_name.toLowerCase().includes(query) ||
+            clinic.specialty.toLowerCase().includes(query) ||
+            clinic.doctor_name.toLowerCase().includes(query) ||
+            clinic.address.toLowerCase().includes(query)
+          );
+        }
+      });
+    }
+
+    setFilteredClinics(filtered);
   };
 
   const handleSpecialtyPress = (code: string) => {
@@ -246,6 +282,30 @@ export default function PatientHomeTab() {
       return profile.full_name.split(' ')[0];
     }
     return '';
+  };
+
+  const openMaps = (latitude: number | null, longitude: number | null, address: string) => {
+    if (latitude && longitude) {
+      const scheme = Platform.select({
+        ios: 'maps:',
+        android: 'geo:',
+      });
+      const url = Platform.select({
+        ios: `${scheme}${latitude},${longitude}?q=${encodeURIComponent(address)}`,
+        android: `${scheme}${latitude},${longitude}?q=${latitude},${longitude}(${encodeURIComponent(address)})`,
+      });
+      
+      if (url) {
+        Linking.openURL(url).catch(() => {
+          // Fallback to Google Maps web
+          Linking.openURL(`https://www.google.com/maps/search/?api=1&query=${latitude},${longitude}`);
+        });
+      }
+    } else if (address) {
+      // If no coordinates, search by address
+      const url = `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(address)}`;
+      Linking.openURL(url);
+    }
   };
 
   if (loading) {
@@ -270,17 +330,39 @@ export default function PatientHomeTab() {
             </Text>
             <Text style={[styles.subtitle, isRTL && styles.textRight]}>{t.home.findNearbyClinics}</Text>
           </View>
-          <TouchableOpacity style={styles.notificationButton}>
-            <Text style={styles.notificationIcon}>🔔</Text>
-          </TouchableOpacity>
+          <View style={styles.headerButtons}>
+            <TouchableOpacity 
+              style={styles.languageButton}
+              onPress={toggleLanguage}
+            >
+              <Text style={styles.languageButtonText}>
+                {language === 'ar' ? 'En' : 'Ar'}
+              </Text>
+            </TouchableOpacity>
+            <TouchableOpacity style={styles.notificationButton}>
+              <Text style={styles.notificationIcon}>🔔</Text>
+            </TouchableOpacity>
+          </View>
         </View>
       </View>
 
       <ScrollView style={styles.content} showsVerticalScrollIndicator={false}>
-        <TouchableOpacity style={[styles.searchBar, isRTL && styles.rowReverse]}>
+        <View style={[styles.searchBar, isRTL && styles.rowReverse]}>
           <Text style={styles.searchIcon}>🔍</Text>
-          <Text style={styles.searchPlaceholder}>{t.home.searchPlaceholder}</Text>
-        </TouchableOpacity>
+          <TextInput
+            style={[styles.searchInput, isRTL && styles.textRight]}
+            placeholder={t.home.searchPlaceholder}
+            placeholderTextColor="#9CA3AF"
+            value={searchQuery}
+            onChangeText={setSearchQuery}
+            autoCapitalize="none"
+          />
+          {searchQuery.length > 0 && (
+            <TouchableOpacity onPress={() => setSearchQuery('')}>
+              <Text style={styles.clearSearchIcon}>✕</Text>
+            </TouchableOpacity>
+          )}
+        </View>
 
         <View style={[styles.sectionHeader, isRTL && styles.rowReverse]}>
           <Text style={styles.sectionTitle}>{t.home.filterBySpecialty}</Text>
@@ -355,11 +437,14 @@ export default function PatientHomeTab() {
                   icon: clinic.specialty_icon,
                   clinic: clinic.clinic_name,
                   address: clinic.address,
+                  latitude: clinic.latitude?.toString() || '',
+                  longitude: clinic.longitude?.toString() || '',
                   experience: clinic.experience,
                   phone: clinic.phone,
                   whatsapp: clinic.whatsapp,
                   instagram: clinic.instagram,
                   facebook: clinic.facebook,
+                  avatar_url: clinic.doctor_avatar_url,
                 }
               } as any)}
             >
@@ -422,11 +507,17 @@ const styles = StyleSheet.create({
   alignLeft: { alignItems: 'flex-start' },
   greeting: { fontSize: 22, fontWeight: 'bold', color: 'white', marginBottom: 4 },
   subtitle: { fontSize: 14, color: '#BFDBFE' },
+  headerButtons: { flexDirection: 'row', alignItems: 'center', gap: 10 },
+  languageButton: { backgroundColor: 'rgba(255,255,255,0.2)', paddingHorizontal: 12, paddingVertical: 8, borderRadius: 12 },
+  languageButtonText: { fontSize: 14, fontWeight: '600', color: 'white' },
   notificationButton: { backgroundColor: 'rgba(255,255,255,0.2)', padding: 10, borderRadius: 12 },
   notificationIcon: { fontSize: 20 },
   content: { flex: 1, padding: 20 },
   searchBar: { backgroundColor: 'white', flexDirection: 'row', alignItems: 'center', padding: 15, borderRadius: 12, marginBottom: 20, marginTop: -10, shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.1, shadowRadius: 3, elevation: 3 },
   searchIcon: { fontSize: 20, marginRight: 10 },
+  searchInput: { flex: 1, fontSize: 16, color: '#1F2937' },
+  clearSearchIcon: { fontSize: 18, color: '#9CA3AF', paddingHorizontal: 8 },
+  textRight: { textAlign: 'right' },
   searchPlaceholder: { color: '#9CA3AF', fontSize: 16 },
   sectionHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 15, marginTop: 10 },
   sectionTitle: { fontSize: 18, fontWeight: '600', color: '#1F2937' },
@@ -445,6 +536,7 @@ const styles = StyleSheet.create({
   clinicHeaderInfo: { flex: 1 },
   clinicName: { fontSize: 16, fontWeight: '700', color: '#1F2937', marginBottom: 2 },
   clinicAddress: { fontSize: 12, color: '#6B7280' },
+  clickableAddress: { textDecorationLine: 'underline', color: '#2563EB' },
   distanceBadge: { backgroundColor: '#ECFDF5', paddingHorizontal: 10, paddingVertical: 5, borderRadius: 8 },
   distanceText: { fontSize: 12, fontWeight: '600', color: '#059669' },
   doctorSection: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#F9FAFB', padding: 10, borderRadius: 10, marginBottom: 10 },

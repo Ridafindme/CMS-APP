@@ -17,7 +17,7 @@ import {
 
 export default function SignUpPatientScreen() {
   const router = useRouter();
-  const { signUp } = useAuth();
+  const { signUp, signOut } = useAuth();
   
   const [formData, setFormData] = useState({
     fullName: '',
@@ -82,6 +82,8 @@ export default function SignUpPatientScreen() {
         setLoading(false);
         return;
       }
+
+      await signOut();
 
       Alert.alert(
         'Account Created!', 

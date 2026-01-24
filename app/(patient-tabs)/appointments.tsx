@@ -30,6 +30,8 @@ type Appointment = {
   clinic_name: string;
   clinic_address: string;
   has_review: boolean;
+  review_id?: string | null;
+  review_rating?: number | null;
 };
 
 export default function AppointmentsTab() {
@@ -43,7 +45,7 @@ export default function AppointmentsTab() {
   const [appointments, setAppointments] = useState<Appointment[]>([]);
   const [pastLookbackDays, setPastLookbackDays] = useState(14);
   const [showReviewModal, setShowReviewModal] = useState(false);
-  const [reviewRating, setReviewRating] = useState(5);
+  const [reviewRating, setReviewRating] = useState(0);
   const [reviewAppointment, setReviewAppointment] = useState<Appointment | null>(null);
   const [submittingReview, setSubmittingReview] = useState(false);
 
@@ -141,17 +143,17 @@ export default function AppointmentsTab() {
       }
 
       // Fetch reviews for these appointments
-      let reviewsMap = new Map<string, number>();
+      let reviewsMap = new Map<string, { id: string; rating: number }>();
       if (user && appointmentsData.length > 0) {
         const appointmentIds = appointmentsData.map(a => a.id);
         const { data: reviews } = await supabase
           .from('reviews')
-          .select('appointment_id, rating')
+          .select('id, appointment_id, rating')
           .eq('patient_id', user.id)
           .in('appointment_id', appointmentIds);
 
         if (reviews) {
-          reviewsMap = new Map(reviews.map(r => [r.appointment_id, r.rating]));
+          reviewsMap = new Map(reviews.map(r => [r.appointment_id, { id: r.id, rating: r.rating }]));
         }
       }
 
@@ -174,6 +176,9 @@ export default function AppointmentsTab() {
           specialty_icon: specialty.icon || '🩺',
           clinic_name: clinic.clinic_name || 'Clinic',
           clinic_address: clinic.address || '',
+          has_review: reviewsMap.has(apt.id),
+          review_id: reviewsMap.get(apt.id)?.id || null,
+          review_rating: reviewsMap.get(apt.id)?.rating ?? null,
         };
       });
 
@@ -219,24 +224,52 @@ export default function AppointmentsTab() {
 
   const openReviewModal = (apt: Appointment) => {
     setReviewAppointment(apt);
-    setReviewRating(5);
+    setReviewRating(apt.review_rating ?? 0);
     setShowReviewModal(true);
+  };
+
+  const canEditReview = (apt: Appointment) => {
+    if (!apt.review_id) return false;
+    const aptDate = new Date(apt.appointment_date);
+    const now = new Date();
+    return (
+      aptDate.getFullYear() === now.getFullYear() &&
+      aptDate.getMonth() === now.getMonth()
+    );
   };
 
   const handleSubmitReview = async () => {
     if (!user || !reviewAppointment) return;
     setSubmittingReview(true);
     try {
-      const { error } = await supabase
-        .from('reviews')
-        .insert({
-          patient_id: user.id,
-          doctor_id: reviewAppointment.doctor_id,
-          appointment_id: reviewAppointment.id,
-          rating: reviewRating,
-          review_text: null,
-          is_anonymous: false,
-        });
+      const isEditing = canEditReview(reviewAppointment);
+      if (reviewAppointment.review_id && !isEditing) {
+        Alert.alert(
+          t.common.error,
+          isRTL ? 'لا يمكن تعديل التقييم بعد انتهاء الشهر' : 'Reviews can only be edited within the same month.'
+        );
+        return;
+      }
+
+      const { error } = reviewAppointment.review_id && isEditing
+        ? await supabase
+            .from('reviews')
+            .update({
+              rating: reviewRating,
+              review_text: null,
+              is_anonymous: false,
+            })
+            .eq('id', reviewAppointment.review_id)
+        : await supabase
+            .from('reviews')
+            .insert({
+              patient_id: user.id,
+              doctor_id: reviewAppointment.doctor_id,
+              appointment_id: reviewAppointment.id,
+              rating: reviewRating,
+              review_text: null,
+              is_anonymous: false,
+            });
 
       if (error) {
         Alert.alert(t.common.error, error.message);
@@ -349,17 +382,17 @@ export default function AppointmentsTab() {
 
             <View style={[styles.appointmentDetails, isRTL && styles.rowReverse]}>
               <View style={[styles.detailItem, isRTL && styles.rowReverse]}>
-                <Text style={styles.detailIcon}>?Y".</Text>
+                <Text style={styles.detailIcon}>D</Text>
                 <Text style={styles.detailText}>{formatDate(apt.appointment_date)}</Text>
               </View>
               <View style={[styles.detailItem, isRTL && styles.rowReverse]}>
-                <Text style={styles.detailIcon}>?Y?</Text>
+                <Text style={styles.detailIcon}>T</Text>
                 <Text style={styles.detailText}>{formatTime(apt.appointment_time)}</Text>
               </View>
             </View>
 
             <View style={[styles.clinicInfo, isRTL && styles.rowReverse]}>
-              <Text style={styles.clinicIcon}>?Y??</Text>
+              <Text style={styles.clinicIcon}>CL</Text>
               <Text style={[styles.clinicName, isRTL && styles.textRight]}>{apt.clinic_name}</Text>
             </View>
 
@@ -372,16 +405,18 @@ export default function AppointmentsTab() {
               </TouchableOpacity>
             )}
 
-            {(apt.status === 'confirmed' || apt.status === 'completed') && !apt.has_review && (
+            {(apt.status === 'confirmed' || apt.status === 'completed') && (!apt.has_review || canEditReview(apt)) && (
               <TouchableOpacity
                 style={styles.reviewButton}
                 onPress={() => openReviewModal(apt)}
               >
-                <Text style={styles.reviewButtonText}>{t.appointments.leaveReview}</Text>
+                <Text style={styles.reviewButtonText}>
+                  {apt.has_review ? t.appointments.editReview : t.appointments.leaveReview}
+                </Text>
               </TouchableOpacity>
             )}
 
-            {(apt.status === 'confirmed' || apt.status === 'completed') && apt.has_review && (
+            {(apt.status === 'confirmed' || apt.status === 'completed') && apt.has_review && !canEditReview(apt) && (
               <View style={styles.reviewedBadge}>
                 <Text style={styles.reviewedText}>{t.appointments.reviewed}</Text>
               </View>

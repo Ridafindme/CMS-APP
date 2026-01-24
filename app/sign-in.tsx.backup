@@ -1,7 +1,7 @@
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useAuth } from '@/lib/AuthContext';
 import { useI18n } from '@/lib/i18n';
 import { supabase } from '@/lib/supabase';
-import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useRouter } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import React, { useEffect, useState } from 'react';
@@ -38,7 +38,7 @@ export default function SignInScreen() {
   const [savedCredentials, setSavedCredentials] = useState<SavedCredential[]>([]);
   const [showSavedAccounts, setShowSavedAccounts] = useState(false);
 
-  useEffect(() => {
+  useEffect(() {
     loadSavedCredentials();
   }, []);
 

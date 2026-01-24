@@ -1,13 +1,17 @@
 import { useI18n } from '@/lib/i18n';
+import { supabase } from '@/lib/supabase';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
-import React from 'react';
-import { Linking, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import React, { useEffect, useState } from 'react';
+import { ActivityIndicator, Image, Linking, Platform, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 
 export default function DoctorProfileScreen() {
   const router = useRouter();
   const params = useLocalSearchParams();
   const { t, isRTL } = useI18n();
+  
+  const [clinicSchedule, setClinicSchedule] = useState<any>(null);
+  const [loadingSchedule, setLoadingSchedule] = useState(true);
   
   // Get all data from navigation params
   const clinicId = params.clinic_id as string;
@@ -28,6 +32,55 @@ export default function DoctorProfileScreen() {
   const whatsapp = params.whatsapp as string || '';
   const instagram = params.instagram as string || '';
   const facebook = params.facebook as string || '';
+  const avatarUrl = params.avatar_url as string || '';
+
+  useEffect(() => {
+    fetchClinicSchedule();
+  }, [clinicId]);
+
+  const fetchClinicSchedule = async () => {
+    if (!clinicId) {
+      setLoadingSchedule(false);
+      return;
+    }
+
+    try {
+      const { data, error } = await supabase
+        .from('clinics')
+        .select('schedule')
+        .eq('id', clinicId)
+        .single();
+
+      if (error) throw error;
+      setClinicSchedule(data?.schedule);
+    } catch (error) {
+      console.error('Error fetching clinic schedule:', error);
+    } finally {
+      setLoadingSchedule(false);
+    }
+  };
+
+  const formatTime = (time: string) => {
+    if (!time) return '';
+    const [hours, minutes = '00'] = time.split(':');
+    const hour = parseInt(hours);
+    const ampm = hour >= 12 ? 'PM' : 'AM';
+    const hour12 = hour === 0 ? 12 : hour > 12 ? hour - 12 : hour;
+    return `${hour12}:${minutes} ${ampm}`;
+  };
+
+  const getDayName = (dayKey: string) => {
+    const days: { [key: string]: { en: string; ar: string } } = {
+      sun: { en: 'Sunday', ar: 'الأحد' },
+      mon: { en: 'Monday', ar: 'الإثنين' },
+      tue: { en: 'Tuesday', ar: 'الثلاثاء' },
+      wed: { en: 'Wednesday', ar: 'الأربعاء' },
+      thu: { en: 'Thursday', ar: 'الخميس' },
+      fri: { en: 'Friday', ar: 'الجمعة' },
+      sat: { en: 'Saturday', ar: 'السبت' },
+    };
+    return isRTL ? days[dayKey]?.ar : days[dayKey]?.en || dayKey;
+  };
 
   const handleCall = () => {
     if (phone) {
@@ -71,6 +124,36 @@ export default function DoctorProfileScreen() {
     Linking.openURL(url);
   };
 
+  const openMaps = () => {
+    const addressParam = params.address as string;
+    const latParam = params.latitude as string;
+    const lonParam = params.longitude as string;
+    const latitude = latParam ? parseFloat(latParam) : null;
+    const longitude = lonParam ? parseFloat(lonParam) : null;
+
+    if (latitude && longitude) {
+      const scheme = Platform.select({
+        ios: 'maps:',
+        android: 'geo:',
+      });
+      const url = Platform.select({
+        ios: `${scheme}${latitude},${longitude}?q=${latitude},${longitude}`,
+        android: `${scheme}${latitude},${longitude}?q=${latitude},${longitude}`,
+      });
+
+      Linking.canOpenURL(url!).then((supported) => {
+        if (supported) {
+          Linking.openURL(url!);
+        } else {
+          Linking.openURL(`https://www.google.com/maps/search/?api=1&query=${latitude},${longitude}`);
+        }
+      });
+    } else if (addressParam) {
+      const url = `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(addressParam)}`;
+      Linking.openURL(url);
+    }
+  };
+
   const handleBookAppointment = () => {
     router.push({
       pathname: '/booking',
@@ -99,7 +182,11 @@ export default function DoctorProfileScreen() {
         </TouchableOpacity>
         
         <View style={styles.doctorHeader}>
-          <Text style={styles.doctorIcon}>{icon}</Text>
+          {avatarUrl ? (
+            <Image source={{ uri: avatarUrl }} style={styles.doctorAvatar} />
+          ) : (
+            <Text style={styles.doctorIcon}>{icon}</Text>
+          )}
           <Text style={styles.doctorName}>{isRTL ? doctorNameAr : doctorName}</Text>
           <Text style={styles.doctorSpecialty}>{isRTL ? specialtyAr : specialty}</Text>
           <View style={styles.ratingContainer}>
@@ -132,7 +219,9 @@ export default function DoctorProfileScreen() {
               <Text style={[styles.infoLabel, isRTL && styles.textRight]}>
                 {isRTL ? 'الموقع' : 'Location'}
               </Text>
-              <Text style={[styles.infoValue, isRTL && styles.textRight]}>{address} • {distance}</Text>
+              <TouchableOpacity onPress={openMaps}>
+                <Text style={[styles.infoValue, styles.clickableAddress, isRTL && styles.textRight]}>{address} • {distance}</Text>
+              </TouchableOpacity>
             </View>
           </View>
           
@@ -209,18 +298,36 @@ export default function DoctorProfileScreen() {
             {isRTL ? 'ساعات العمل' : 'Working Hours'}
           </Text>
           
-          <View style={[styles.scheduleRow, isRTL && styles.rowReverse]}>
-            <Text style={styles.scheduleDay}>{isRTL ? 'الإثنين - الجمعة' : 'Monday - Friday'}</Text>
-            <Text style={styles.scheduleTime}>{isRTL ? '٩:٠٠ ص - ٥:٠٠ م' : '9:00 AM - 5:00 PM'}</Text>
-          </View>
-          <View style={[styles.scheduleRow, isRTL && styles.rowReverse]}>
-            <Text style={styles.scheduleDay}>{isRTL ? 'السبت' : 'Saturday'}</Text>
-            <Text style={styles.scheduleTime}>{isRTL ? '١٠:٠٠ ص - ٢:٠٠ م' : '10:00 AM - 2:00 PM'}</Text>
-          </View>
-          <View style={[styles.scheduleRow, isRTL && styles.rowReverse]}>
-            <Text style={styles.scheduleDay}>{isRTL ? 'الأحد' : 'Sunday'}</Text>
-            <Text style={[styles.scheduleTime, styles.closedText]}>{isRTL ? 'مغلق' : 'Closed'}</Text>
-          </View>
+          {loadingSchedule ? (
+            <ActivityIndicator size="small" color="#2563EB" style={{ marginVertical: 20 }} />
+          ) : clinicSchedule?.default ? (
+            <>
+              {/* Days with working hours */}
+              {['mon', 'tue', 'wed', 'thu', 'fri', 'sat', 'sun'].map((day) => {
+                const isWeeklyOff = clinicSchedule.weekly_off?.includes(day);
+                const schedule = clinicSchedule.default;
+                
+                return (
+                  <View key={day} style={[styles.scheduleRow, isRTL && styles.rowReverse]}>
+                    <Text style={styles.scheduleDay}>{getDayName(day)}</Text>
+                    {isWeeklyOff ? (
+                      <Text style={[styles.scheduleTime, styles.closedText]}>
+                        {isRTL ? 'مغلق' : 'Closed'}
+                      </Text>
+                    ) : (
+                      <Text style={styles.scheduleTime}>
+                        {formatTime(schedule.start)} - {formatTime(schedule.end)}
+                      </Text>
+                    )}
+                  </View>
+                );
+              })}
+            </>
+          ) : (
+            <Text style={[styles.scheduleTime, { textAlign: 'center', paddingVertical: 20 }]}>
+              {isRTL ? 'لا توجد ساعات عمل محددة' : 'No schedule available'}
+            </Text>
+          )}
         </View>
 
         <View style={{ height: 120 }} />
@@ -245,6 +352,7 @@ const styles = StyleSheet.create({
   backButtonText: { color: 'white', fontSize: 16, fontWeight: '600' },
   doctorHeader: { alignItems: 'center', paddingHorizontal: 20 },
   doctorIcon: { fontSize: 60, marginBottom: 10 },
+  doctorAvatar: { width: 90, height: 90, borderRadius: 45, marginBottom: 10 },
   doctorName: { fontSize: 24, fontWeight: 'bold', color: 'white', textAlign: 'center' },
   doctorSpecialty: { fontSize: 16, color: '#BFDBFE', marginTop: 5 },
   ratingContainer: { flexDirection: 'row', alignItems: 'center', marginTop: 10 },
@@ -261,6 +369,7 @@ const styles = StyleSheet.create({
   infoText: { flex: 1 },
   infoLabel: { fontSize: 13, color: '#6B7280', marginBottom: 2 },
   infoValue: { fontSize: 15, color: '#1F2937', fontWeight: '500' },
+  clickableAddress: { color: '#2563EB', textDecorationLine: 'underline' },
   feeText: { color: '#2563EB', fontWeight: 'bold', fontSize: 18 },
   contactButtons: { flexDirection: 'row', gap: 10 },
   contactButton: { flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', backgroundColor: '#EFF6FF', padding: 15, borderRadius: 12 },
