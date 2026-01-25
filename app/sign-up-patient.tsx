@@ -1,3 +1,4 @@
+import PhoneInput from '@/components/ui/phone-input';
 import { useAuth } from '@/lib/AuthContext';
 import { useRouter } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
@@ -104,7 +105,6 @@ export default function SignUpPatientScreen() {
         keyboardShouldPersistTaps="handled"
         showsVerticalScrollIndicator={false}
         bounces={false}
-        enableOnAndroid={true}
       >
         {/* Header */}
         <View style={styles.header}>

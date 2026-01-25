@@ -1,9 +1,9 @@
-import { Stack } from 'expo-router';
-import 'react-native-reanimated';
 import { AuthProvider } from '@/lib/AuthContext';
 import { I18nProvider } from '@/lib/i18n';
-import { SafeAreaProvider } from 'react-native-safe-area-context';
+import { Stack } from 'expo-router';
 import * as WebBrowser from 'expo-web-browser';
+import 'react-native-reanimated';
+import { SafeAreaProvider } from 'react-native-safe-area-context';
 
 WebBrowser.maybeCompleteAuthSession();
 

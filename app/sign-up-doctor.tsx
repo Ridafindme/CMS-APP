@@ -19,7 +19,7 @@ import {
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import PhoneInput from '@/components/ui/phone-input';
-import { validatePhone } from '@/lib/phone-utils';
+import { validatePhone, fromE164 } from '@/lib/phone-utils';
 
 type Specialty = {
   code: string;
@@ -187,15 +187,15 @@ export default function ApplyAsDoctorScreen() {
     if (formData.mobile || formData.landline || formData.whatsapp) {
       const { data: countryData } = await supabase
         .from('countries')
-        .select('phone_config')
+        .select('phone_config, country_code')
         .eq('is_default', true)
         .single();
       
       if (countryData?.phone_config) {
         // Validate mobile
         if (formData.mobile) {
-          const cleaned = formData.mobile.replace(/[^0-9]/g, '');
-          const validation = validatePhone(cleaned, countryData.phone_config, 'mobile');
+          const localNumber = fromE164(formData.mobile, countryData.country_code);
+          const validation = validatePhone(localNumber, countryData.phone_config, 'mobile');
           if (!validation.valid) {
             Alert.alert('Error', `Mobile: ${validation.error}`);
             return;
@@ -204,8 +204,8 @@ export default function ApplyAsDoctorScreen() {
         
         // Validate landline
         if (formData.landline) {
-          const cleaned = formData.landline.replace(/[^0-9]/g, '');
-          const validation = validatePhone(cleaned, countryData.phone_config, 'landline');
+          const localNumber = fromE164(formData.landline, countryData.country_code);
+          const validation = validatePhone(localNumber, countryData.phone_config, 'landline');
           if (!validation.valid) {
             Alert.alert('Error', `Landline: ${validation.error}`);
             return;
@@ -214,8 +214,8 @@ export default function ApplyAsDoctorScreen() {
         
         // Validate whatsapp
         if (formData.whatsapp) {
-          const cleaned = formData.whatsapp.replace(/[^0-9]/g, '');
-          const validation = validatePhone(cleaned, countryData.phone_config, 'mobile');
+          const localNumber = fromE164(formData.whatsapp, countryData.country_code);
+          const validation = validatePhone(localNumber, countryData.phone_config, 'mobile');
           if (!validation.valid) {
             Alert.alert('Error', `WhatsApp: ${validation.error}`);
             return;

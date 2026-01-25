@@ -1,3 +1,4 @@
+import PhoneInput from '@/components/ui/phone-input';
 import { useAuth } from '@/lib/AuthContext';
 import { useI18n } from '@/lib/i18n';
 import { supabase } from '@/lib/supabase';
@@ -15,7 +16,6 @@ import {
   TouchableOpacity,
   View,
 } from 'react-native';
-import PhoneInput from '@/components/ui/phone-input';
 
 type Profile = {
   full_name: string;

@@ -1,6 +1,9 @@
+import PhoneInput from '@/components/ui/phone-input';
 import { useAuth } from '@/lib/AuthContext';
 import { useI18n } from '@/lib/i18n';
+import { fromE164, validatePhone } from '@/lib/phone-utils';
 import { supabase } from '@/lib/supabase';
+import { Ionicons } from '@expo/vector-icons';
 import * as FileSystem from 'expo-file-system/legacy';
 import * as ImagePicker from 'expo-image-picker';
 import * as Location from 'expo-location';
@@ -11,19 +14,18 @@ import {
   ActivityIndicator,
   Alert,
   Image,
+  KeyboardAvoidingView,
   Modal,
+  Platform,
   RefreshControl,
   ScrollView,
   StyleSheet,
   Text,
   TextInput,
   TouchableOpacity,
-  View,
+  View
 } from 'react-native';
 import MapView, { Marker } from 'react-native-maps';
-import { Ionicons } from '@expo/vector-icons';
-import PhoneInput from '@/components/ui/phone-input';
-import { validatePhone, fromE164 } from '@/lib/phone-utils';
 
 type Appointment = {
   id: string;
@@ -179,6 +181,9 @@ export default function DoctorDashboardScreen() {
     mobile: '',
     landline: '',
     whatsapp: '',
+    mobileLocal: '',
+    landlineLocal: '',
+    whatsappLocal: '',
   });
   const [savingClinicEdit, setSavingClinicEdit] = useState(false);
   
@@ -921,6 +926,9 @@ export default function DoctorDashboardScreen() {
       mobile: clinic.mobile || '',
       landline: clinic.landline || '',
       whatsapp: clinic.whatsapp || '',
+      mobileLocal: '',
+      landlineLocal: '',
+      whatsappLocal: '',
     });
     setShowEditClinicModal(true);
   };
@@ -928,44 +936,75 @@ export default function DoctorDashboardScreen() {
   const handleSaveClinicEdit = async () => {
     if (!editClinicId) return;
     
-    // Validate phone numbers if provided
-    if (editClinicDraft.mobile || editClinicDraft.landline || editClinicDraft.whatsapp) {
-      const { data: countryData } = await supabase
-        .from('countries')
-        .select('phone_config')
-        .eq('is_default', true)
-        .single();
-      
-      if (countryData?.phone_config) {
-        // Validate mobile
-        if (editClinicDraft.mobile) {
-          const cleaned = editClinicDraft.mobile.replace(/[^0-9]/g, '');
-          const validation = validatePhone(cleaned, countryData.phone_config, 'mobile');
-          if (!validation.valid) {
-            Alert.alert(t.common.error, `Mobile: ${validation.error}`);
-            return;
-          }
-        }
-        
-        // Validate landline
-        if (editClinicDraft.landline) {
-          const cleaned = editClinicDraft.landline.replace(/[^0-9]/g, '');
-          const validation = validatePhone(cleaned, countryData.phone_config, 'landline');
-          if (!validation.valid) {
-            Alert.alert(t.common.error, `Landline: ${validation.error}`);
-            return;
-          }
-        }
-        
-        // Validate whatsapp
-        if (editClinicDraft.whatsapp) {
-          const cleaned = editClinicDraft.whatsapp.replace(/[^0-9]/g, '');
-          const validation = validatePhone(cleaned, countryData.phone_config, 'mobile');
-          if (!validation.valid) {
-            Alert.alert(t.common.error, `WhatsApp: ${validation.error}`);
-            return;
-          }
-        }
+    // Load country data for validation
+    const { data: countryData } = await supabase
+      .from('countries')
+      .select('phone_config, country_code')
+      .eq('is_default', true)
+      .single();
+    
+    if (!countryData?.phone_config) {
+      Alert.alert(t.common.error, 'Unable to validate phone numbers');
+      return;
+    }
+    
+    // Check if user has started typing a mobile number but it's incomplete/invalid
+    if (editClinicDraft.mobileLocal && editClinicDraft.mobileLocal.length > 0 && !editClinicDraft.mobile) {
+      Alert.alert(t.common.error, 'Mobile: Please enter a valid phone number');
+      return;
+    }
+    
+    // Validate mobile if provided
+    if (editClinicDraft.mobile && editClinicDraft.mobile.trim()) {
+      const localNumber = fromE164(editClinicDraft.mobile, countryData.country_code);
+      if (!localNumber || localNumber.length === 0) {
+        Alert.alert(t.common.error, 'Mobile: Invalid phone number format');
+        return;
+      }
+      const validation = validatePhone(localNumber, countryData.phone_config, 'mobile');
+      if (!validation.valid) {
+        Alert.alert(t.common.error, `Mobile: ${validation.error}`);
+        return;
+      }
+    }
+    
+    // Check if user has started typing a landline number but it's incomplete/invalid
+    if (editClinicDraft.landlineLocal && editClinicDraft.landlineLocal.length > 0 && !editClinicDraft.landline) {
+      Alert.alert(t.common.error, 'Landline: Please enter a valid phone number');
+      return;
+    }
+    
+    // Validate landline if provided
+    if (editClinicDraft.landline && editClinicDraft.landline.trim()) {
+      const localNumber = fromE164(editClinicDraft.landline, countryData.country_code);
+      if (!localNumber || localNumber.length === 0) {
+        Alert.alert(t.common.error, 'Landline: Invalid phone number format');
+        return;
+      }
+      const validation = validatePhone(localNumber, countryData.phone_config, 'landline');
+      if (!validation.valid) {
+        Alert.alert(t.common.error, `Landline: ${validation.error}`);
+        return;
+      }
+    }
+    
+    // Check if user has started typing a whatsapp number but it's incomplete/invalid
+    if (editClinicDraft.whatsappLocal && editClinicDraft.whatsappLocal.length > 0 && !editClinicDraft.whatsapp) {
+      Alert.alert(t.common.error, 'WhatsApp: Please enter a valid phone number');
+      return;
+    }
+    
+    // Validate whatsapp if provided
+    if (editClinicDraft.whatsapp && editClinicDraft.whatsapp.trim()) {
+      const localNumber = fromE164(editClinicDraft.whatsapp, countryData.country_code);
+      if (!localNumber || localNumber.length === 0) {
+        Alert.alert(t.common.error, 'WhatsApp: Invalid phone number format');
+        return;
+      }
+      const validation = validatePhone(localNumber, countryData.phone_config, 'mobile');
+      if (!validation.valid) {
+        Alert.alert(t.common.error, `WhatsApp: ${validation.error}`);
+        return;
       }
     }
     
@@ -2216,11 +2255,20 @@ export default function DoctorDashboardScreen() {
 
       {/* Edit Clinic Modal */}
       <Modal visible={showEditClinicModal} transparent animationType="slide">
-        <View style={styles.modalOverlay}>
-          <View style={styles.modalContent}>
-            <Text style={styles.modalTitle}>{t.common.edit}</Text>
+        <KeyboardAvoidingView 
+          behavior={Platform.OS === 'ios' ? 'padding' : 'height'} 
+          style={{ flex: 1 }}
+        >
+          <View style={styles.modalOverlay}>
+            <View style={[styles.modalContent, { maxHeight: '90%' }]}>
+              <ScrollView 
+                keyboardShouldPersistTaps="handled"
+                contentContainerStyle={{ paddingBottom: 20 }}
+                showsVerticalScrollIndicator={true}
+              >
+                <Text style={styles.modalTitle}>{t.common.edit}</Text>
 
-            <View style={styles.inputGroup}>
+                <View style={styles.inputGroup}>
               <Text style={styles.label}>{t.doctorApp.clinicName}</Text>
               <TextInput
                 style={styles.input}
@@ -2256,7 +2304,7 @@ export default function DoctorDashboardScreen() {
 
             <PhoneInput
               value={editClinicDraft.mobile}
-              onChangeValue={(e164, local) => setEditClinicDraft(prev => ({ ...prev, mobile: e164 }))}
+              onChangeValue={(e164, local) => setEditClinicDraft(prev => ({ ...prev, mobile: e164, mobileLocal: local }))}
               type="mobile"
               label={isRTL ? 'رقم الموبايل' : 'Mobile Number'}
               placeholder="70 123 456"
@@ -2266,7 +2314,7 @@ export default function DoctorDashboardScreen() {
 
             <PhoneInput
               value={editClinicDraft.landline}
-              onChangeValue={(e164, local) => setEditClinicDraft(prev => ({ ...prev, landline: e164 }))}
+              onChangeValue={(e164, local) => setEditClinicDraft(prev => ({ ...prev, landline: e164, landlineLocal: local }))}
               type="landline"
               label={isRTL ? 'رقم أرضي (اختياري)' : 'Landline (Optional)'}
               placeholder="01 123 456"
@@ -2276,7 +2324,7 @@ export default function DoctorDashboardScreen() {
 
             <PhoneInput
               value={editClinicDraft.whatsapp}
-              onChangeValue={(e164, local) => setEditClinicDraft(prev => ({ ...prev, whatsapp: e164 }))}
+              onChangeValue={(e164, local) => setEditClinicDraft(prev => ({ ...prev, whatsapp: e164, whatsappLocal: local }))}
               type="mobile"
               label={isRTL ? 'رقم واتساب' : 'WhatsApp Number'}
               placeholder="70 123 456"
@@ -2284,22 +2332,24 @@ export default function DoctorDashboardScreen() {
               isRTL={isRTL}
             />
 
-            <View style={styles.modalButtons}>
-              <TouchableOpacity style={styles.modalButtonSecondary} onPress={() => setShowEditClinicModal(false)}>
-                <Text style={styles.modalButtonSecondaryText}>{t.common.cancel}</Text>
-              </TouchableOpacity>
-              <TouchableOpacity
-                style={[styles.modalButtonPrimary, savingClinicEdit && styles.buttonDisabled]}
-                onPress={handleSaveClinicEdit}
-                disabled={savingClinicEdit}
-              >
-                {savingClinicEdit ? <ActivityIndicator color="white" size="small" /> : (
-                  <Text style={styles.modalButtonPrimaryText}>{t.common.save}</Text>
-                )}
-              </TouchableOpacity>
+                <View style={styles.modalButtons}>
+                  <TouchableOpacity style={styles.modalButtonSecondary} onPress={() => setShowEditClinicModal(false)}>
+                    <Text style={styles.modalButtonSecondaryText}>{t.common.cancel}</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity
+                    style={[styles.modalButtonPrimary, savingClinicEdit && styles.buttonDisabled]}
+                    onPress={handleSaveClinicEdit}
+                    disabled={savingClinicEdit}
+                  >
+                    {savingClinicEdit ? <ActivityIndicator color="white" size="small" /> : (
+                      <Text style={styles.modalButtonPrimaryText}>{t.common.save}</Text>
+                    )}
+                  </TouchableOpacity>
+                </View>
+              </ScrollView>
             </View>
           </View>
-        </View>
+        </KeyboardAvoidingView>
       </Modal>
 
       {/* Block Time Modal */}

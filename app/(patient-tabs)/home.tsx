@@ -29,7 +29,7 @@ type Clinic = {
   clinic_name: string;
   address: string;
   consultation_fee: string;
-  phone: string;
+  mobile: string;
   whatsapp: string;
   instagram: string;
   facebook: string;
@@ -144,7 +144,7 @@ export default function PatientHomeTab() {
       const { data: clinicsData, error: clinicsError } = await supabase
         .from('clinics')
         .select(`
-          id, clinic_name, address, consultation_fee, phone, whatsapp, latitude, longitude, doctor_id,
+          id, clinic_name, address, consultation_fee, mobile, whatsapp, latitude, longitude, doctor_id,
           doctors!inner (id, user_id, specialty_code, experience_years, rating, total_reviews, is_approved, instagram, facebook, bio)
         `)
         .eq('is_active', true)
@@ -188,7 +188,7 @@ export default function PatientHomeTab() {
           clinic_name: clinic.clinic_name,
           address: clinic.address || '',
           consultation_fee: clinic.consultation_fee || t.home.consultationFee,
-          phone: clinic.phone || '',
+          mobile: clinic.mobile || '',
           whatsapp: clinic.whatsapp || '',
           instagram: doctor?.instagram || '',
           facebook: doctor?.facebook || '',
@@ -452,7 +452,7 @@ export default function PatientHomeTab() {
                   latitude: clinic.latitude?.toString() || '',
                   longitude: clinic.longitude?.toString() || '',
                   experience: clinic.experience,
-                  phone: clinic.phone,
+                  phone: clinic.mobile,
                   whatsapp: clinic.whatsapp,
                   instagram: clinic.instagram,
                   facebook: clinic.facebook,

@@ -4,6 +4,7 @@ import { useLocalSearchParams, useRouter } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import React, { useEffect, useState } from 'react';
 import { ActivityIndicator, Image, Linking, Platform, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { Ionicons } from '@expo/vector-icons';
 
 export default function DoctorProfileScreen() {
   const router = useRouter();
@@ -117,8 +118,8 @@ export default function DoctorProfileScreen() {
   };
 
   const socialLinks = [
-    { key: 'instagram', label: 'Instagram', icon: 'IG', url: buildSocialUrl('instagram', instagram) },
-    { key: 'facebook', label: 'Facebook', icon: 'FB', url: buildSocialUrl('facebook', facebook) },
+    { key: 'instagram', label: 'Instagram', iconName: 'logo-instagram', color: '#E1306C', url: buildSocialUrl('instagram', instagram) },
+    { key: 'facebook', label: 'Facebook', iconName: 'logo-facebook', color: '#1877F2', url: buildSocialUrl('facebook', facebook) },
   ].filter(link => link.url);
 
   const handleOpenLink = (url: string) => {
@@ -261,14 +262,14 @@ export default function DoctorProfileScreen() {
           <View style={styles.contactButtons}>
             {phone && (
               <TouchableOpacity style={styles.contactButton} onPress={handleCall}>
-                <Text style={styles.contactButtonIcon}>📞</Text>
+                <Ionicons name="call-outline" size={20} color="#1F2937" style={styles.contactButtonIcon} />
                 <Text style={styles.contactButtonText}>{isRTL ? 'اتصال' : 'Call'}</Text>
               </TouchableOpacity>
             )}
             
             {whatsapp && (
               <TouchableOpacity style={[styles.contactButton, styles.whatsappButton]} onPress={handleWhatsApp}>
-                <Text style={styles.contactButtonIcon}>💬</Text>
+                <Ionicons name="logo-whatsapp" size={20} color="#25D366" style={styles.contactButtonIcon} />
                 <Text style={styles.contactButtonText}>WhatsApp</Text>
               </TouchableOpacity>
             )}
@@ -288,7 +289,7 @@ export default function DoctorProfileScreen() {
                   style={[styles.socialButton, isRTL && styles.rowReverse]}
                   onPress={() => handleOpenLink(link.url)}
                 >
-                  <Text style={styles.socialIcon}>{link.icon}</Text>
+                    <Ionicons name={link.iconName as any} size={20} color={link.color} style={styles.socialIcon} />
                   <Text style={[styles.socialText, isRTL && styles.textRight]}>{link.label}</Text>
                 </TouchableOpacity>
               ))}
@@ -390,11 +391,11 @@ const styles = StyleSheet.create({
   contactButtons: { flexDirection: 'row', gap: 10 },
   contactButton: { flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', backgroundColor: '#EFF6FF', padding: 15, borderRadius: 12 },
   whatsappButton: { backgroundColor: '#D1FAE5' },
-  contactButtonIcon: { fontSize: 20, marginRight: 8 },
+  contactButtonIcon: { marginRight: 8 },
   contactButtonText: { fontSize: 14, fontWeight: '600', color: '#1F2937' },
   socialButtons: { flexDirection: 'row', flexWrap: 'wrap', gap: 10 },
   socialButton: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#F3F4F6', padding: 12, borderRadius: 12 },
-  socialIcon: { fontSize: 18, marginRight: 8 },
+  socialIcon: { marginRight: 8 },
   socialText: { fontSize: 14, fontWeight: '600', color: '#1F2937' },
   scheduleRow: { flexDirection: 'row', justifyContent: 'space-between', paddingVertical: 10, borderBottomWidth: 1, borderBottomColor: '#F3F4F6' },
   scheduleDay: { fontSize: 14, color: '#6B7280' },
