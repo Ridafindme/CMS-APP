@@ -8,7 +8,8 @@
     "android": "expo start --android",
     "ios": "expo start --ios",
     "web": "expo start --web",
-    "lint": "expo lint"
+    "lint": "expo lint",
+    "test": "jest"
   },
   "dependencies": {
     "@expo/vector-icons": "^15.0.3",
@@ -21,6 +22,7 @@
     "expo": "~54.0.31",
     "expo-auth-session": "~7.0.10",
     "expo-constants": "~18.0.13",
+    "expo-dev-client": "~6.0.20",
     "expo-device": "~8.0.10",
     "expo-font": "~14.0.10",
     "expo-haptics": "~15.0.8",

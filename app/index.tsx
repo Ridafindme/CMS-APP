@@ -1,5 +1,7 @@
+import { supabase } from '@/lib/supabase';
 import { useRouter } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
+import * as WebBrowser from 'expo-web-browser';
 import React, { useEffect, useMemo, useState } from 'react';
 import {
   ActivityIndicator,
@@ -11,9 +13,6 @@ import {
   TouchableOpacity,
   View,
 } from 'react-native';
-import { makeRedirectUri } from 'expo-auth-session';
-import * as WebBrowser from 'expo-web-browser';
-import { supabase } from '@/lib/supabase';
 
 WebBrowser.maybeCompleteAuthSession();
 
@@ -112,12 +111,10 @@ export default function WelcomeScreen() {
     try {
       setGoogleLoading(true);
       
-      console.log('Welcome screen - Starting OAuth with redirectTo:', 'exp://192.168.0.106:8081');
-      
+      // Use Supabase callback URL for OAuth
       const { data, error } = await supabase.auth.signInWithOAuth({
         provider: 'google',
         options: {
-          redirectTo: 'exp://192.168.0.106:8081',
           skipBrowserRedirect: false,
         },
       });
@@ -139,23 +136,19 @@ export default function WelcomeScreen() {
 
       const result = await WebBrowser.openAuthSessionAsync(
         data.url,
-        'exp://192.168.0.106:8081',
-        { 
-          showInRecents: true,
-        }
+        'com.cms.app://',
       );
 
       console.log('Welcome screen - Browser result:', result);
-      setGoogleLoading(false);
       
       if (result.type === 'success' && result.url) {
         await handleUrl(result.url);
       } else if (result.type === 'cancel') {
         console.log('Welcome screen - User canceled');
         Alert.alert('Cancelled', 'Sign-in was cancelled');
-      } else {
-        console.log('Welcome screen - Unexpected result type:', result.type);
       }
+      
+      setGoogleLoading(false);
     } catch (err: any) {
       console.error('Welcome screen - Google sign-in error:', err);
       Alert.alert('Google Sign-In Failed', err.message || 'Unexpected error occurred.');
@@ -172,7 +165,7 @@ export default function WelcomeScreen() {
       
       {/* App Name */}
       <Text style={styles.title}>CMS App</Text>
-      <Text style={styles.subtitle}>Clinic Management System</Text>
+      <Text style={styles.subtitle}>Clinic Management System v2.1</Text>
       <Text style={styles.tagline}>Connect with healthcare professionals</Text>
       
       {/* Buttons */}

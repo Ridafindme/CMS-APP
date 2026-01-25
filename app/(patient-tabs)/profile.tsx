@@ -15,6 +15,7 @@ import {
   TouchableOpacity,
   View,
 } from 'react-native';
+import PhoneInput from '@/components/ui/phone-input';
 
 type Profile = {
   full_name: string;
@@ -42,6 +43,7 @@ export default function ProfileTab() {
   const [showEditModal, setShowEditModal] = useState(false);
   const [editName, setEditName] = useState('');
   const [editNameAr, setEditNameAr] = useState('');
+  const [editPhone, setEditPhone] = useState('');
   const [saving, setSaving] = useState(false);
 
   useEffect(() => {
@@ -119,6 +121,7 @@ export default function ProfileTab() {
   const handleOpenEditModal = () => {
     setEditName(profile?.full_name || '');
     setEditNameAr(profile?.full_name_ar || '');
+    setEditPhone(profile?.phone || '');
     setShowEditModal(true);
   };
 
@@ -135,6 +138,7 @@ export default function ProfileTab() {
         .update({
           full_name: editName.trim(),
           full_name_ar: editNameAr.trim() || null,
+          phone: editPhone || null,
         })
         .eq('id', user.id);
 
@@ -144,6 +148,7 @@ export default function ProfileTab() {
         ...profile!,
         full_name: editName.trim(),
         full_name_ar: editNameAr.trim(),
+        phone: editPhone,
       });
 
       setShowEditModal(false);
@@ -352,6 +357,18 @@ export default function ProfileTab() {
               placeholder="أدخل اسمك الكامل"
               placeholderTextColor="#9CA3AF"
             />
+
+            <View style={{ marginTop: 10 }}>
+              <PhoneInput
+                value={editPhone}
+                onChangeValue={(e164, local) => setEditPhone(e164)}
+                type="mobile"
+                label={isRTL ? 'رقم الهاتف' : 'Phone Number'}
+                placeholder="70 123 456"
+                icon="📱"
+                isRTL={isRTL}
+              />
+            </View>
 
             <View style={styles.modalButtons}>
               <TouchableOpacity

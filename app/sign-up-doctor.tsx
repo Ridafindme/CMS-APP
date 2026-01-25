@@ -17,6 +17,9 @@ import {
   TouchableOpacity,
   View,
 } from 'react-native';
+import { Ionicons } from '@expo/vector-icons';
+import PhoneInput from '@/components/ui/phone-input';
+import { validatePhone } from '@/lib/phone-utils';
 
 type Specialty = {
   code: string;
@@ -51,6 +54,8 @@ export default function ApplyAsDoctorScreen() {
     clinicLatitude: null as number | null,
     clinicLongitude: null as number | null,
     consultationFee: '',
+    mobile: '',
+    landline: '',
     whatsapp: '',
   });
 
@@ -178,6 +183,47 @@ export default function ApplyAsDoctorScreen() {
       return;
     }
 
+    // Validate phone numbers if provided
+    if (formData.mobile || formData.landline || formData.whatsapp) {
+      const { data: countryData } = await supabase
+        .from('countries')
+        .select('phone_config')
+        .eq('is_default', true)
+        .single();
+      
+      if (countryData?.phone_config) {
+        // Validate mobile
+        if (formData.mobile) {
+          const cleaned = formData.mobile.replace(/[^0-9]/g, '');
+          const validation = validatePhone(cleaned, countryData.phone_config, 'mobile');
+          if (!validation.valid) {
+            Alert.alert('Error', `Mobile: ${validation.error}`);
+            return;
+          }
+        }
+        
+        // Validate landline
+        if (formData.landline) {
+          const cleaned = formData.landline.replace(/[^0-9]/g, '');
+          const validation = validatePhone(cleaned, countryData.phone_config, 'landline');
+          if (!validation.valid) {
+            Alert.alert('Error', `Landline: ${validation.error}`);
+            return;
+          }
+        }
+        
+        // Validate whatsapp
+        if (formData.whatsapp) {
+          const cleaned = formData.whatsapp.replace(/[^0-9]/g, '');
+          const validation = validatePhone(cleaned, countryData.phone_config, 'mobile');
+          if (!validation.valid) {
+            Alert.alert('Error', `WhatsApp: ${validation.error}`);
+            return;
+          }
+        }
+      }
+    }
+
     setLoading(true);
     
     try {
@@ -216,6 +262,8 @@ export default function ApplyAsDoctorScreen() {
           latitude: formData.clinicLatitude,
           longitude: formData.clinicLongitude,
           consultation_fee: formData.consultationFee || null,
+          mobile: formData.mobile || null,
+          landline: formData.landline || null,
           whatsapp: formData.whatsapp || null,
           is_active: false, // Admin must activate
         });
@@ -402,19 +450,32 @@ export default function ApplyAsDoctorScreen() {
                 </View>
               </View>
 
-              <View style={styles.inputGroup}>
-                <Text style={styles.label}>WhatsApp Number</Text>
-                <View style={styles.inputWrapper}>
-                  <TextInput
-                    style={styles.input}
-                    placeholder="+961 70 XXX XXX"
-                    placeholderTextColor="#9CA3AF"
-                    value={formData.whatsapp}
-                    onChangeText={(value) => updateField('whatsapp', value)}
-                    keyboardType="phone-pad"
-                  />
-                </View>
-              </View>
+              <PhoneInput
+                value={formData.mobile}
+                onChangeValue={(e164, local) => updateField('mobile', e164)}
+                type="mobile"
+                label="Mobile Number"
+                placeholder="70 123 456"
+                icon="📱"
+              />
+
+              <PhoneInput
+                value={formData.landline}
+                onChangeValue={(e164, local) => updateField('landline', e164)}
+                type="landline"
+                label="Landline (Optional)"
+                placeholder="01 123 456"
+                icon="☎️"
+              />
+
+              <PhoneInput
+                value={formData.whatsapp}
+                onChangeValue={(e164, local) => updateField('whatsapp', e164)}
+                type="mobile"
+                label="WhatsApp Number"
+                placeholder="70 123 456"
+                icon={require('@/assets/images/whatsappicon.png')}
+              />
 
               <View style={styles.infoBox}>
                 <Text style={styles.infoIcon}>ℹ️</Text>

@@ -36,7 +36,10 @@ type ClinicSchedule = {
 const DAY_KEYS: DayKey[] = ['sun', 'mon', 'tue', 'wed', 'thu', 'fri', 'sat'];
 
 const timeToMinutes = (time: string) => {
-  const [h, m] = time.split(':').map(v => parseInt(v, 10));
+  if (!time) return null;
+  // Normalize format: if no colon, assume it's just hours (e.g., "9" -> "09:00")
+  const normalized = time.includes(':') ? time : `${time}:00`;
+  const [h, m] = normalized.split(':').map(v => parseInt(v, 10));
   if (Number.isNaN(h) || Number.isNaN(m)) return null;
   return h * 60 + m;
 };
@@ -100,11 +103,14 @@ export default function BookingScreen() {
         .eq('id', clinicId)
         .single();
 
+      console.log('Fetched clinic schedule:', { clinicId, data, error });
+
       if (!error && data) {
         setClinicSchedule((data as any).schedule || null);
         const rawMinutes = (data as any).slot_minutes ?? 30;
         const clamped = Math.min(120, Math.max(20, rawMinutes));
         setSlotMinutes(clamped);
+        console.log('Set clinic schedule:', (data as any).schedule);
       }
     } catch (error) {
       console.error('Error fetching clinic schedule:', error);
@@ -189,11 +195,24 @@ export default function BookingScreen() {
   };
 
   const getScheduleForDate = (dateString: string) => {
-    if (!clinicSchedule?.default) return null;
+    if (!clinicSchedule) {
+      console.log('No clinic schedule available');
+      return null;
+    }
     const dayKey = getDayKey(dateString);
     const weeklyOff = clinicSchedule.weekly_off || [];
-    if (weeklyOff.includes(dayKey)) return null;
-    return clinicSchedule.default;
+    if (weeklyOff.includes(dayKey)) {
+      console.log(`${dayKey} is weekly off`);
+      return null;
+    }
+    
+    // Priority: Day-specific schedule > Generic default
+    const daySpecificSchedule = clinicSchedule[dayKey];
+    if (daySpecificSchedule && (daySpecificSchedule.start || daySpecificSchedule.end)) {
+      return daySpecificSchedule;
+    }
+    
+    return clinicSchedule.default || null;
   };
 
   const getSlotsForDate = (dateString: string) => {
@@ -225,7 +244,7 @@ export default function BookingScreen() {
   const formatTime = (time: string) => {
     const [hours, minutes = '00'] = time.split(':');
     const hour = parseInt(hours, 10);
-    const ampm = hour >= 12 ? (isRTL ? '?' : 'PM') : (isRTL ? '?' : 'AM');
+    const ampm = hour >= 12 ? (isRTL ? 'م' : 'PM') : (isRTL ? 'ص' : 'AM');
     const hour12 = hour % 12 || 12;
     return `${hour12}:${minutes.padStart(2, '0')} ${ampm}`;
   };

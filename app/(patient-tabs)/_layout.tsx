@@ -1,10 +1,40 @@
-import { Tabs } from 'expo-router';
-import React from 'react';
-import { Platform, Text } from 'react-native';
+import { Tabs, usePathname } from 'expo-router';
+import React, { useEffect } from 'react';
+import { Platform, Text, BackHandler, Alert } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 export default function PatientTabsLayout() {
   const insets = useSafeAreaInsets();
+  const pathname = usePathname();
+  
+  useEffect(() => {
+    // Only handle back button on main tab screens
+    const mainPaths = ['/home', '/appointments', '/chat', '/profile'];
+    const isMainTab = mainPaths.includes(pathname);
+    
+    if (!isMainTab) return;
+    
+    const backAction = () => {
+      Alert.alert(
+        'Exit App',
+        'Use Sign Out from the Profile tab to exit properly.',
+        [
+          {
+            text: 'OK',
+            style: 'cancel'
+          }
+        ]
+      );
+      return true; // Prevent exit
+    };
+
+    const backHandler = BackHandler.addEventListener(
+      'hardwareBackPress',
+      backAction
+    );
+
+    return () => backHandler.remove();
+  }, [pathname]);
   
   return (
     <Tabs

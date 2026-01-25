@@ -1,5 +1,6 @@
 import { Session, User } from '@supabase/supabase-js';
 import React, { createContext, useContext, useEffect, useState } from 'react';
+import { registerForPushNotificationsAsync, savePushToken, setupNotificationListeners } from './notifications';
 import { supabase } from './supabase';
 
 type AuthContextType = {
@@ -48,8 +49,25 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
       setLoading(false);
     });
 
-    return () => subscription.unsubscribe();
+    // Setup notification listeners
+    const cleanupNotifications = setupNotificationListeners();
+
+    return () => {
+      subscription.unsubscribe();
+      cleanupNotifications();
+    };
   }, []);
+
+  // Register for push notifications when user logs in
+  useEffect(() => {
+    if (user) {
+      registerForPushNotificationsAsync().then(token => {
+        if (token) {
+          savePushToken(user.id, token);
+        }
+      });
+    }
+  }, [user]);
 
   const signIn = async (email: string, password: string) => {
     const { error } = await supabase.auth.signInWithPassword({

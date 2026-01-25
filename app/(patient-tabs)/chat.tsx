@@ -50,12 +50,24 @@ export default function ChatTab() {
   const [newMessage, setNewMessage] = useState('');
   const [sending, setSending] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [messageChannel, setMessageChannel] = useState<any>(null);
+  const [isTyping, setIsTyping] = useState(false);
+  const [typingTimeout, setTypingTimeout] = useState<NodeJS.Timeout | null>(null);
 
   useEffect(() => {
     if (user) {
       fetchConversations();
     }
   }, [user]);
+
+  // Clean up message channel when conversation changes or unmounts
+  useEffect(() => {
+    return () => {
+      if (messageChannel) {
+        messageChannel.unsubscribe();
+      }
+    };
+  }, [selectedConversation]);
 
   const fetchConversations = async () => {
     if (!user) return;
@@ -189,6 +201,22 @@ export default function ChatTab() {
     }
   };
 
+  const markMessagesAsRead = async (conversation: Conversation) => {
+    if (!user) return;
+
+    try {
+      // Mark all unread messages from this doctor as read
+      await supabase
+        .from('messages')
+        .update({ read_at: new Date().toISOString() })
+        .eq('sender_id', conversation.doctor_user_id)
+        .eq('receiver_id', user.id)
+        .is('read_at', null);
+    } catch (error) {
+      console.error('Error marking messages as read:', error);
+    }
+  };
+
   const fetchMessages = async (conversation: Conversation) => {
     if (!user) return;
 
@@ -224,10 +252,124 @@ export default function ChatTab() {
       } else {
         setMessages([]);
       }
+
+      // Set up real-time subscription for new messages
+      if (messageChannel) {
+        messageChannel.unsubscribe();
+      }
+
+      console.log('🔔 Setting up real-time for:', user.id, 'and', conversation.doctor_user_id);
+      
+      const channel = supabase
+        .channel(`messages:${user.id}:${conversation.doctor_user_id}`)
+        .on(
+          'postgres_changes',
+          {
+            event: 'INSERT',
+            schema: 'public',
+            table: 'messages',
+          },
+          (payload: any) => {
+            console.log('📨 New message received:', payload);
+            const newMsg: Message = {
+              id: payload.new.id,
+              sender_id: payload.new.sender_id,
+              content: payload.new.content,
+              created_at: payload.new.created_at,
+              is_mine: payload.new.sender_id === user.id,
+            };
+            setMessages(prev => [...prev, newMsg]);
+            
+            // Auto-scroll to new message
+            setTimeout(() => {
+              flatListRef.current?.scrollToEnd({ animated: true });
+            }, 100);
+          }
+        )
+        .subscribe();
+
+      setMessageChannel(channel);
+
+      // Mark messages as read
+      await markMessagesAsRead(conversation);
+
+      // Subscribe to typing presence
+      const presenceChannel = supabase.channel(`presence:${user.id}:${conversation.doctor_user_id}`, {
+        config: { presence: { key: user.id } }
+      });
+
+      presenceChannel
+        .on('presence', { event: 'sync' }, () => {
+          const state = presenceChannel.presenceState();
+          const doctorPresence = state[conversation.doctor_user_id];
+          setIsTyping(doctorPresence && doctorPresence[0]?.typing === true);
+        })
+        .on('presence', { event: 'join' }, ({ key, newPresences }) => {
+          if (key === conversation.doctor_user_id && newPresences[0]?.typing) {
+            setIsTyping(true);
+          }
+        })
+        .on('presence', { event: 'leave' }, ({ key }) => {
+          if (key === conversation.doctor_user_id) {
+            setIsTyping(false);
+          }
+        })
+        .subscribe();
+
+      // Listen for read receipt updates
+      const readChannel = supabase
+        .channel(`read_receipts:${user.id}:${conversation.doctor_user_id}`)
+        .on(
+          'postgres_changes',
+          {
+            event: 'UPDATE',
+            schema: 'public',
+            table: 'messages',
+            filter: `sender_id=eq.${user.id}`
+          },
+          (payload: any) => {
+            if (payload.new.read_at) {
+              console.log('📖 Message read:', payload.new.id);
+              // Update local message to show as read
+              setMessages(prev => prev.map(msg => 
+                msg.id === payload.new.id ? { ...msg, read_at: payload.new.read_at } : msg
+              ));
+            }
+          }
+        )
+        .subscribe();
+
     } catch (error) {
       console.error('Error fetching messages:', error);
       setMessages([]);
     }
+  };
+
+  const handleTextChange = (text: string) => {
+    setNewMessage(text);
+
+    if (!selectedConversation || !user) return;
+
+    // Clear existing timeout
+    if (typingTimeout) {
+      clearTimeout(typingTimeout);
+    }
+
+    // Broadcast typing status
+    const channel = supabase.channel(`presence:${selectedConversation.doctor_user_id}:${user.id}`);
+    channel.subscribe(async (status) => {
+      if (status === 'SUBSCRIBED') {
+        await channel.track({ typing: text.length > 0 });
+      }
+    });
+
+    // Stop typing after 2 seconds of no input
+    const timeout = setTimeout(async () => {
+      await channel.track({ typing: false });
+      channel.unsubscribe();
+    }, 2000);
+
+    setTypingTimeout(timeout);
   };
 
   const sendMessage = async () => {
@@ -251,9 +393,8 @@ export default function ChatTab() {
 
       if (error) {
         console.log('Send error:', error);
-        // If table doesn't exist or other error, still show message locally
+        // If table doesn't exist or other error, show message locally
         if (error.code === 'PGRST116') {
-          // Table doesn't exist
           setError(isRTL ? 'ميزة الرسائل غير متاحة حالياً' : 'Messaging feature is not available yet');
         } else {
           setError(isRTL ? 'فشل إرسال الرسالة' : 'Failed to send message');
@@ -266,15 +407,8 @@ export default function ChatTab() {
           is_mine: true,
         };
         setMessages(prev => [...prev, tempMsg]);
-      } else if (data) {
-        setMessages(prev => [...prev, {
-          id: data.id,
-          sender_id: data.sender_id,
-          content: data.content,
-          created_at: data.created_at,
-          is_mine: true,
-        }]);
       }
+      // Real-time subscription will add the message automatically
 
       setTimeout(() => {
         flatListRef.current?.scrollToEnd({ animated: true });
@@ -312,35 +446,41 @@ export default function ChatTab() {
   // Chat View
   if (selectedConversation) {
     return (
-      <View style={styles.chatContainer}>
-        <StatusBar style="light" />
-        
-        {/* Chat Header */}
-        <View style={styles.chatHeader}>
-          <TouchableOpacity 
-            style={styles.backButton}
-            onPress={() => setSelectedConversation(null)}
-          >
-            <Text style={styles.backButtonText}>{isRTL ? '→' : '←'}</Text>
-          </TouchableOpacity>
-          <View style={styles.chatHeaderInfo}>
-            <Text style={styles.chatHeaderName}>{selectedConversation.doctor_name}</Text>
-            <Text style={styles.chatHeaderSpecialty}>
-              {selectedConversation.specialty_icon} {selectedConversation.specialty}
-            </Text>
+      <KeyboardAvoidingView 
+        style={{ flex: 1 }}
+        behavior={Platform.OS === 'ios' ? 'padding' : 'padding'}
+        keyboardVerticalOffset={Platform.OS === 'ios' ? 90 : 0}
+      >
+        <View style={styles.chatContainer}>
+          <StatusBar style="light" />
+          
+          {/* Chat Header */}
+          <View style={styles.chatHeader}>
+            <TouchableOpacity 
+              style={styles.backButton}
+              onPress={() => setSelectedConversation(null)}
+            >
+              <Text style={styles.backButtonText}>{isRTL ? '→' : '←'}</Text>
+            </TouchableOpacity>
+            <View style={styles.chatHeaderInfo}>
+              <Text style={styles.chatHeaderName}>{selectedConversation.doctor_name}</Text>
+              <Text style={styles.chatHeaderSpecialty}>
+                {selectedConversation.specialty_icon} {selectedConversation.specialty}
+              </Text>
+            </View>
           </View>
-        </View>
 
-        {/* Messages */}
-        <FlatList
-          ref={flatListRef}
-          data={messages}
-          keyExtractor={(item) => item.id}
-          style={styles.messagesList}
-          contentContainerStyle={[styles.messagesContent, { paddingBottom: 100 + tabBarHeight }]}
-          onContentSizeChange={() => flatListRef.current?.scrollToEnd()}
-          scrollEnabled={true}
-          ListEmptyComponent={
+          {/* Messages */}
+          <FlatList
+            ref={flatListRef}
+            data={messages}
+            keyExtractor={(item) => item.id}
+            style={styles.messagesList}
+            contentContainerStyle={{ paddingBottom: 20 }}
+            onContentSizeChange={() => flatListRef.current?.scrollToEnd()}
+            scrollEnabled={true}
+            keyboardShouldPersistTaps="handled"
+            ListEmptyComponent={
             <View style={styles.emptyMessages}>
               <Text style={styles.emptyMessagesIcon}>💬</Text>
               <Text style={styles.emptyMessagesText}>
@@ -368,30 +508,31 @@ export default function ChatTab() {
                 item.is_mine ? styles.myMessageTime : styles.theirMessageTime
               ]}>
                 {formatTime(item.created_at)}
+                {item.is_mine && (
+                  <Text style={styles.readReceipt}>
+                    {' '}{(item as any).read_at ? '✓✓' : '✓'}
+                  </Text>
+                )}
               </Text>
             </View>
           )}
         />
 
-        {/* Error Banner */}
-        {error && messages.length > 0 && (
-          <View style={styles.errorBanner}>
-            <Text style={styles.errorBannerText}>{error}</Text>
-          </View>
-        )}
+          {/* Error Banner */}
+          {error && messages.length > 0 && (
+            <View style={styles.errorBanner}>
+              <Text style={styles.errorBannerText}>{error}</Text>
+            </View>
+          )}
 
-        {/* Input - Wrapped in KeyboardAvoidingView */}
-        <KeyboardAvoidingView 
-          behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-          keyboardVerticalOffset={60}
-        >
-          <View style={[styles.inputContainer, isRTL && styles.rowReverse, { paddingBottom: 20 + tabBarHeight }]}>
+          {/* Input */}
+          <View style={[styles.inputContainer, isRTL && styles.rowReverse, { paddingBottom: tabBarHeight }]}>
             <TextInput
               style={[styles.textInput, isRTL && styles.textRight]}
               placeholder={isRTL ? 'اكتب رسالتك...' : 'Type a message...'}
               placeholderTextColor="#9CA3AF"
               value={newMessage}
-              onChangeText={setNewMessage}
+              onChangeText={handleTextChange}
               multiline
               maxLength={1000}
             />
@@ -407,8 +548,17 @@ export default function ChatTab() {
               )}
             </TouchableOpacity>
           </View>
-        </KeyboardAvoidingView>
-      </View>
+
+          {/* Typing Indicator */}
+          {isTyping && (
+            <View style={styles.typingIndicator}>
+              <Text style={styles.typingText}>
+                {isRTL ? `${selectedConversation.doctor_name} يكتب...` : `${selectedConversation.doctor_name} is typing...`}
+              </Text>
+            </View>
+          )}
+        </View>
+      </KeyboardAvoidingView>
     );
   }
 
@@ -473,7 +623,7 @@ export default function ChatTab() {
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#F3F4F6' },
-  chatContainer: { flex: 1, backgroundColor: '#F3F4F6', justifyContent: 'space-between' },
+  chatContainer: { flex: 1, backgroundColor: '#F3F4F6' },
   centered: { justifyContent: 'center', alignItems: 'center' },
   loadingText: { marginTop: 10, fontSize: 16, color: '#6B7280' },
   textRight: { textAlign: 'right' },
@@ -526,9 +676,13 @@ const styles = StyleSheet.create({
   myMessageTime: { fontSize: 11, color: 'rgba(255,255,255,0.7)', textAlign: 'right' },
   theirMessageTime: { fontSize: 11, color: '#9CA3AF' },
   
-  inputContainer: { flexDirection: 'row', padding: 10, backgroundColor: 'white', borderTopWidth: 1, borderTopColor: '#E5E7EB', alignItems: 'flex-end', paddingBottom: 20 },
+  inputContainer: { flexDirection: 'row', padding: 10, backgroundColor: 'white', borderTopWidth: 1, borderTopColor: '#E5E7EB', alignItems: 'flex-end' },
   textInput: { flex: 1, backgroundColor: '#F3F4F6', borderRadius: 20, paddingHorizontal: 15, paddingVertical: 10, fontSize: 16, maxHeight: 100, marginRight: 10 },
   sendButton: { width: 44, height: 44, borderRadius: 22, backgroundColor: '#2563EB', justifyContent: 'center', alignItems: 'center' },
   sendButtonDisabled: { backgroundColor: '#93C5FD' },
   sendButtonText: { fontSize: 20, color: 'white', fontWeight: 'bold' },
+  
+  typingIndicator: { position: 'absolute', bottom: 80, left: 15, backgroundColor: '#E5E7EB', paddingHorizontal: 12, paddingVertical: 6, borderRadius: 12 },
+  typingText: { fontSize: 12, color: '#6B7280', fontStyle: 'italic' },
+  readReceipt: { fontSize: 10, color: 'rgba(255,255,255,0.9)' },
 });

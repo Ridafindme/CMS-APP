@@ -51,11 +51,6 @@ export default function SignUpPatientScreen() {
       return false;
     }
 
-    if (formData.phone && !formData.phone.startsWith('+')) {
-      Alert.alert('Error', 'Phone number must start with country code (e.g., +961)');
-      return false;
-    }
-
     if (!agreeToTerms) {
       Alert.alert('Error', 'Please agree to the Terms & Privacy Policy');
       return false;
@@ -100,13 +95,16 @@ export default function SignUpPatientScreen() {
   return (
     <KeyboardAvoidingView 
       style={styles.container}
-      behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+      behavior={Platform.OS === 'ios' ? 'padding' : 'padding'}
+      keyboardVerticalOffset={0}
     >
       <StatusBar style="light" />
       <ScrollView 
         contentContainerStyle={styles.scrollContent}
         keyboardShouldPersistTaps="handled"
         showsVerticalScrollIndicator={false}
+        bounces={false}
+        enableOnAndroid={true}
       >
         {/* Header */}
         <View style={styles.header}>
@@ -174,21 +172,14 @@ export default function SignUpPatientScreen() {
             </View>
           </View>
 
-          {/* Phone */}
-          <View style={styles.inputGroup}>
-            <Text style={styles.label}>Phone Number</Text>
-            <View style={styles.inputWrapper}>
-              <Text style={styles.inputIcon}>📱</Text>
-              <TextInput
-                style={styles.input}
-                placeholder="+961 XX XXX XXX"
-                placeholderTextColor="#9CA3AF"
-                value={formData.phone}
-                onChangeText={(value) => updateField('phone', value)}
-                keyboardType="phone-pad"
-              />
-            </View>
-          </View>
+          <PhoneInput
+            value={formData.phone}
+            onChangeValue={(e164, local) => updateField('phone', e164)}
+            type="mobile"
+            label="Phone Number (Optional)"
+            placeholder="70 123 456"
+            icon="📱"
+          />
 
           {/* Password */}
           <View style={styles.inputGroup}>

@@ -1,5 +1,5 @@
-import { createClient } from '@supabase/supabase-js';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { createClient } from '@supabase/supabase-js';
 
 // Replace with YOUR values from Step 4!
 const SUPABASE_URL = 'https://tqajsfkofgpncufkghvk.supabase.co';

@@ -140,12 +140,15 @@ export default function SignInScreen() {
   return (
     <KeyboardAvoidingView 
       style={styles.container}
-      behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+      behavior={Platform.OS === 'ios' ? 'padding' : 'padding'}
+      keyboardVerticalOffset={0}
     >
       <StatusBar style="light" />
       <ScrollView 
         contentContainerStyle={styles.scrollContent}
         keyboardShouldPersistTaps="handled"
+        showsVerticalScrollIndicator={false}
+        bounces={false}
       >
         {/* Header */}
         <View style={styles.header}>
@@ -288,7 +291,7 @@ export default function SignInScreen() {
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#2563EB' },
-  scrollContent: { flexGrow: 1 },
+  scrollContent: { flexGrow: 1, paddingBottom: 40 },
   header: { paddingTop: 50, paddingHorizontal: 20, paddingBottom: 30, alignItems: 'center' },
   backButton: { alignSelf: 'flex-start', marginBottom: 20 },
   alignRight: { alignSelf: 'flex-end' },
@@ -296,7 +299,7 @@ const styles = StyleSheet.create({
   icon: { fontSize: 60, marginBottom: 15 },
   title: { fontSize: 28, fontWeight: 'bold', color: 'white', marginBottom: 8 },
   subtitle: { fontSize: 16, color: '#BFDBFE' },
-  formContainer: { flex: 1, backgroundColor: 'white', borderTopLeftRadius: 30, borderTopRightRadius: 30, padding: 25, paddingTop: 25 },
+  formContainer: { flex: 1, backgroundColor: 'white', borderTopLeftRadius: 30, borderTopRightRadius: 30, padding: 25, paddingTop: 25, paddingBottom: 50 },
   rowReverse: { flexDirection: 'row-reverse' },
   textRight: { textAlign: 'right' },
   savedAccountsSection: { marginBottom: 20, backgroundColor: '#F9FAFB', borderRadius: 12, overflow: 'hidden' },

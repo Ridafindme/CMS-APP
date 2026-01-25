@@ -33,6 +33,7 @@ export default function DoctorProfileScreen() {
   const instagram = params.instagram as string || '';
   const facebook = params.facebook as string || '';
   const avatarUrl = params.avatar_url as string || '';
+  const bio = params.bio as string || '';
 
   useEffect(() => {
     fetchClinicSchedule();
@@ -193,6 +194,11 @@ export default function DoctorProfileScreen() {
             <Text style={styles.rating}>⭐ {rating}</Text>
             <Text style={styles.reviews}>({reviews} {isRTL ? 'تقييم' : 'reviews'})</Text>
           </View>
+          {bio ? (
+            <Text style={[styles.bioInHeader, isRTL && styles.textRight]}>
+              {bio}
+            </Text>
+          ) : null}
         </View>
       </View>
 
@@ -300,12 +306,16 @@ export default function DoctorProfileScreen() {
           
           {loadingSchedule ? (
             <ActivityIndicator size="small" color="#2563EB" style={{ marginVertical: 20 }} />
-          ) : clinicSchedule?.default ? (
+          ) : clinicSchedule ? (
             <>
               {/* Days with working hours */}
               {['mon', 'tue', 'wed', 'thu', 'fri', 'sat', 'sun'].map((day) => {
                 const isWeeklyOff = clinicSchedule.weekly_off?.includes(day);
-                const schedule = clinicSchedule.default;
+                // Priority: Day-specific schedule > Generic default
+                const daySchedule = clinicSchedule[day];
+                const schedule = (daySchedule && (daySchedule.start || daySchedule.end)) 
+                  ? daySchedule 
+                  : clinicSchedule.default;
                 
                 return (
                   <View key={day} style={[styles.scheduleRow, isRTL && styles.rowReverse]}>
@@ -314,9 +324,13 @@ export default function DoctorProfileScreen() {
                       <Text style={[styles.scheduleTime, styles.closedText]}>
                         {isRTL ? 'مغلق' : 'Closed'}
                       </Text>
-                    ) : (
+                    ) : schedule?.start && schedule?.end ? (
                       <Text style={styles.scheduleTime}>
                         {formatTime(schedule.start)} - {formatTime(schedule.end)}
+                      </Text>
+                    ) : (
+                      <Text style={[styles.scheduleTime, styles.closedText]}>
+                        {isRTL ? 'غير متاح' : 'Not Available'}
                       </Text>
                     )}
                   </View>
@@ -358,9 +372,11 @@ const styles = StyleSheet.create({
   ratingContainer: { flexDirection: 'row', alignItems: 'center', marginTop: 10 },
   rating: { fontSize: 16, color: '#FCD34D', fontWeight: '600' },
   reviews: { fontSize: 14, color: '#BFDBFE', marginLeft: 8 },
+  bioInHeader: { fontSize: 14, color: '#E0E7FF', marginTop: 12, paddingHorizontal: 20, textAlign: 'center', lineHeight: 20 },
   content: { flex: 1, padding: 20 },
   card: { backgroundColor: 'white', borderRadius: 16, padding: 20, marginBottom: 15, shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.05, shadowRadius: 3, elevation: 2 },
   cardTitle: { fontSize: 18, fontWeight: 'bold', color: '#1F2937', marginBottom: 15 },
+  bioText: { fontSize: 15, color: '#4B5563', lineHeight: 24 },
   textRight: { textAlign: 'right' },
   rowReverse: { flexDirection: 'row-reverse' },
   alignRight: { alignItems: 'flex-end' },

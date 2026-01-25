@@ -22,6 +22,8 @@ import {
 } from 'react-native';
 import MapView, { Marker } from 'react-native-maps';
 import { Ionicons } from '@expo/vector-icons';
+import PhoneInput from '@/components/ui/phone-input';
+import { validatePhone, fromE164 } from '@/lib/phone-utils';
 
 type Appointment = {
   id: string;
@@ -43,6 +45,9 @@ type Clinic = {
   longitude?: number;
   schedule?: ClinicSchedule | null;
   slot_minutes?: number | null;
+  mobile?: string | null;
+  landline?: string | null;
+  whatsapp?: string | null;
 };
 
 type DoctorData = {
@@ -171,6 +176,9 @@ export default function DoctorDashboardScreen() {
     consultation_fee: '',
     latitude: null as number | null,
     longitude: null as number | null,
+    mobile: '',
+    landline: '',
+    whatsapp: '',
   });
   const [savingClinicEdit, setSavingClinicEdit] = useState(false);
   
@@ -910,12 +918,57 @@ export default function DoctorDashboardScreen() {
       consultation_fee: clinic.consultation_fee || '',
       latitude: clinic.latitude ?? null,
       longitude: clinic.longitude ?? null,
+      mobile: clinic.mobile || '',
+      landline: clinic.landline || '',
+      whatsapp: clinic.whatsapp || '',
     });
     setShowEditClinicModal(true);
   };
 
   const handleSaveClinicEdit = async () => {
     if (!editClinicId) return;
+    
+    // Validate phone numbers if provided
+    if (editClinicDraft.mobile || editClinicDraft.landline || editClinicDraft.whatsapp) {
+      const { data: countryData } = await supabase
+        .from('countries')
+        .select('phone_config')
+        .eq('is_default', true)
+        .single();
+      
+      if (countryData?.phone_config) {
+        // Validate mobile
+        if (editClinicDraft.mobile) {
+          const cleaned = editClinicDraft.mobile.replace(/[^0-9]/g, '');
+          const validation = validatePhone(cleaned, countryData.phone_config, 'mobile');
+          if (!validation.valid) {
+            Alert.alert(t.common.error, `Mobile: ${validation.error}`);
+            return;
+          }
+        }
+        
+        // Validate landline
+        if (editClinicDraft.landline) {
+          const cleaned = editClinicDraft.landline.replace(/[^0-9]/g, '');
+          const validation = validatePhone(cleaned, countryData.phone_config, 'landline');
+          if (!validation.valid) {
+            Alert.alert(t.common.error, `Landline: ${validation.error}`);
+            return;
+          }
+        }
+        
+        // Validate whatsapp
+        if (editClinicDraft.whatsapp) {
+          const cleaned = editClinicDraft.whatsapp.replace(/[^0-9]/g, '');
+          const validation = validatePhone(cleaned, countryData.phone_config, 'mobile');
+          if (!validation.valid) {
+            Alert.alert(t.common.error, `WhatsApp: ${validation.error}`);
+            return;
+          }
+        }
+      }
+    }
+    
     setSavingClinicEdit(true);
     try {
       const { error } = await supabase
@@ -926,6 +979,9 @@ export default function DoctorDashboardScreen() {
           consultation_fee: editClinicDraft.consultation_fee.trim() || null,
           latitude: editClinicDraft.latitude,
           longitude: editClinicDraft.longitude,
+          mobile: editClinicDraft.mobile || null,
+          landline: editClinicDraft.landline || null,
+          whatsapp: editClinicDraft.whatsapp || null,
         })
         .eq('id', editClinicId);
 
@@ -942,6 +998,9 @@ export default function DoctorDashboardScreen() {
                   consultation_fee: editClinicDraft.consultation_fee.trim(),
                   latitude: editClinicDraft.latitude ?? c.latitude,
                   longitude: editClinicDraft.longitude ?? c.longitude,
+                  mobile: editClinicDraft.mobile || null,
+                  landline: editClinicDraft.landline || null,
+                  whatsapp: editClinicDraft.whatsapp || null,
                 }
               : c
           )
@@ -2194,6 +2253,36 @@ export default function DoctorDashboardScreen() {
                 onChangeText={(text) => setEditClinicDraft(prev => ({ ...prev, consultation_fee: text }))}
               />
             </View>
+
+            <PhoneInput
+              value={editClinicDraft.mobile}
+              onChangeValue={(e164, local) => setEditClinicDraft(prev => ({ ...prev, mobile: e164 }))}
+              type="mobile"
+              label={isRTL ? 'رقم الموبايل' : 'Mobile Number'}
+              placeholder="70 123 456"
+              icon="📱"
+              isRTL={isRTL}
+            />
+
+            <PhoneInput
+              value={editClinicDraft.landline}
+              onChangeValue={(e164, local) => setEditClinicDraft(prev => ({ ...prev, landline: e164 }))}
+              type="landline"
+              label={isRTL ? 'رقم أرضي (اختياري)' : 'Landline (Optional)'}
+              placeholder="01 123 456"
+              icon="☎️"
+              isRTL={isRTL}
+            />
+
+            <PhoneInput
+              value={editClinicDraft.whatsapp}
+              onChangeValue={(e164, local) => setEditClinicDraft(prev => ({ ...prev, whatsapp: e164 }))}
+              type="mobile"
+              label={isRTL ? 'رقم واتساب' : 'WhatsApp Number'}
+              placeholder="70 123 456"
+              icon={require('@/assets/images/whatsappicon.png')}
+              isRTL={isRTL}
+            />
 
             <View style={styles.modalButtons}>
               <TouchableOpacity style={styles.modalButtonSecondary} onPress={() => setShowEditClinicModal(false)}>

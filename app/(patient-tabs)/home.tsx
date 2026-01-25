@@ -14,8 +14,7 @@ import {
   Text,
   TextInput,
   TouchableOpacity,
-  View,
-  I18nManager,
+  View
 } from 'react-native';
 
 type Specialty = {
@@ -50,6 +49,7 @@ type Clinic = {
   reviews: string;
   experience: string;
   experience_years: number;
+  bio?: string;
 };
 
 type Profile = {
@@ -78,8 +78,11 @@ export default function PatientHomeTab() {
   const [searchQuery, setSearchQuery] = useState('');
 
   useEffect(() => {
-    getUserLocation();
-    fetchData();
+    const initializeData = async () => {
+      await getUserLocation();
+      await fetchData();
+    };
+    initializeData();
   }, [user]);
 
   useEffect(() => {
@@ -142,7 +145,7 @@ export default function PatientHomeTab() {
         .from('clinics')
         .select(`
           id, clinic_name, address, consultation_fee, phone, whatsapp, latitude, longitude, doctor_id,
-          doctors!inner (id, user_id, specialty_code, experience_years, rating, total_reviews, is_approved, instagram, facebook)
+          doctors!inner (id, user_id, specialty_code, experience_years, rating, total_reviews, is_approved, instagram, facebook, bio)
         `)
         .eq('is_active', true)
         .eq('doctors.is_approved', true);
@@ -205,6 +208,7 @@ export default function PatientHomeTab() {
           reviews: doctor?.total_reviews?.toString() || '0',
           experience: `${doctor?.experience_years || 0} ${t.home.yearsExp}`,
           experience_years: doctor?.experience_years || 0,
+          bio: doctor?.bio || '',
         };
       });
 
@@ -259,6 +263,14 @@ export default function PatientHomeTab() {
         }
       });
     }
+
+    // Sort by distance (nearest first)
+    filtered.sort((a, b) => {
+      if (a.distance === null && b.distance === null) return 0;
+      if (a.distance === null) return 1;
+      if (b.distance === null) return -1;
+      return a.distance - b.distance;
+    });
 
     setFilteredClinics(filtered);
   };
@@ -445,6 +457,7 @@ export default function PatientHomeTab() {
                   instagram: clinic.instagram,
                   facebook: clinic.facebook,
                   avatar_url: clinic.doctor_avatar_url,
+                  bio: clinic.bio,
                 }
               } as any)}
             >
@@ -517,7 +530,6 @@ const styles = StyleSheet.create({
   searchIcon: { fontSize: 20, marginRight: 10 },
   searchInput: { flex: 1, fontSize: 16, color: '#1F2937' },
   clearSearchIcon: { fontSize: 18, color: '#9CA3AF', paddingHorizontal: 8 },
-  textRight: { textAlign: 'right' },
   searchPlaceholder: { color: '#9CA3AF', fontSize: 16 },
   sectionHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 15, marginTop: 10 },
   sectionTitle: { fontSize: 18, fontWeight: '600', color: '#1F2937' },
