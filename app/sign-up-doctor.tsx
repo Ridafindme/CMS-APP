@@ -1,4 +1,6 @@
+import PhoneInput from '@/components/ui/phone-input';
 import { useAuth } from '@/lib/AuthContext';
+import { fromE164, validatePhone } from '@/lib/phone-utils';
 import { supabase } from '@/lib/supabase';
 import * as Location from 'expo-location';
 import { useRouter } from 'expo-router';
@@ -17,9 +19,6 @@ import {
   TouchableOpacity,
   View,
 } from 'react-native';
-import { Ionicons } from '@expo/vector-icons';
-import PhoneInput from '@/components/ui/phone-input';
-import { validatePhone, fromE164 } from '@/lib/phone-utils';
 
 type Specialty = {
   code: string;

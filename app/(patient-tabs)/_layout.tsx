@@ -1,6 +1,7 @@
+import { Ionicons } from '@expo/vector-icons';
 import { Tabs, usePathname } from 'expo-router';
 import React, { useEffect } from 'react';
-import { Platform, Text, BackHandler, Alert } from 'react-native';
+import { Alert, BackHandler } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 export default function PatientTabsLayout() {
@@ -71,7 +72,11 @@ export default function PatientTabsLayout() {
         options={{
           title: 'Home',
           tabBarIcon: ({ color, focused }) => (
-            <Text style={{ fontSize: 24 }}>{focused ? '🏠' : '🏘️'}</Text>
+            <Ionicons
+              name={focused ? 'home' : 'home-outline'}
+              size={24}
+              color={color}
+            />
           ),
         }}
       />
@@ -80,7 +85,11 @@ export default function PatientTabsLayout() {
         options={{
           title: 'Appointments',
           tabBarIcon: ({ color, focused }) => (
-            <Text style={{ fontSize: 24 }}>{focused ? '📅' : '📆'}</Text>
+            <Ionicons
+              name={focused ? 'calendar' : 'calendar-outline'}
+              size={24}
+              color={color}
+            />
           ),
         }}
       />
@@ -89,7 +98,11 @@ export default function PatientTabsLayout() {
         options={{
           title: 'Chat',
           tabBarIcon: ({ color, focused }) => (
-            <Text style={{ fontSize: 24 }}>{focused ? '💬' : '💭'}</Text>
+            <Ionicons
+              name={focused ? 'chatbubble-ellipses' : 'chatbubble-ellipses-outline'}
+              size={24}
+              color={color}
+            />
           ),
         }}
       />
@@ -98,7 +111,11 @@ export default function PatientTabsLayout() {
         options={{
           title: 'Profile',
           tabBarIcon: ({ color, focused }) => (
-            <Text style={{ fontSize: 24 }}>{focused ? '👤' : '👥'}</Text>
+            <Ionicons
+              name={focused ? 'person-circle' : 'person-circle-outline'}
+              size={24}
+              color={color}
+            />
           ),
         }}
       />

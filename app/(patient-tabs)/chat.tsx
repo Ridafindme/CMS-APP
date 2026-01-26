@@ -1,6 +1,7 @@
 import { useAuth } from '@/lib/AuthContext';
 import { useI18n } from '@/lib/i18n';
 import { supabase } from '@/lib/supabase';
+import { useBottomTabBarHeight } from '@react-navigation/bottom-tabs';
 import { StatusBar } from 'expo-status-bar';
 import React, { useEffect, useRef, useState } from 'react';
 import {
@@ -14,7 +15,6 @@ import {
   TouchableOpacity,
   View,
 } from 'react-native';
-import { useBottomTabBarHeight } from '@react-navigation/bottom-tabs';
 
 type Conversation = {
   id: string;
@@ -35,6 +35,11 @@ type Message = {
   content: string;
   created_at: string;
   is_mine: boolean;
+};
+
+type PresenceState = {
+  presence_ref: string;
+  typing?: boolean;
 };
 
 export default function ChatTab() {
@@ -300,11 +305,11 @@ export default function ChatTab() {
 
       presenceChannel
         .on('presence', { event: 'sync' }, () => {
-          const state = presenceChannel.presenceState();
+          const state = presenceChannel.presenceState() as Record<string, PresenceState[]>;
           const doctorPresence = state[conversation.doctor_user_id];
           setIsTyping(doctorPresence && doctorPresence[0]?.typing === true);
         })
-        .on('presence', { event: 'join' }, ({ key, newPresences }) => {
+        .on('presence', { event: 'join' }, ({ key, newPresences }: { key: string; newPresences: PresenceState[] }) => {
           if (key === conversation.doctor_user_id && newPresences[0]?.typing) {
             setIsTyping(true);
           }

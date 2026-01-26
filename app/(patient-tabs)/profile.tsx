@@ -1,20 +1,22 @@
 import PhoneInput from '@/components/ui/phone-input';
 import { useAuth } from '@/lib/AuthContext';
 import { useI18n } from '@/lib/i18n';
+import { fromE164, validatePhone } from '@/lib/phone-utils';
 import { supabase } from '@/lib/supabase';
+import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import React, { useEffect, useState } from 'react';
 import {
-  ActivityIndicator,
-  Alert,
-  Modal,
-  ScrollView,
-  StyleSheet,
-  Text,
-  TextInput,
-  TouchableOpacity,
-  View,
+    ActivityIndicator,
+    Alert,
+    Modal,
+    ScrollView,
+    StyleSheet,
+    Text,
+    TextInput,
+    TouchableOpacity,
+    View,
 } from 'react-native';
 
 type Profile = {
@@ -44,6 +46,7 @@ export default function ProfileTab() {
   const [editName, setEditName] = useState('');
   const [editNameAr, setEditNameAr] = useState('');
   const [editPhone, setEditPhone] = useState('');
+  const [editPhoneLocal, setEditPhoneLocal] = useState('');
   const [saving, setSaving] = useState(false);
 
   useEffect(() => {
@@ -116,12 +119,18 @@ export default function ProfileTab() {
   };
 
   const getEmailValue = () => profile?.email || t.profile.notProvided;
-  const getPhoneValue = () => (profile?.phone?.trim() ? profile.phone : t.profile.notProvided);
+  const getPhoneValue = () => {
+    if (!profile?.phone?.trim()) return t.profile.notProvided;
+    // Display local format from E.164
+    const local = fromE164(profile.phone, '961');
+    return local || profile.phone;
+  };
 
   const handleOpenEditModal = () => {
     setEditName(profile?.full_name || '');
     setEditNameAr(profile?.full_name_ar || '');
     setEditPhone(profile?.phone || '');
+    setEditPhoneLocal('');
     setShowEditModal(true);
   };
 
@@ -129,6 +138,29 @@ export default function ProfileTab() {
     if (!user || !editName.trim()) {
       Alert.alert(t.common.error, 'Name is required');
       return;
+    }
+
+    // Validate phone if provided
+    if (editPhoneLocal && editPhoneLocal.length > 0) {
+      if (!editPhone) {
+        Alert.alert(t.common.error, 'Please enter a valid mobile number');
+        return;
+      }
+      
+      // Load country data for validation
+      const { data: countryData } = await supabase
+        .from('countries')
+        .select('phone_config, country_code')
+        .eq('is_default', true)
+        .single();
+      
+      if (countryData?.phone_config) {
+        const validation = validatePhone(editPhoneLocal, countryData.phone_config, 'mobile');
+        if (!validation.valid) {
+          Alert.alert(t.common.error, validation.error || 'Invalid mobile number');
+          return;
+        }
+      }
     }
 
     setSaving(true);
@@ -196,18 +228,12 @@ export default function ProfileTab() {
         <View style={styles.headerTopRow}>
           <View style={styles.languageToggleRow}>
             <TouchableOpacity
-              style={[styles.languageButton, language === 'ar' && styles.languageButtonActive]}
-              onPress={() => setLanguage('ar')}
-              accessibilityLabel="AR"
+              style={styles.languagePill}
+              onPress={() => setLanguage(language === 'en' ? 'ar' : 'en')}
+              accessibilityLabel={isRTL ? 'تغيير اللغة' : 'Toggle Language'}
             >
-              <Text style={styles.languageButtonText}>AR</Text>
-            </TouchableOpacity>
-            <TouchableOpacity
-              style={[styles.languageButton, language === 'en' && styles.languageButtonActive]}
-              onPress={() => setLanguage('en')}
-              accessibilityLabel="EN"
-            >
-              <Text style={styles.languageButtonText}>EN</Text>
+              <Ionicons name="globe-outline" size={16} color="#fff" />
+              <Text style={styles.languagePillText}>{language === 'en' ? 'AR' : 'EN'}</Text>
             </TouchableOpacity>
           </View>
           <TouchableOpacity
@@ -215,7 +241,8 @@ export default function ProfileTab() {
             onPress={() => setShowSignOutModal(true)}
             accessibilityLabel={t.profile.signOut}
           >
-            <Text style={styles.headerSignOutIcon}>X</Text>
+            <Ionicons name="log-out-outline" size={18} color="#fff" />
+            <Text style={styles.headerSignOutText}>{t.profile.signOut}</Text>
           </TouchableOpacity>
         </View>
         <View style={styles.profileAvatar}>
@@ -228,27 +255,30 @@ export default function ProfileTab() {
       </View>
 
       <ScrollView style={styles.content} showsVerticalScrollIndicator={false}>
-        <Text style={[styles.sectionTitle, isRTL && styles.textRight]}>{t.profile.personalInfo}</Text>
-        <View style={[styles.infoCard, isRTL && styles.alignRight]}>
-          <TouchableOpacity style={styles.infoRow} onPress={handleOpenEditModal}>
-            <Text style={styles.infoLabel}>{t.profile.fullNameLabel}</Text>
-            <View style={styles.infoValueContainer}>
-              <Text style={[styles.infoValue, isRTL && styles.textRight]}>{getDisplayName()}</Text>
-              <Text style={styles.editIcon}>✏️</Text>
-            </View>
+        <View style={[styles.sectionHeader, isRTL && styles.rowReverse]}>
+          <Text style={[styles.sectionTitle, isRTL && styles.textRight]}>{t.profile.personalInfo}</Text>
+          <TouchableOpacity onPress={handleOpenEditModal} style={styles.editButton}>
+            <Ionicons name="create-outline" size={18} color="#2563EB" />
+            <Text style={styles.editButtonText}>{t.common.edit}</Text>
           </TouchableOpacity>
+        </View>
+        <View style={[styles.infoCard, isRTL && styles.alignRight]}>
+          <View style={styles.infoRow}>
+            <Text style={[styles.infoLabel, isRTL && styles.textRight]}>{t.profile.fullNameLabel}</Text>
+            <Text style={[styles.infoValue, isRTL && styles.textRight]}>{getDisplayName()}</Text>
+          </View>
 
           <View style={styles.infoDivider} />
 
           <View style={styles.infoRow}>
-            <Text style={styles.infoLabel}>{t.profile.emailLabel}</Text>
+            <Text style={[styles.infoLabel, isRTL && styles.textRight]}>{t.profile.emailLabel}</Text>
             <Text style={[styles.infoValue, isRTL && styles.textRight]}>{getEmailValue()}</Text>
           </View>
 
           <View style={styles.infoDivider} />
 
           <View style={styles.infoRow}>
-            <Text style={styles.infoLabel}>{t.profile.phoneLabel}</Text>
+            <Text style={[styles.infoLabel, isRTL && styles.textRight]}>{t.profile.phoneLabel}</Text>
             <Text style={[styles.infoValue, isRTL && styles.textRight]}>{getPhoneValue()}</Text>
           </View>
         </View>
@@ -337,7 +367,7 @@ export default function ProfileTab() {
         onRequestClose={() => setShowEditModal(false)}
       >
         <View style={styles.modalOverlay}>
-          <View style={[styles.modalContent, isRTL && styles.alignRight]}>
+          <View style={[styles.modalContent, styles.editModalContent, isRTL && styles.alignRight]}>
             <Text style={[styles.modalTitle, isRTL && styles.textRight]}>Edit Profile</Text>
             
             <Text style={[styles.inputLabel, isRTL && styles.textRight]}>Full Name (English)</Text>
@@ -358,17 +388,18 @@ export default function ProfileTab() {
               placeholderTextColor="#9CA3AF"
             />
 
-            <View style={{ marginTop: 10 }}>
-              <PhoneInput
-                value={editPhone}
-                onChangeValue={(e164, local) => setEditPhone(e164)}
-                type="mobile"
-                label={isRTL ? 'رقم الهاتف' : 'Phone Number'}
-                placeholder="70 123 456"
-                icon="📱"
-                isRTL={isRTL}
-              />
-            </View>
+            <PhoneInput
+              value={editPhone}
+              onChangeValue={(e164, local) => {
+                setEditPhone(e164);
+                setEditPhoneLocal(local);
+              }}
+              type="mobile"
+              label={isRTL ? 'رقم الموبايل' : 'Mobile'}
+              placeholder="70 123 456"
+              icon="📱"
+              isRTL={isRTL}
+            />
 
             <View style={styles.modalButtons}>
               <TouchableOpacity
@@ -397,7 +428,7 @@ export default function ProfileTab() {
       {/* Doctor Modal */}
       <Modal visible={showDoctorModal} transparent animationType="fade">
         <View style={styles.modalOverlay}>
-          <View style={styles.modalContent}>
+          <View style={[styles.modalContent, styles.standardModalContent]}>
             <Text style={styles.modalIcon}>👨‍⚕️</Text>
             <Text style={[styles.modalTitle, isRTL && styles.textRight]}>
               {doctorInfo ? t.profile.switchToDoctorMode : t.profile.applyAsDoctor}
@@ -430,7 +461,7 @@ export default function ProfileTab() {
       {/* Sign Out Modal */}
       <Modal visible={showSignOutModal} transparent animationType="fade">
         <View style={styles.modalOverlay}>
-          <View style={styles.modalContent}>
+          <View style={[styles.modalContent, styles.standardModalContent]}>
             <Text style={styles.modalIcon}>🚪</Text>
             <Text style={[styles.modalTitle, isRTL && styles.textRight]}>{t.profile.signOut}</Text>
             <Text style={[styles.modalMessage, isRTL && styles.textRight]}>{t.profile.signOutConfirm}</Text>
@@ -467,11 +498,10 @@ const styles = StyleSheet.create({
   header: { backgroundColor: '#2563EB', paddingTop: 50, paddingBottom: 30, alignItems: 'center', borderBottomLeftRadius: 25, borderBottomRightRadius: 25 },
   headerTopRow: { width: '100%', paddingHorizontal: 20, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12 },
   languageToggleRow: { flexDirection: 'row', alignItems: 'center' },
-  languageButton: { backgroundColor: 'rgba(255,255,255,0.2)', width: 40, height: 32, borderRadius: 16, alignItems: 'center', justifyContent: 'center', marginRight: 8 },
-  languageButtonActive: { backgroundColor: 'rgba(255,255,255,0.35)' },
-  languageButtonText: { color: 'white', fontSize: 12, fontWeight: '600' },
-  headerSignOutButton: { backgroundColor: 'rgba(255,255,255,0.2)', width: 32, height: 32, borderRadius: 16, alignItems: 'center', justifyContent: 'center' },
-  headerSignOutIcon: { color: 'white', fontSize: 14, fontWeight: '700' },
+  languagePill: { backgroundColor: 'rgba(255,255,255,0.2)', height: 34, paddingHorizontal: 14, borderRadius: 18, flexDirection: 'row', alignItems: 'center', gap: 6 },
+  languagePillText: { color: 'white', fontWeight: '600', letterSpacing: 0.4 },
+  headerSignOutButton: { backgroundColor: 'rgba(255,255,255,0.2)', height: 34, paddingHorizontal: 14, borderRadius: 18, flexDirection: 'row', alignItems: 'center', gap: 6 },
+  headerSignOutText: { color: 'white', fontSize: 12, fontWeight: '600' },
   profileAvatar: { width: 80, height: 80, borderRadius: 40, backgroundColor: 'rgba(255,255,255,0.2)', justifyContent: 'center', alignItems: 'center', marginBottom: 15 },
   avatarText: { fontSize: 32, fontWeight: 'bold', color: 'white' },
   profileName: { fontSize: 22, fontWeight: 'bold', color: 'white', marginBottom: 5 },
@@ -498,10 +528,11 @@ const styles = StyleSheet.create({
   infoRow: { marginBottom: 12 },
   infoLabel: { fontSize: 13, color: '#6B7280', marginBottom: 2 },
   infoValue: { fontSize: 15, color: '#111827', fontWeight: '500' },
-  infoValueContainer: { flexDirection: 'row', alignItems: 'center', gap: 8 },
-  editIcon: { fontSize: 16 },
   infoDivider: { height: 1, backgroundColor: '#E5E7EB', marginBottom: 12 },
-  sectionTitle: { fontSize: 16, fontWeight: '600', color: '#374151', marginBottom: 10 },
+  sectionHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 },
+  sectionTitle: { fontSize: 16, fontWeight: '600', color: '#374151' },
+  editButton: { flexDirection: 'row', alignItems: 'center', gap: 4, paddingHorizontal: 12, paddingVertical: 6, backgroundColor: '#EFF6FF', borderRadius: 8 },
+  editButtonText: { fontSize: 14, color: '#2563EB', fontWeight: '600' },
   settingsCard: { backgroundColor: 'white', borderRadius: 16, marginBottom: 15, overflow: 'hidden' },
   settingsItem: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', padding: 15, borderBottomWidth: 1, borderBottomColor: '#F3F4F6' },
   noBorder: { borderBottomWidth: 0 },
@@ -511,8 +542,10 @@ const styles = StyleSheet.create({
   settingsItemRight: { flexDirection: 'row', alignItems: 'center' },
   settingsValue: { fontSize: 14, color: '#6B7280', marginRight: 5 },
   chevron: { fontSize: 20, color: '#9CA3AF' },
-  modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'center', alignItems: 'center', padding: 20 },
-  modalContent: { backgroundColor: 'white', borderRadius: 20, padding: 25, width: '100%', maxWidth: 340, alignItems: 'center' },
+  modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'center', alignItems: 'center' },
+  modalContent: { backgroundColor: 'white', borderRadius: 20, padding: 25, width: '90%', alignItems: 'center', alignSelf: 'center' },
+  standardModalContent: { width: '90%', maxWidth: 420 },
+  editModalContent: { width: '95%', maxWidth: 520, alignItems: 'stretch', alignSelf: 'center' },
   modalIcon: { fontSize: 50, marginBottom: 15 },
   modalTitle: { fontSize: 20, fontWeight: 'bold', color: '#1F2937', marginBottom: 10, textAlign: 'center' },
   modalMessage: { fontSize: 14, color: '#6B7280', textAlign: 'center', marginBottom: 20, lineHeight: 20 },

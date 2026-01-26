@@ -31,6 +31,13 @@ type DayKey = 'sun' | 'mon' | 'tue' | 'wed' | 'thu' | 'fri' | 'sat';
 type ClinicSchedule = {
   default?: ClinicScheduleDay;
   weekly_off?: DayKey[];
+  sun?: ClinicScheduleDay;
+  mon?: ClinicScheduleDay;
+  tue?: ClinicScheduleDay;
+  wed?: ClinicScheduleDay;
+  thu?: ClinicScheduleDay;
+  fri?: ClinicScheduleDay;
+  sat?: ClinicScheduleDay;
 };
 
 const DAY_KEYS: DayKey[] = ['sun', 'mon', 'tue', 'wed', 'thu', 'fri', 'sat'];
@@ -207,7 +214,7 @@ export default function BookingScreen() {
     }
     
     // Priority: Day-specific schedule > Generic default
-    const daySpecificSchedule = clinicSchedule[dayKey];
+    const daySpecificSchedule = (clinicSchedule as any)[dayKey] as ClinicScheduleDay | undefined;
     if (daySpecificSchedule && (daySpecificSchedule.start || daySpecificSchedule.end)) {
       return daySpecificSchedule;
     }

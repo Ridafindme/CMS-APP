@@ -13,6 +13,7 @@ import React, { useEffect, useState } from 'react';
 import {
   ActivityIndicator,
   Alert,
+  BackHandler,
   Image,
   KeyboardAvoidingView,
   Modal,
@@ -35,6 +36,7 @@ type Appointment = {
   patient_name: string;
   patient_id: string;
   clinic_name: string;
+  notes?: string | null;
 };
 
 type Clinic = {
@@ -99,6 +101,13 @@ type DayKey = 'sun' | 'mon' | 'tue' | 'wed' | 'thu' | 'fri' | 'sat';
 type ClinicSchedule = {
   default?: ClinicScheduleDay;
   weekly_off?: DayKey[];
+  sun?: ClinicScheduleDay;
+  mon?: ClinicScheduleDay;
+  tue?: ClinicScheduleDay;
+  wed?: ClinicScheduleDay;
+  thu?: ClinicScheduleDay;
+  fri?: ClinicScheduleDay;
+  sat?: ClinicScheduleDay;
 };
 
 const DAY_KEYS: DayKey[] = ['sun', 'mon', 'tue', 'wed', 'thu', 'fri', 'sat'];
@@ -160,6 +169,7 @@ export default function DoctorDashboardScreen() {
   const [scheduleClinicId, setScheduleClinicId] = useState<string | null>(null);
   const [scheduleDraft, setScheduleDraft] = useState<ClinicSchedule>({});
   const [scheduleSlotMinutes, setScheduleSlotMinutes] = useState<number>(30);
+  const [scheduleMode, setScheduleMode] = useState<'generic' | 'day-by-day'>('generic');
   const [savingSchedule, setSavingSchedule] = useState(false);
   const [showDoctorSocialModal, setShowDoctorSocialModal] = useState(false);
   const [socialInstagram, setSocialInstagram] = useState('');
@@ -196,6 +206,10 @@ export default function DoctorDashboardScreen() {
   const [showEditProfileModal, setShowEditProfileModal] = useState(false);
   const [editName, setEditName] = useState('');
   const [editNameAr, setEditNameAr] = useState('');
+  const [editPhone, setEditPhone] = useState('');
+  const [editPhoneLocal, setEditPhoneLocal] = useState('');
+  const [editInstagram, setEditInstagram] = useState('');
+  const [editFacebook, setEditFacebook] = useState('');
   const [savingProfile, setSavingProfile] = useState(false);
   const [selectedBlockClinicId, setSelectedBlockClinicId] = useState<string | null>(null);
   const [blockReason, setBlockReason] = useState('');
@@ -256,6 +270,18 @@ export default function DoctorDashboardScreen() {
     setSelectedBlockSlots([]);
   }, [selectedBlockDate, selectedBlockClinicId]);
 
+  // Handle Android back button
+  useEffect(() => {
+    const backAction = () => {
+      handleBackNavigation();
+      return true; // Prevent default behavior (exit app)
+    };
+
+    const backHandler = BackHandler.addEventListener('hardwareBackPress', backAction);
+
+    return () => backHandler.remove();
+  }, [activeTab, selectedChatConversation, router]);
+
   const dedupeBlockedSlots = (slots: BlockedSlot[]) => {
     const seen = new Set<string>();
     return slots.filter((slot) => {
@@ -264,6 +290,25 @@ export default function DoctorDashboardScreen() {
       seen.add(key);
       return true;
     });
+  };
+
+  // Unified back navigation handler
+  const handleBackNavigation = () => {
+    // If in chat view with a conversation open, go back to conversations list
+    if (activeTab === 'chat' && selectedChatConversation) {
+      setSelectedChatConversation(null);
+      setChatMessages([]);
+      return;
+    }
+    
+    // If not on the default tab (appointments), go back to it
+    if (activeTab !== 'appointments') {
+      setActiveTab('appointments');
+      return;
+    }
+    
+    // If already on appointments tab, navigate back to patient home
+    router.replace('/(patient-tabs)/home');
   };
 
   const fetchData = async () => {
@@ -335,28 +380,34 @@ export default function DoctorDashboardScreen() {
 
         console.log('📅 ALL Appointments (no filter):', allAppointments, aptError);
 
-        // Now fetch with date filter
+        // Now fetch with date filter - include past AND future appointments
         const todayDate = new Date();
         const today = todayDate.toISOString().split('T')[0];
         const startDate = new Date(todayDate);
         startDate.setDate(startDate.getDate() - appointmentsLookbackDays);
         const startStr = startDate.toISOString().split('T')[0];
-        console.log('📅 Today is:', today);
+        
+        // Get future appointments up to 30 days ahead
+        const futureDate = new Date(todayDate);
+        futureDate.setDate(futureDate.getDate() + 30);
+        const futureStr = futureDate.toISOString().split('T')[0];
+        
+        console.log('📅 Date range:', startStr, 'to', futureStr, '(today:', today + ')');
         
         const { data: appointmentsData, error: aptError2 } = await supabase
           .from('appointments')
-          .select('id, appointment_date,time_slot, status, clinic_id, patient_id')
+          .select('id, appointment_date, time_slot, status, clinic_id, patient_id, notes')
           .eq('doctor_id', doctorResult.id)
           .gte('appointment_date', startStr)
-          .lte('appointment_date', today)
-          .order('appointment_date', { ascending: false });
+          .lte('appointment_date', futureStr)
+          .order('appointment_date', { ascending: true });
 
         console.log('📅 Filtered appointments:', appointmentsData, aptError2);
 
         // Use all appointments if filtered is empty but all has data
         const aptsToUse = (appointmentsData && appointmentsData.length > 0) 
           ? appointmentsData 
-          : allAppointments?.filter(a => a.appointment_date >= startStr && a.appointment_date <= today) || [];
+          : allAppointments?.filter(a => a.appointment_date >= startStr && a.appointment_date <= futureStr) || [];
 
         console.log('📅 Using appointments:', aptsToUse);
 
@@ -401,6 +452,7 @@ export default function DoctorDashboardScreen() {
               patient_name: patient.full_name || 'Patient',
               patient_id: apt.patient_id,
               clinic_name: clinic.clinic_name || 'Clinic',
+              notes: apt.notes || null,
             };
           });
 
@@ -1097,6 +1149,20 @@ export default function DoctorDashboardScreen() {
     }));
   };
 
+  const updateScheduleDay = (
+    day: DayKey,
+    field: keyof ClinicScheduleDay,
+    value: string
+  ) => {
+    setScheduleDraft(prev => ({
+      ...prev,
+      [day]: {
+        ...(prev[day] || {}),
+        [field]: value.trim(),
+      },
+    }));
+  };
+
   const toggleWeeklyOff = (day: DayKey) => {
     setScheduleDraft(prev => {
       const current = prev.weekly_off || [];
@@ -1492,6 +1558,10 @@ export default function DoctorDashboardScreen() {
   const handleOpenEditProfileModal = () => {
     setEditName(profile?.full_name || '');
     setEditNameAr(profile?.full_name_ar || '');
+    setEditPhone(profile?.phone || '');
+    setEditPhoneLocal('');
+    setEditInstagram(doctorData?.instagram || '');
+    setEditFacebook(doctorData?.facebook || '');
     setShowEditProfileModal(true);
   };
 
@@ -1501,22 +1571,67 @@ export default function DoctorDashboardScreen() {
       return;
     }
 
+    // Validate phone if provided
+    if (editPhoneLocal && editPhoneLocal.length > 0) {
+      if (!editPhone) {
+        Alert.alert(t.common.error, 'Please enter a valid mobile number');
+        return;
+      }
+      
+      // Load country data for validation
+      const { data: countryData } = await supabase
+        .from('countries')
+        .select('phone_config, country_code')
+        .eq('is_default', true)
+        .single();
+      
+      if (countryData?.phone_config) {
+        const validation = validatePhone(editPhoneLocal, countryData.phone_config, 'mobile');
+        if (!validation.valid) {
+          Alert.alert(t.common.error, validation.error || 'Invalid mobile number');
+          return;
+        }
+      }
+    }
+
     setSavingProfile(true);
     try {
-      const { error } = await supabase
+      // Update profile
+      const { error: profileError } = await supabase
         .from('profiles')
         .update({
           full_name: editName.trim(),
           full_name_ar: editNameAr.trim() || null,
+          phone: editPhone || null,
         })
         .eq('id', user.id);
 
-      if (error) throw error;
+      if (profileError) throw profileError;
+
+      // Update doctor social media
+      if (doctorData?.id) {
+        const { error: doctorError } = await supabase
+          .from('doctors')
+          .update({
+            instagram: editInstagram.trim() || null,
+            facebook: editFacebook.trim() || null,
+          })
+          .eq('id', doctorData.id);
+
+        if (doctorError) throw doctorError;
+
+        setDoctorData({
+          ...doctorData,
+          instagram: editInstagram.trim() || null,
+          facebook: editFacebook.trim() || null,
+        });
+      }
 
       setProfile({
         ...profile!,
         full_name: editName.trim(),
         full_name_ar: editNameAr.trim(),
+        phone: editPhone,
       });
 
       setShowEditProfileModal(false);
@@ -1590,9 +1705,10 @@ export default function DoctorDashboardScreen() {
             <TouchableOpacity
               style={styles.languageButton}
               onPress={() => setLanguage(language === 'en' ? 'ar' : 'en')}
-              accessibilityLabel="Toggle Language"
+              accessibilityLabel={isRTL ? 'تغيير اللغة' : 'Toggle Language'}
             >
-              <Text style={styles.languageIcon}>{language === 'en' ? 'AR' : 'EN'}</Text>
+              <Ionicons name="globe-outline" size={16} color="#fff" />
+              <Text style={styles.languageButtonText}>{language === 'en' ? 'AR' : 'EN'}</Text>
             </TouchableOpacity>
           </View>
           <TouchableOpacity
@@ -1601,6 +1717,7 @@ export default function DoctorDashboardScreen() {
             accessibilityLabel={t.profile.signOut}
           >
             <Ionicons name="log-out-outline" size={18} color="#fff" />
+            <Text style={styles.signOutIconButtonText}>{t.profile.signOut}</Text>
           </TouchableOpacity>
         </View>
         <TouchableOpacity 
@@ -1654,31 +1771,56 @@ export default function DoctorDashboardScreen() {
           style={[styles.tab, activeTab === 'appointments' && styles.tabActive]}
           onPress={() => setActiveTab('appointments')}
         >
-          <Text style={styles.tabEmoji}>📅</Text>
+          <Ionicons
+            name={activeTab === 'appointments' ? 'calendar' : 'calendar-outline'}
+            size={22}
+            color={activeTab === 'appointments' ? '#FFFFFF' : '#1F2937'}
+            style={styles.tabIcon}
+          />
         </TouchableOpacity>
         <TouchableOpacity 
           style={[styles.tab, activeTab === 'schedule' && styles.tabActive]}
           onPress={() => setActiveTab('schedule')}
         >
-          <Text style={styles.tabEmoji}>🕐</Text>
+          <Ionicons
+            name={activeTab === 'schedule' ? 'time' : 'time-outline'}
+            size={22}
+            color={activeTab === 'schedule' ? '#FFFFFF' : '#1F2937'}
+            style={styles.tabIcon}
+          />
         </TouchableOpacity>
         <TouchableOpacity 
           style={[styles.tab, activeTab === 'clinics' && styles.tabActive]}
           onPress={() => setActiveTab('clinics')}
         >
-          <Text style={styles.tabEmoji}>🏥</Text>
+          <Ionicons
+            name={activeTab === 'clinics' ? 'business' : 'business-outline'}
+            size={22}
+            color={activeTab === 'clinics' ? '#FFFFFF' : '#1F2937'}
+            style={styles.tabIcon}
+          />
         </TouchableOpacity>
         <TouchableOpacity 
           style={[styles.tab, activeTab === 'chat' && styles.tabActive]}
           onPress={() => setActiveTab('chat')}
         >
-          <Text style={styles.tabEmoji}>💬</Text>
+          <Ionicons
+            name={activeTab === 'chat' ? 'chatbubble-ellipses' : 'chatbubble-ellipses-outline'}
+            size={22}
+            color={activeTab === 'chat' ? '#FFFFFF' : '#1F2937'}
+            style={styles.tabIcon}
+          />
         </TouchableOpacity>
         <TouchableOpacity 
           style={[styles.tab, activeTab === 'profile' && styles.tabActive]}
           onPress={() => setActiveTab('profile')}
         >
-          <Text style={styles.tabEmoji}>👤</Text>
+          <Ionicons
+            name={activeTab === 'profile' ? 'person-circle' : 'person-circle-outline'}
+            size={22}
+            color={activeTab === 'profile' ? '#FFFFFF' : '#1F2937'}
+            style={styles.tabIcon}
+          />
         </TouchableOpacity>
       </View>
 
@@ -1697,22 +1839,50 @@ export default function DoctorDashboardScreen() {
                 <Text style={styles.emptyIcon}>📅</Text>
                 <Text style={styles.emptyTitle}>{t.doctorDashboard.noAppointments}</Text>
                 <Text style={styles.emptyText}>{t.doctorDashboard.noAppointmentsDesc}</Text>
+                <View style={styles.debugInfo}>
+                  <Text style={styles.debugTitle}>Debug Info:</Text>
+                  <Text style={styles.debugText}>Doctor ID: {doctorData?.id || 'N/A'}</Text>
+                  <Text style={styles.debugText}>User ID: {user?.id || 'N/A'}</Text>
+                  <Text style={styles.debugText}>Lookback Days: {appointmentsLookbackDays}</Text>
+                  <Text style={styles.debugText}>Check console for query details</Text>
+                </View>
               </View>
             ) : (
               appointments.map((apt) => (
                 <View key={apt.id} style={styles.appointmentCard}>
                   <View style={[styles.appointmentHeader, isRTL && styles.rowReverse]}>
                     <View style={isRTL ? styles.alignRight : undefined}>
-                      <Text style={[styles.patientName, isRTL && styles.textRight]}>{apt.patient_name}</Text>
+                      <Text style={[styles.patientName, isRTL && styles.textRight]}>👤 {apt.patient_name}</Text>
                       <Text style={[styles.clinicText, isRTL && styles.textRight]}>🏥 {apt.clinic_name}</Text>
                     </View>
+                  </View>
+                  
+                  <View style={[styles.appointmentMeta, isRTL && styles.rowReverse]}>
                     <View style={[styles.dateBadge, apt.appointment_date === new Date().toISOString().split('T')[0] && styles.todayBadge]}>
-                      <Text style={styles.dateText}>{formatDate(apt.appointment_date)}</Text>
+                      <Text style={styles.dateText}>📅 {formatDate(apt.appointment_date)}</Text>
                     </View>
                     <View style={styles.timeBadge}>
-          <Text style={styles.timeText}>🕒 {apt.appointment_time}</Text>
-        </View>
+                      <Text style={styles.timeText}>🕒 {apt.appointment_time}</Text>
+                    </View>
+                    <View style={[styles.statusBadgeInline, 
+                      apt.status === 'confirmed' && styles.confirmedBadgeInline,
+                      apt.status === 'cancelled' && styles.cancelledBadgeInline]}>
+                      <Text style={styles.statusBadgeText}>
+                        {apt.status === 'pending' && '⏳'}
+                        {apt.status === 'confirmed' && '✓'}
+                        {apt.status === 'cancelled' && '✕'}
+                        {' '}
+                        {apt.status.charAt(0).toUpperCase() + apt.status.slice(1)}
+                      </Text>
+                    </View>
                   </View>
+
+                  {apt.notes && (
+                    <View style={styles.appointmentNotes}>
+                      <Text style={styles.notesLabel}>{isRTL ? 'ملاحظات:' : 'Notes:'}</Text>
+                      <Text style={styles.notesText}>{apt.notes}</Text>
+                    </View>
+                  )}
                   
                   <View style={styles.appointmentActions}>
                     {apt.status === 'pending' && (
@@ -1986,7 +2156,7 @@ export default function DoctorDashboardScreen() {
                           <Text style={styles.avatarEmoji}>👤</Text>
                         </View>
                         <View style={[styles.conversationInfo, isRTL && styles.alignRight]}>
-                          <Text style={[styles.doctorName, isRTL && styles.textRight]}>{conv.patient_name}</Text>
+                          <Text style={[styles.conversationPatientName, isRTL && styles.textRight]}>{conv.patient_name}</Text>
                           <Text style={[styles.lastMessage, isRTL && styles.textRight]} numberOfLines={1}>
                             {conv.last_message}
                           </Text>
@@ -2113,23 +2283,25 @@ export default function DoctorDashboardScreen() {
               </View>
             </View>
 
-            <View style={[styles.infoCard, isRTL && styles.alignRight]}>
-              <Text style={[styles.infoTitle, isRTL && styles.textRight]}>{t.profile.personalInfo}</Text>
-
-              <TouchableOpacity style={styles.infoRow} onPress={handleOpenEditProfileModal}>
-                <Text style={styles.infoLabel}>{t.profile.fullNameLabel}</Text>
-                <View style={styles.infoValueContainer}>
-                  <Text style={[styles.infoValue, isRTL && styles.textRight]}>
-                    {getDoctorDisplayName(isRTL, profile, t.profile.notProvided)}
-                  </Text>
-                  <Text style={styles.editIcon}>✏️</Text>
-                </View>
+            <View style={[styles.sectionHeader, isRTL && styles.rowReverse]}>
+              <Text style={[styles.sectionTitle, isRTL && styles.textRight]}>{t.profile.personalInfo}</Text>
+              <TouchableOpacity onPress={handleOpenEditProfileModal} style={styles.editButton}>
+                <Ionicons name="create-outline" size={18} color="#2563EB" />
+                <Text style={styles.editButtonText}>{t.common.edit}</Text>
               </TouchableOpacity>
+            </View>
+            <View style={[styles.infoCard, isRTL && styles.alignRight]}>
+              <View style={styles.infoRow}>
+                <Text style={[styles.infoLabel, isRTL && styles.textRight]}>{t.profile.fullNameLabel}</Text>
+                <Text style={[styles.infoValue, isRTL && styles.textRight]}>
+                  {getDoctorDisplayName(isRTL, profile, t.profile.notProvided)}
+                </Text>
+              </View>
 
               <View style={styles.infoDivider} />
 
               <View style={styles.infoRow}>
-                <Text style={styles.infoLabel}>{t.profile.emailLabel}</Text>
+                <Text style={[styles.infoLabel, isRTL && styles.textRight]}>{t.profile.emailLabel}</Text>
                 <Text style={[styles.infoValue, isRTL && styles.textRight]}>
                   {user?.email || t.profile.notProvided}
                 </Text>
@@ -2138,16 +2310,30 @@ export default function DoctorDashboardScreen() {
               <View style={styles.infoDivider} />
 
               <View style={styles.infoRow}>
-                <Text style={styles.infoLabel}>{t.profile.phoneLabel}</Text>
+                <Text style={[styles.infoLabel, isRTL && styles.textRight]}>{t.profile.phoneLabel}</Text>
                 <Text style={[styles.infoValue, isRTL && styles.textRight]}>
                   {getDoctorPhone(profile, t.profile.notProvided)}
                 </Text>
               </View>
-            </View>
 
-            <TouchableOpacity style={styles.scheduleBtn} onPress={openDoctorSocialModal}>
-              <Text style={styles.scheduleBtnText}>Social Media</Text>
-            </TouchableOpacity>
+              <View style={styles.infoDivider} />
+
+              <View style={styles.infoRow}>
+                <Text style={[styles.infoLabel, isRTL && styles.textRight]}>Instagram</Text>
+                <Text style={[styles.infoValue, isRTL && styles.textRight]}>
+                  {doctorData?.instagram || t.profile.notProvided}
+                </Text>
+              </View>
+
+              <View style={styles.infoDivider} />
+
+              <View style={styles.infoRow}>
+                <Text style={[styles.infoLabel, isRTL && styles.textRight]}>Facebook</Text>
+                <Text style={[styles.infoValue, isRTL && styles.textRight]}>
+                  {doctorData?.facebook || t.profile.notProvided}
+                </Text>
+              </View>
+            </View>
             <TouchableOpacity style={styles.signOutButton} onPress={handleSignOut}>
               <Text style={styles.signOutText}>🚪 {t.profile.signOut}</Text>
             </TouchableOpacity>
@@ -2357,96 +2543,188 @@ export default function DoctorDashboardScreen() {
       <Modal visible={showScheduleModal} transparent animationType="slide">
         <View style={styles.modalOverlay}>
           <View style={[styles.modalContent, { maxHeight: '85%' }]}>
-            <Text style={styles.modalTitle}>{t.doctorDashboard.clinicScheduleTitle}</Text>
+            <ScrollView keyboardShouldPersistTaps="handled" showsVerticalScrollIndicator={true}>
+              <Text style={styles.modalTitle}>{t.doctorDashboard.clinicScheduleTitle}</Text>
 
-            <View style={styles.inputGroup}>
-              <Text style={styles.label}>{t.doctorDashboard.slotMinutesLabel}</Text>
-              <TextInput
-                style={styles.input}
-                keyboardType="numeric"
-                value={String(scheduleSlotMinutes)}
-                onChangeText={(value) => setScheduleSlotMinutes(parseInt(value || '0', 10))}
-                placeholder={t.doctorDashboard.slotMinutesExample}
-                placeholderTextColor="#9CA3AF"
-              />
-              <Text style={styles.helperText}>{t.doctorDashboard.slotMinutesHelp}</Text>
-            </View>
-
-            <View style={styles.scheduleSection}>
-              <Text style={styles.label}>{t.doctorDashboard.defaultWorkingHours}</Text>
-              <View style={styles.scheduleRow}>
-                <Text style={styles.scheduleLabel}>{t.doctorDashboard.startLabel}</Text>
+              <View style={styles.inputGroup}>
+                <Text style={styles.label}>{t.doctorDashboard.slotMinutesLabel}</Text>
                 <TextInput
-                  style={styles.scheduleInput}
-                  placeholder="09:00"
+                  style={styles.input}
+                  keyboardType="numeric"
+                  value={String(scheduleSlotMinutes)}
+                  onChangeText={(value) => setScheduleSlotMinutes(parseInt(value || '0', 10))}
+                  placeholder={t.doctorDashboard.slotMinutesExample}
                   placeholderTextColor="#9CA3AF"
-                  value={scheduleDraft.default?.start || ''}
-                  onChangeText={(value) => updateScheduleDefault('start', value)}
                 />
-                <Text style={styles.scheduleLabel}>{t.doctorDashboard.endLabel}</Text>
-                <TextInput
-                  style={styles.scheduleInput}
-                  placeholder="17:00"
-                  placeholderTextColor="#9CA3AF"
-                  value={scheduleDraft.default?.end || ''}
-                  onChangeText={(value) => updateScheduleDefault('end', value)}
-                />
+                <Text style={styles.helperText}>{t.doctorDashboard.slotMinutesHelp}</Text>
               </View>
 
-              <View style={styles.scheduleRow}>
-                <Text style={styles.scheduleLabel}>{t.doctorDashboard.breakLabel}</Text>
-                <TextInput
-                  style={styles.scheduleInput}
-                  placeholder="13:00"
-                  placeholderTextColor="#9CA3AF"
-                  value={scheduleDraft.default?.break_start || ''}
-                  onChangeText={(value) => updateScheduleDefault('break_start', value)}
-                />
-                <Text style={styles.scheduleLabel}>{t.doctorDashboard.toLabel}</Text>
-                <TextInput
-                  style={styles.scheduleInput}
-                  placeholder="14:00"
-                  placeholderTextColor="#9CA3AF"
-                  value={scheduleDraft.default?.break_end || ''}
-                  onChangeText={(value) => updateScheduleDefault('break_end', value)}
-                />
+              {/* Schedule Mode Toggle */}
+              <View style={styles.inputGroup}>
+                <Text style={styles.label}>{t.doctorDashboard.scheduleMode}</Text>
+                <View style={styles.scheduleModeToggle}>
+                  <TouchableOpacity
+                    style={[styles.scheduleModeOption, scheduleMode === 'generic' && styles.scheduleModeOptionActive]}
+                    onPress={() => setScheduleMode('generic')}
+                  >
+                    <Text style={[styles.scheduleModeText, scheduleMode === 'generic' && styles.scheduleModeTextActive]}>
+                      {t.doctorDashboard.generic}
+                    </Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity
+                    style={[styles.scheduleModeOption, scheduleMode === 'day-by-day' && styles.scheduleModeOptionActive]}
+                    onPress={() => setScheduleMode('day-by-day')}
+                  >
+                    <Text style={[styles.scheduleModeText, scheduleMode === 'day-by-day' && styles.scheduleModeTextActive]}>
+                      {t.doctorDashboard.dayByDay}
+                    </Text>
+                  </TouchableOpacity>
+                </View>
               </View>
-            </View>
 
-            <View style={styles.scheduleSection}>
-              <Text style={styles.label}>{t.doctorDashboard.weeklyOffDays}</Text>
-              <View style={styles.weeklyOffGrid}>
-                {DAY_KEYS.map((dayKey) => {
-                  const isOff = (scheduleDraft.weekly_off || []).includes(dayKey);
-                  return (
-                    <TouchableOpacity
-                      key={dayKey}
-                      style={[styles.weeklyOffChip, isOff && styles.weeklyOffChipSelected]}
-                      onPress={() => toggleWeeklyOff(dayKey)}
-                    >
-                      <Text style={[styles.weeklyOffText, isOff && styles.weeklyOffTextSelected]}>
-                        {DAY_LABELS[dayKey]}
-                      </Text>
-                    </TouchableOpacity>
-                  );
-                })}
+              {scheduleMode === 'generic' ? (
+                <>
+                  <View style={styles.scheduleSection}>
+                    <Text style={styles.label}>{t.doctorDashboard.defaultWorkingHours}</Text>
+                    <View style={styles.scheduleRow}>
+                      <Text style={styles.scheduleLabel}>{t.doctorDashboard.startLabel}</Text>
+                      <TextInput
+                        style={styles.scheduleInput}
+                        placeholder="09:00"
+                        placeholderTextColor="#9CA3AF"
+                        value={scheduleDraft.default?.start || ''}
+                        onChangeText={(value) => updateScheduleDefault('start', value)}
+                      />
+                      <Text style={styles.scheduleLabel}>{t.doctorDashboard.endLabel}</Text>
+                      <TextInput
+                        style={styles.scheduleInput}
+                        placeholder="17:00"
+                        placeholderTextColor="#9CA3AF"
+                        value={scheduleDraft.default?.end || ''}
+                        onChangeText={(value) => updateScheduleDefault('end', value)}
+                      />
+                    </View>
+
+                    <View style={styles.scheduleRow}>
+                      <Text style={styles.scheduleLabel}>{t.doctorDashboard.breakLabel}</Text>
+                      <TextInput
+                        style={styles.scheduleInput}
+                        placeholder="13:00"
+                        placeholderTextColor="#9CA3AF"
+                        value={scheduleDraft.default?.break_start || ''}
+                        onChangeText={(value) => updateScheduleDefault('break_start', value)}
+                      />
+                      <Text style={styles.scheduleLabel}>{t.doctorDashboard.toLabel}</Text>
+                      <TextInput
+                        style={styles.scheduleInput}
+                        placeholder="14:00"
+                        placeholderTextColor="#9CA3AF"
+                        value={scheduleDraft.default?.break_end || ''}
+                        onChangeText={(value) => updateScheduleDefault('break_end', value)}
+                      />
+                    </View>
+                  </View>
+
+                  <View style={styles.scheduleSection}>
+                    <Text style={styles.label}>{t.doctorDashboard.weeklyOffDays}</Text>
+                    <View style={styles.weeklyOffGrid}>
+                      {DAY_KEYS.map((dayKey) => {
+                        const isOff = (scheduleDraft.weekly_off || []).includes(dayKey);
+                        return (
+                          <TouchableOpacity
+                            key={dayKey}
+                            style={[styles.weeklyOffChip, isOff && styles.weeklyOffChipSelected]}
+                            onPress={() => toggleWeeklyOff(dayKey)}
+                          >
+                            <Text style={[styles.weeklyOffText, isOff && styles.weeklyOffTextSelected]}>
+                              {DAY_LABELS[dayKey]}
+                            </Text>
+                          </TouchableOpacity>
+                        );
+                      })}
+                    </View>
+                  </View>
+                </>
+              ) : (
+                <View style={styles.scheduleSection}>
+                  <Text style={styles.label}>{t.doctorDashboard.dayByDaySchedule}</Text>
+                  {DAY_KEYS.map((dayKey) => {
+                    const isOff = (scheduleDraft.weekly_off || []).includes(dayKey);
+                    const daySchedule = scheduleDraft[dayKey];
+                    return (
+                      <View key={dayKey} style={styles.dayScheduleRow}>
+                        <View style={styles.dayScheduleHeader}>
+                          <Text style={styles.dayScheduleDay}>{DAY_LABELS[dayKey]}</Text>
+                          <TouchableOpacity
+                            style={[styles.dayOffToggle, isOff && styles.dayOffToggleActive]}
+                            onPress={() => toggleWeeklyOff(dayKey)}
+                          >
+                            <Text style={[styles.dayOffToggleText, isOff && styles.dayOffToggleTextActive]}>
+                              {isOff ? t.common.closed : t.common.workingHours}
+                            </Text>
+                          </TouchableOpacity>
+                        </View>
+                        {!isOff && (
+                          <View style={styles.dayScheduleInputs}>
+                            <View style={styles.scheduleRow}>
+                              <Text style={styles.scheduleLabel}>{t.doctorDashboard.startLabel}</Text>
+                              <TextInput
+                                style={styles.scheduleInput}
+                                placeholder="09:00"
+                                placeholderTextColor="#9CA3AF"
+                                value={daySchedule?.start || ''}
+                                onChangeText={(value) => updateScheduleDay(dayKey, 'start', value)}
+                              />
+                              <Text style={styles.scheduleLabel}>{t.doctorDashboard.endLabel}</Text>
+                              <TextInput
+                                style={styles.scheduleInput}
+                                placeholder="17:00"
+                                placeholderTextColor="#9CA3AF"
+                                value={daySchedule?.end || ''}
+                                onChangeText={(value) => updateScheduleDay(dayKey, 'end', value)}
+                              />
+                            </View>
+                            <View style={styles.scheduleRow}>
+                              <Text style={styles.scheduleLabel}>{t.doctorDashboard.breakLabel}</Text>
+                              <TextInput
+                                style={styles.scheduleInput}
+                                placeholder="13:00"
+                                placeholderTextColor="#9CA3AF"
+                                value={daySchedule?.break_start || ''}
+                                onChangeText={(value) => updateScheduleDay(dayKey, 'break_start', value)}
+                              />
+                              <Text style={styles.scheduleLabel}>{t.doctorDashboard.toLabel}</Text>
+                              <TextInput
+                                style={styles.scheduleInput}
+                                placeholder="14:00"
+                                placeholderTextColor="#9CA3AF"
+                                value={daySchedule?.break_end || ''}
+                                onChangeText={(value) => updateScheduleDay(dayKey, 'break_end', value)}
+                              />
+                            </View>
+                          </View>
+                        )}
+                      </View>
+                    );
+                  })}
+                </View>
+              )}
+
+              <View style={styles.modalButtons}>
+                <TouchableOpacity style={styles.modalButtonSecondary} onPress={() => setShowScheduleModal(false)}>
+                  <Text style={styles.modalButtonSecondaryText}>{t.common.cancel}</Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={[styles.modalButtonPrimary, savingSchedule && styles.buttonDisabled]}
+                  onPress={handleSaveSchedule}
+                  disabled={savingSchedule}
+                >
+                  {savingSchedule ? <ActivityIndicator color="white" size="small" /> : (
+                    <Text style={styles.modalButtonPrimaryText}>{t.common.save}</Text>
+                  )}
+                </TouchableOpacity>
               </View>
-            </View>
-
-            <View style={styles.modalButtons}>
-              <TouchableOpacity style={styles.modalButtonSecondary} onPress={() => setShowScheduleModal(false)}>
-                <Text style={styles.modalButtonSecondaryText}>{t.common.cancel}</Text>
-              </TouchableOpacity>
-              <TouchableOpacity
-                style={[styles.modalButtonPrimary, savingSchedule && styles.buttonDisabled]}
-                onPress={handleSaveSchedule}
-                disabled={savingSchedule}
-              >
-                {savingSchedule ? <ActivityIndicator color="white" size="small" /> : (
-                  <Text style={styles.modalButtonPrimaryText}>{t.common.save}</Text>
-                )}
-              </TouchableOpacity>
-            </View>
+            </ScrollView>
           </View>
         </View>
       </Modal>
@@ -2573,54 +2851,98 @@ export default function DoctorDashboardScreen() {
 
       {/* Edit Profile Modal */}
       <Modal visible={showEditProfileModal} transparent animationType="fade" onRequestClose={() => setShowEditProfileModal(false)}>
-        <View style={styles.modalOverlay}>
-          <View style={styles.modalContent}>
-            <Text style={[styles.modalTitle, isRTL && styles.textRight]}>Edit Profile</Text>
-            
-            <View style={styles.inputGroup}>
-              <Text style={[styles.label, isRTL && styles.textRight]}>Full Name (English)</Text>
-              <TextInput
-                style={[styles.input, isRTL && styles.textRight]}
-                value={editName}
-                onChangeText={setEditName}
-                placeholder="Enter your full name"
-                placeholderTextColor="#9CA3AF"
-              />
-            </View>
+        <KeyboardAvoidingView
+          behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+          style={[styles.modalOverlay, styles.editProfileModalOverlay]}
+        >
+          <ScrollView
+            style={styles.editProfileModalScroll}
+            contentContainerStyle={[styles.modalScrollContent, styles.editProfileModalScrollContent]}
+            keyboardShouldPersistTaps="handled"
+          >
+            <View style={[styles.modalContent, styles.editProfileModalContent]}>
+              <Text style={[styles.modalTitle, isRTL && styles.textRight]}>Edit Profile</Text>
+              
+              <View style={styles.inputGroup}>
+                <Text style={[styles.label, isRTL && styles.textRight]}>Full Name (English)</Text>
+                <TextInput
+                  style={[styles.input, isRTL && styles.textRight]}
+                  value={editName}
+                  onChangeText={setEditName}
+                  placeholder="Enter your full name"
+                  placeholderTextColor="#9CA3AF"
+                />
+              </View>
 
-            <View style={styles.inputGroup}>
-              <Text style={[styles.label, isRTL && styles.textRight]}>Full Name (Arabic)</Text>
-              <TextInput
-                style={[styles.input, isRTL && styles.textRight]}
-                value={editNameAr}
-                onChangeText={setEditNameAr}
-                placeholder="أدخل اسمك الكامل"
-                placeholderTextColor="#9CA3AF"
-              />
-            </View>
+              <View style={styles.inputGroup}>
+                <Text style={[styles.label, isRTL && styles.textRight]}>Full Name (Arabic)</Text>
+                <TextInput
+                  style={[styles.input, isRTL && styles.textRight]}
+                  value={editNameAr}
+                  onChangeText={setEditNameAr}
+                  placeholder="أدخل اسمك الكامل"
+                  placeholderTextColor="#9CA3AF"
+                />
+              </View>
 
-            <View style={styles.modalButtons}>
-              <TouchableOpacity
-                style={styles.modalButtonSecondary}
-                onPress={() => setShowEditProfileModal(false)}
-                disabled={savingProfile}
-              >
-                <Text style={styles.modalButtonSecondaryText}>{t.common.cancel}</Text>
-              </TouchableOpacity>
-              <TouchableOpacity
-                style={[styles.modalButtonPrimary, savingProfile && styles.buttonDisabled]}
-                onPress={handleSaveProfile}
-                disabled={savingProfile}
-              >
-                {savingProfile ? (
-                  <ActivityIndicator color="white" />
-                ) : (
-                  <Text style={styles.modalButtonPrimaryText}>{t.common.save}</Text>
-                )}
-              </TouchableOpacity>
+              <PhoneInput
+                value={editPhone}
+                onChangeValue={(e164, local) => {
+                  setEditPhone(e164);
+                  setEditPhoneLocal(local);
+                }}
+                type="mobile"
+                label={isRTL ? 'رقم الموبايل' : 'Mobile'}
+                placeholder="70 123 456"
+                icon="📱"
+                isRTL={isRTL}
+              />
+
+              <View style={styles.inputGroup}>
+                <Text style={[styles.label, isRTL && styles.textRight]}>Instagram</Text>
+                <TextInput
+                  style={[styles.input, isRTL && styles.textRight]}
+                  value={editInstagram}
+                  onChangeText={setEditInstagram}
+                  placeholder="instagram.com/username"
+                  placeholderTextColor="#9CA3AF"
+                />
+              </View>
+
+              <View style={styles.inputGroup}>
+                <Text style={[styles.label, isRTL && styles.textRight]}>Facebook</Text>
+                <TextInput
+                  style={[styles.input, isRTL && styles.textRight]}
+                  value={editFacebook}
+                  onChangeText={setEditFacebook}
+                  placeholder="facebook.com/page"
+                  placeholderTextColor="#9CA3AF"
+                />
+              </View>
+
+              <View style={styles.modalButtons}>
+                <TouchableOpacity
+                  style={styles.modalButtonSecondary}
+                  onPress={() => setShowEditProfileModal(false)}
+                  disabled={savingProfile}
+                >
+                  <Text style={styles.modalButtonSecondaryText}>{t.common.cancel}</Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={[styles.modalButtonPrimary, savingProfile && styles.buttonDisabled]}
+                  onPress={handleSaveProfile}
+                  disabled={savingProfile}
+                >
+                  {savingProfile ? (
+                    <ActivityIndicator color="white" />
+                  ) : (
+                    <Text style={styles.modalButtonPrimaryText}>{t.common.save}</Text>
+                  )}
+                </TouchableOpacity>
+              </View>
             </View>
-          </View>
-        </View>
+          </ScrollView>
+        </KeyboardAvoidingView>
       </Modal>
 
       <Modal visible={showBlockTimeModal} transparent animationType="slide">
@@ -2843,17 +3165,6 @@ export default function DoctorDashboardScreen() {
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#F3F4F6' },
   centered: { justifyContent: 'center', alignItems: 'center' },
-  timeBadge: {
-    marginTop: 4,
-    paddingHorizontal: 8,
-    paddingVertical: 2,
-    backgroundColor: '#f0f0f0',
-    borderRadius: 4,
-  },timeText: {
-    fontSize: 12,
-    color: '#666',
-    fontWeight: 'bold',
-  },
   loadingText: { marginTop: 10, fontSize: 16, color: '#6B7280' },
   textRight: { textAlign: 'right' },
   rowReverse: { flexDirection: 'row-reverse' },
@@ -2862,10 +3173,10 @@ const styles = StyleSheet.create({
   header: { backgroundColor: '#2563EB', paddingTop: 50, paddingBottom: 20, paddingHorizontal: 20, borderBottomLeftRadius: 25, borderBottomRightRadius: 25 },
   headerTopRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12 },
   languageToggleRow: { flexDirection: 'row', alignItems: 'center' },
-  languageButton: { backgroundColor: 'rgba(255,255,255,0.18)', height: 32, paddingHorizontal: 10, borderRadius: 16, alignItems: 'center', justifyContent: 'center', marginRight: 8 },
-  languageButtonActive: { backgroundColor: 'rgba(255,255,255,0.32)' },
-  languageIcon: { fontSize: 18 },
-  signOutIconButton: { backgroundColor: 'rgba(255,255,255,0.2)', width: 36, height: 36, borderRadius: 18, alignItems: 'center', justifyContent: 'center' },
+  languageButton: { backgroundColor: 'rgba(255,255,255,0.18)', height: 34, paddingHorizontal: 12, borderRadius: 18, alignItems: 'center', justifyContent: 'center', flexDirection: 'row', gap: 6 },
+  languageButtonText: { color: '#fff', fontWeight: '600', letterSpacing: 0.4 },
+  signOutIconButton: { backgroundColor: 'rgba(255,255,255,0.2)', height: 34, paddingHorizontal: 14, borderRadius: 18, alignItems: 'center', justifyContent: 'center', flexDirection: 'row', gap: 6 },
+  signOutIconButtonText: { color: '#fff', fontSize: 12, fontWeight: '600' },
   switchButton: { alignSelf: 'flex-start', backgroundColor: 'rgba(255,255,255,0.2)', paddingHorizontal: 12, paddingVertical: 6, borderRadius: 15, marginBottom: 10 },
   switchButtonContent: { flexDirection: 'row', alignItems: 'center', gap: 6 },
   switchButtonText: { color: 'white', fontSize: 12, fontWeight: '600' },
@@ -2882,7 +3193,7 @@ const styles = StyleSheet.create({
   tabContainer: { flexDirection: 'row', backgroundColor: 'white', marginHorizontal: 20, marginTop: -15, borderRadius: 12, padding: 5, shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.1, shadowRadius: 3, elevation: 3 },
   tab: { flex: 1, paddingVertical: 12, borderRadius: 10, alignItems: 'center' },
   tabActive: { backgroundColor: '#2563EB' },
-  tabEmoji: { fontSize: 20 },
+  tabIcon: {},
   
   content: { flex: 1, padding: 20 },
   tabHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 15 },
@@ -2895,12 +3206,22 @@ const styles = StyleSheet.create({
   emptyText: { fontSize: 14, color: '#6B7280', textAlign: 'center' },
   
   appointmentCard: { backgroundColor: 'white', borderRadius: 12, padding: 15, marginBottom: 10 },
-  appointmentHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 12 },
-  patientName: { fontSize: 16, fontWeight: '600', color: '#1F2937' },
-  clinicText: { fontSize: 13, color: '#6B7280', marginTop: 3 },
+  appointmentHeader: { marginBottom: 8 },
+  appointmentMeta: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginBottom: 12 },
+  patientName: { fontSize: 16, fontWeight: '600', color: '#1F2937', marginBottom: 4 },
+  clinicText: { fontSize: 13, color: '#6B7280' },
   dateBadge: { backgroundColor: '#EFF6FF', paddingHorizontal: 10, paddingVertical: 5, borderRadius: 8 },
   todayBadge: { backgroundColor: '#FEF3C7' },
   dateText: { fontSize: 12, color: '#1E40AF', fontWeight: '600' },
+  timeBadge: { backgroundColor: '#F3F4F6', paddingHorizontal: 10, paddingVertical: 5, borderRadius: 8 },
+  timeText: { fontSize: 12, color: '#374151', fontWeight: '600' },
+  statusBadgeInline: { backgroundColor: '#F3F4F6', paddingHorizontal: 10, paddingVertical: 5, borderRadius: 8 },
+  confirmedBadgeInline: { backgroundColor: '#D1FAE5' },
+  cancelledBadgeInline: { backgroundColor: '#FEE2E2' },
+  statusBadgeText: { fontSize: 12, fontWeight: '600', color: '#374151' },
+  appointmentNotes: { backgroundColor: '#F9FAFB', padding: 10, borderRadius: 8, marginBottom: 12 },
+  notesLabel: { fontSize: 12, fontWeight: '600', color: '#6B7280', marginBottom: 4 },
+  notesText: { fontSize: 13, color: '#374151', lineHeight: 18 },
   appointmentActions: { flexDirection: 'row', gap: 10 },
   confirmBtn: { flex: 1, backgroundColor: '#D1FAE5', paddingVertical: 10, borderRadius: 8, alignItems: 'center' },
   confirmBtnText: { color: '#065F46', fontWeight: '600' },
@@ -2958,6 +3279,10 @@ const styles = StyleSheet.create({
   reviewCount: { fontSize: 13, color: '#6B7280', marginLeft: 5 },
   infoCard: { backgroundColor: 'white', borderRadius: 16, padding: 20, marginBottom: 20 },
   infoTitle: { fontSize: 16, fontWeight: '600', color: '#111827', marginBottom: 12 },
+  sectionHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 },
+  sectionTitle: { fontSize: 16, fontWeight: '600', color: '#374151' },
+  editButton: { flexDirection: 'row', alignItems: 'center', gap: 4, paddingHorizontal: 12, paddingVertical: 6, backgroundColor: '#EFF6FF', borderRadius: 8 },
+  editButtonText: { fontSize: 14, color: '#2563EB', fontWeight: '600' },
   infoRow: { marginBottom: 12 },
   infoLabel: { fontSize: 13, color: '#6B7280', marginBottom: 2 },
   infoValue: { fontSize: 15, color: '#111827', fontWeight: '500' },
@@ -2968,7 +3293,12 @@ const styles = StyleSheet.create({
   signOutText: { color: '#DC2626', fontSize: 16, fontWeight: '600' },
   
   modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.6)', justifyContent: 'center', alignItems: 'center', padding: 20 },
+  modalScrollContent: { flexGrow: 1, justifyContent: 'center', alignItems: 'center', padding: 20 },
   modalContent: { backgroundColor: 'white', borderRadius: 20, padding: 25, width: '90%', maxWidth: 400 },
+  editProfileModalOverlay: { paddingHorizontal: 0, width: '100%' },
+  editProfileModalScroll: { width: '100%' },
+  editProfileModalScrollContent: { paddingHorizontal: 0, alignItems: 'stretch', width: '100%' },
+  editProfileModalContent: { width: '90%', maxWidth: 640, alignSelf: 'center', alignItems: 'stretch' },
   modalTitle: { fontSize: 20, fontWeight: 'bold', color: '#1F2937', marginBottom: 20, textAlign: 'center' },
   inputGroup: { marginBottom: 15 },
   label: { fontSize: 14, fontWeight: '600', color: '#374151', marginBottom: 8 },
@@ -3027,6 +3357,21 @@ const styles = StyleSheet.create({
   weeklyOffText: { fontSize: 12, color: '#374151', fontWeight: '500' },
   weeklyOffTextSelected: { color: 'white' },
   
+  scheduleModeToggle: { flexDirection: 'row', backgroundColor: '#F3F4F6', borderRadius: 10, padding: 4 },
+  scheduleModeOption: { flex: 1, paddingVertical: 10, paddingHorizontal: 16, borderRadius: 8, alignItems: 'center' },
+  scheduleModeOptionActive: { backgroundColor: 'white', shadowColor: '#000', shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.1, shadowRadius: 2, elevation: 2 },
+  scheduleModeText: { fontSize: 14, fontWeight: '500', color: '#6B7280' },
+  scheduleModeTextActive: { color: '#2563EB', fontWeight: '600' },
+  
+  dayScheduleRow: { marginBottom: 16, borderWidth: 1, borderColor: '#E5E7EB', borderRadius: 10, padding: 12, backgroundColor: 'white' },
+  dayScheduleHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 },
+  dayScheduleDay: { fontSize: 16, fontWeight: '600', color: '#1F2937' },
+  dayOffToggle: { paddingHorizontal: 12, paddingVertical: 6, borderRadius: 6, backgroundColor: '#10B981', borderWidth: 1, borderColor: '#10B981' },
+  dayOffToggleActive: { backgroundColor: '#EF4444', borderColor: '#EF4444' },
+  dayOffToggleText: { fontSize: 12, fontWeight: '600', color: 'white' },
+  dayOffToggleTextActive: { color: 'white' },
+  dayScheduleInputs: { marginTop: 8 },
+  
   chatPlaceholder: { flex: 1, alignItems: 'center', justifyContent: 'center', paddingVertical: 100 },
   chatPlaceholderEmoji: { fontSize: 60, marginBottom: 15 },
   chatPlaceholderText: { fontSize: 18, fontWeight: '600', color: '#1F2937', marginBottom: 8 },
@@ -3045,6 +3390,7 @@ const styles = StyleSheet.create({
   avatarContainer: { width: 50, height: 50, borderRadius: 25, backgroundColor: '#EFF6FF', justifyContent: 'center', alignItems: 'center', marginRight: 12 },
   avatarEmoji: { fontSize: 24 },
   conversationInfo: { flex: 1 },
+  conversationPatientName: { fontSize: 16, fontWeight: '600', color: '#1F2937' },
   lastMessage: { fontSize: 13, color: '#9CA3AF', marginTop: 4 },
   
   chatViewContainer: { flex: 1, flexDirection: 'column' },
@@ -3063,6 +3409,10 @@ const styles = StyleSheet.create({
   messageTime: { fontSize: 12, marginTop: 4 },
   myMessageTime: { color: '#E0E7FF' },
   theirMessageTime: { color: '#9CA3AF' },
+  
+  debugInfo: { marginTop: 20, padding: 15, backgroundColor: '#FEF3C7', borderRadius: 8, borderWidth: 1, borderColor: '#F59E0B' },
+  debugTitle: { fontSize: 14, fontWeight: 'bold', color: '#92400E', marginBottom: 8 },
+  debugText: { fontSize: 12, color: '#78350F', marginBottom: 4 },
   inputRow: { flexDirection: 'row', padding: 12, backgroundColor: 'white', borderTopWidth: 1, borderTopColor: '#E5E7EB', alignItems: 'flex-end', gap: 8 },
   textInput: { flex: 1, backgroundColor: '#F3F4F6', borderRadius: 20, paddingHorizontal: 15, paddingVertical: 10, fontSize: 16, maxHeight: 100 },
   sendBtn: { width: 44, height: 44, borderRadius: 22, backgroundColor: '#2563EB', justifyContent: 'center', alignItems: 'center' },

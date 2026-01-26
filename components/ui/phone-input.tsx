@@ -1,24 +1,23 @@
+import {
+    CountryData,
+    formatAsTyping,
+    fromE164,
+    getPhoneErrorMessage,
+    PhoneType,
+    toE164,
+    validatePhone,
+} from '@/lib/phone-utils';
+import { supabase } from '@/lib/supabase';
 import React, { useEffect, useState } from 'react';
 import {
-  StyleSheet,
-  Text,
-  TextInput,
-  View,
-  TouchableOpacity,
-  ActivityIndicator,
-  Image,
-  ImageSourcePropType,
+    ActivityIndicator,
+    Image,
+    ImageSourcePropType,
+    StyleSheet,
+    Text,
+    TextInput,
+    View
 } from 'react-native';
-import { supabase } from '@/lib/supabase';
-import {
-  CountryData,
-  PhoneType,
-  validatePhone,
-  formatAsTyping,
-  toE164,
-  fromE164,
-  getPhoneErrorMessage,
-} from '@/lib/phone-utils';
 
 type PhoneInputProps = {
   value: string; // E.164 format or local format
@@ -191,13 +190,14 @@ export default function PhoneInput({
 
 const styles = StyleSheet.create({
   inputGroup: {
-    marginBottom: 18,
+    marginBottom: 10,
   },
   label: {
     fontSize: 14,
     fontWeight: '600',
     color: '#374151',
     marginBottom: 8,
+    marginTop: 10,
   },
   textRight: {
     textAlign: 'right',
@@ -206,10 +206,13 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     backgroundColor: '#F9FAFB',
-    borderRadius: 12,
+    borderRadius: 10,
     borderWidth: 1,
     borderColor: '#E5E7EB',
-    paddingHorizontal: 15,
+    paddingHorizontal: 12,
+    paddingVertical: 3,
+    minHeight: 50,
+    width: '100%',
   },
   inputWrapperError: {
     borderColor: '#EF4444',
@@ -223,34 +226,34 @@ const styles = StyleSheet.create({
     flexDirection: 'row-reverse',
   },
   inputIcon: {
-    fontSize: 20,
-    marginRight: 10,
+    fontSize: 18,
+    marginRight: 8,
   },
   inputIconImage: {
-    width: 20,
-    height: 20,
-    marginRight: 10,
+    width: 18,
+    height: 18,
+    marginRight: 8,
   },
   countryCode: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingRight: 10,
-    marginRight: 10,
+    paddingRight: 8,
+    marginRight: 8,
     borderRightWidth: 1,
     borderRightColor: '#E5E7EB',
   },
   countryCodeRTL: {
     paddingRight: 0,
-    paddingLeft: 10,
+    paddingLeft: 8,
     marginRight: 0,
-    marginLeft: 10,
+    marginLeft: 8,
     borderRightWidth: 0,
     borderLeftWidth: 1,
     borderLeftColor: '#E5E7EB',
   },
   countryFlag: {
-    fontSize: 18,
-    marginRight: 5,
+    fontSize: 16,
+    marginRight: 4,
   },
   countryCodeText: {
     fontSize: 14,
@@ -259,9 +262,9 @@ const styles = StyleSheet.create({
   },
   input: {
     flex: 1,
-    paddingVertical: 15,
-    fontSize: 16,
-    color: '#1F2937',
+    paddingVertical: 12,
+    fontSize: 15,
+    color: '#111827',
   },
   errorText: {
     fontSize: 12,

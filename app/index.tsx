@@ -1,17 +1,18 @@
 import { supabase } from '@/lib/supabase';
+import Constants from 'expo-constants';
 import { useRouter } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import * as WebBrowser from 'expo-web-browser';
 import React, { useEffect, useMemo, useState } from 'react';
 import {
-  ActivityIndicator,
-  Alert,
-  Image,
-  Linking,
-  StyleSheet,
-  Text,
-  TouchableOpacity,
-  View,
+    ActivityIndicator,
+    Alert,
+    Image,
+    Linking,
+    StyleSheet,
+    Text,
+    TouchableOpacity,
+    View,
 } from 'react-native';
 
 WebBrowser.maybeCompleteAuthSession();
@@ -19,6 +20,7 @@ WebBrowser.maybeCompleteAuthSession();
 export default function WelcomeScreen() {
   const router = useRouter();
   const [googleLoading, setGoogleLoading] = useState(false);
+  const appVersion = Constants.expoConfig?.version || 'dev';
   
   // Force native scheme
   const redirectTo = useMemo(() => 'cms://', []);
@@ -165,7 +167,7 @@ export default function WelcomeScreen() {
       
       {/* App Name */}
       <Text style={styles.title}>CMS App</Text>
-      <Text style={styles.subtitle}>Clinic Management System v2.1</Text>
+      <Text style={styles.subtitle}>Clinic Management System</Text>
       <Text style={styles.tagline}>Connect with healthcare professionals</Text>
       
       {/* Buttons */}
@@ -213,6 +215,7 @@ export default function WelcomeScreen() {
       <Text style={styles.footerText}>
         By continuing, you agree to our Terms & Privacy Policy
       </Text>
+      <Text style={styles.versionText}>App version {appVersion}</Text>
     </View>
   );
 }
@@ -318,5 +321,12 @@ const styles = StyleSheet.create({
     color: '#93C5FD',
     fontSize: 12,
     textAlign: 'center',
+  },
+  versionText: {
+    marginTop: 6,
+    color: '#DBEAFE',
+    fontSize: 12,
+    textAlign: 'center',
+    opacity: 0.9,
   },
 });
