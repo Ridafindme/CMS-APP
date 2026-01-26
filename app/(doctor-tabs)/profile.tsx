@@ -193,7 +193,7 @@ export default function DoctorProfileScreen() {
           .from('doctors')
           .update({
             experience_years: editExperienceYears ? parseInt(editExperienceYears) : null,
-            graduate_year: editGraduateYear ? parseInt(editGraduateYear) : null,
+            graduation_year: editGraduateYear ? parseInt(editGraduateYear) : null,
             bio: editBio || null,
           })
           .eq('id', doctorData.id);

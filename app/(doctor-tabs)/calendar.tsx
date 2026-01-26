@@ -1,10 +1,12 @@
-import { useDoctorContext } from '@/lib/DoctorContext';
+import { getDayKey, minutesToTime, timeToMinutes, useDoctorContext } from '@/lib/DoctorContext';
 import { useI18n } from '@/lib/i18n';
 import { Ionicons } from '@expo/vector-icons';
 import { StatusBar } from 'expo-status-bar';
 import React, { useEffect, useState } from 'react';
 import {
     ActivityIndicator,
+    Alert,
+    Modal,
     Platform,
     RefreshControl,
     StatusBar as RNStatusBar,
@@ -23,17 +25,34 @@ type DayAppointment = {
   completed: number;
 };
 
+type TimeSlot = {
+  time: string;
+  status: 'available' | 'pending' | 'taken';
+  appointment?: any;
+};
+
 export default function DoctorCalendarScreen() {
   const { t, isRTL } = useI18n();
-  const { loading, appointments, fetchAppointments } = useDoctorContext();
+  const { loading, appointments, clinics, fetchAppointments, doctorData } = useDoctorContext();
   
   const [refreshing, setRefreshing] = useState(false);
   const [currentMonth, setCurrentMonth] = useState(new Date());
   const [selectedDate, setSelectedDate] = useState<string | null>(null);
+  const [selectedClinic, setSelectedClinic] = useState<string | null>(null);
+  const [showAppointmentModal, setShowAppointmentModal] = useState(false);
+  const [selectedAppointment, setSelectedAppointment] = useState<any>(null);
 
   useEffect(() => {
     fetchAppointments();
   }, []);
+
+  useEffect(() => {
+    // Auto-select first active clinic
+    if (clinics.length > 0 && !selectedClinic) {
+      const activeClinic = clinics.find(c => c.is_active) || clinics[0];
+      setSelectedClinic(activeClinic.id);
+    }
+  }, [clinics]);
 
   const handleRefresh = async () => {
     setRefreshing(true);
@@ -99,8 +118,9 @@ export default function DoctorCalendarScreen() {
   const formatDateKey = (day: number) => {
     const year = currentMonth.getFullYear();
     const month = currentMonth.getMonth();
-    const date = new Date(year, month, day);
-    return date.toISOString().split('T')[0];
+    const monthStr = String(month + 1).padStart(2, '0');
+    const dayStr = String(day).padStart(2, '0');
+    return `${year}-${monthStr}-${dayStr}`;
   };
 
   const goToPreviousMonth = () => {
@@ -122,6 +142,148 @@ export default function DoctorCalendarScreen() {
     if (!selectedDate) return [];
     return appointments.filter(apt => apt.appointment_date === selectedDate);
   };
+
+  // Generate time slots for selected date and clinic
+  const generateTimeSlots = (): TimeSlot[] => {
+    if (!selectedDate || !selectedClinic) {
+      console.log('❌ No date or clinic selected');
+      return [];
+    }
+
+    const clinic = clinics.find(c => c.id === selectedClinic);
+    if (!clinic) {
+      console.log('❌ Clinic not found:', selectedClinic);
+      return [];
+    }
+
+    const slots: TimeSlot[] = [];
+
+    // First, check if there are any appointments for this day/clinic
+    const dayAppointments = appointments.filter(apt => 
+      apt.appointment_date === selectedDate && 
+      apt.clinic_id === selectedClinic
+    );
+
+    console.log('📅 Selected date:', selectedDate, 'Appointments:', dayAppointments.length);
+    
+    if (!clinic.schedule) {
+      console.log('❌ No schedule for clinic:', clinic.clinic_name);
+      // Still show appointment slots even without schedule
+      dayAppointments.forEach(apt => {
+        let status: 'available' | 'pending' | 'taken' = 'pending';
+        if (apt.status === 'confirmed' || apt.status === 'completed') {
+          status = 'taken';
+        }
+        slots.push({ time: apt.appointment_time, status, appointment: apt });
+      });
+      return slots;
+    }
+
+    const dayKey = getDayKey(selectedDate);
+    console.log('Day:', dayKey);
+    
+    const schedule = clinic.schedule;
+    const slotMinutes = clinic.slot_minutes || 30;
+
+    // Check if day is weekly off
+    if (schedule.weekly_off?.includes(dayKey)) {
+      console.log('🚫 Day is weekly off:', dayKey);
+      // Still show appointment slots even on weekly off
+      dayAppointments.forEach(apt => {
+        let status: 'available' | 'pending' | 'taken' = 'pending';
+        if (apt.status === 'confirmed' || apt.status === 'completed') {
+          status = 'taken';
+        }
+        slots.push({ time: apt.appointment_time, status, appointment: apt });
+      });
+      return slots;
+    }
+
+    // Get schedule for this day (use day-specific or default)
+    const daySchedule = schedule[dayKey] || schedule.default;
+    console.log('⏰ Day schedule:', daySchedule);
+    
+    if (!daySchedule?.start || !daySchedule?.end) {
+      console.log('❌ No start/end time for day:', dayKey);
+      // Still show appointment slots
+      dayAppointments.forEach(apt => {
+        let status: 'available' | 'pending' | 'taken' = 'pending';
+        if (apt.status === 'confirmed' || apt.status === 'completed') {
+          status = 'taken';
+        }
+        slots.push({ time: apt.appointment_time, status, appointment: apt });
+      });
+      return slots;
+    }
+
+    const startMin = timeToMinutes(daySchedule.start);
+    const endMin = timeToMinutes(daySchedule.end);
+    const breakStartMin = daySchedule.break_start ? timeToMinutes(daySchedule.break_start) : null;
+    const breakEndMin = daySchedule.break_end ? timeToMinutes(daySchedule.break_end) : null;
+
+    if (startMin === null || endMin === null) {
+      console.log('❌ Invalid start/end minutes');
+      return slots;
+    }
+
+    console.log('✅ Generating slots from', daySchedule.start, 'to', daySchedule.end);
+
+    let currentMin = startMin;
+
+    while (currentMin < endMin) {
+      // Skip break time
+      if (breakStartMin !== null && breakEndMin !== null && 
+          currentMin >= breakStartMin && currentMin < breakEndMin) {
+        currentMin += slotMinutes;
+        continue;
+      }
+
+      const timeStr = minutesToTime(currentMin);
+      
+      // Check if this slot has an appointment
+      const appointment = appointments.find(apt => 
+        apt.appointment_date === selectedDate && 
+        apt.appointment_time === timeStr &&
+        apt.clinic_id === selectedClinic
+      );
+
+      let status: 'available' | 'pending' | 'taken' = 'available';
+      if (appointment) {
+        if (appointment.status === 'pending') {
+          status = 'pending';
+        } else if (appointment.status === 'confirmed' || appointment.status === 'completed') {
+          status = 'taken';
+        }
+      }
+
+      slots.push({ time: timeStr, status, appointment });
+      currentMin += slotMinutes;
+    }
+
+    console.log('✅ Generated', slots.length, 'slots');
+    return slots;
+  };
+
+  const handleSlotPress = (slot: TimeSlot) => {
+    if (slot.status === 'available') {
+      Alert.alert(
+        isRTL ? 'حجز موعد' : 'Book Appointment',
+        isRTL ? `هل تريد فتح نموذج الحجز للساعة ${slot.time}؟` : `Open booking form for ${slot.time}?`,
+        [
+          { text: isRTL ? 'إلغاء' : 'Cancel', style: 'cancel' },
+          { text: isRTL ? 'نعم' : 'Yes', onPress: () => {
+            // TODO: Navigate to booking or open booking modal
+            Alert.alert(isRTL ? 'قريباً' : 'Coming Soon', isRTL ? 'سيتم إضافة وظيفة الحجز قريباً' : 'Booking functionality coming soon');
+          }}
+        ]
+      );
+    } else if (slot.appointment) {
+      setSelectedAppointment(slot.appointment);
+      setShowAppointmentModal(true);
+    }
+  };
+
+  const timeSlots = generateTimeSlots();
 
   const monthNames = [
     'January', 'February', 'March', 'April', 'May', 'June',
@@ -259,7 +421,7 @@ export default function DoctorCalendarScreen() {
         {selectedDate && (
           <View style={styles.appointmentsSection}>
             <Text style={[styles.sectionTitle, isRTL && styles.textRight]}>
-              {isRTL ? 'مواعيد' : 'Appointments for'} {new Date(selectedDate).toLocaleDateString(isRTL ? 'ar' : 'en', { 
+              {new Date(selectedDate).toLocaleDateString(isRTL ? 'ar' : 'en', { 
                 weekday: 'long', 
                 year: 'numeric', 
                 month: 'long', 
@@ -267,51 +429,157 @@ export default function DoctorCalendarScreen() {
               })}
             </Text>
 
-            {selectedDayAppointments.length === 0 ? (
+            {/* Clinic Selector */}
+            {clinics.length > 1 && (
+              <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.clinicSelector}>
+                {clinics.map(clinic => (
+                  <TouchableOpacity
+                    key={clinic.id}
+                    style={[
+                      styles.clinicChip,
+                      selectedClinic === clinic.id && styles.clinicChipSelected
+                    ]}
+                    onPress={() => setSelectedClinic(clinic.id)}
+                  >
+                    <Text style={[
+                      styles.clinicChipText,
+                      selectedClinic === clinic.id && styles.clinicChipTextSelected
+                    ]}>
+                      {clinic.clinic_name}
+                    </Text>
+                  </TouchableOpacity>
+                ))}
+              </ScrollView>
+            )}
+
+            {/* Time Slots Grid */}
+            {timeSlots.length === 0 ? (
               <View style={styles.emptyState}>
-                <Text style={styles.emptyIcon}>📅</Text>
+                <Text style={styles.emptyIcon}>🕐</Text>
                 <Text style={styles.emptyText}>
-                  {isRTL ? 'لا توجد مواعيد في هذا اليوم' : 'No appointments on this day'}
+                  {isRTL ? 'لا توجد مواعيد متاحة في هذا اليوم' : 'No available slots on this day'}
                 </Text>
               </View>
             ) : (
-              selectedDayAppointments.map(apt => (
-                <View key={apt.id} style={styles.appointmentCard}>
-                  <View style={[styles.appointmentRow, isRTL && styles.rowReverse]}>
-                    <View style={styles.appointmentInfo}>
-                      <Text style={[styles.patientName, isRTL && styles.textRight]}>
-                        {apt.patient_name}
-                      </Text>
-                      <Text style={[styles.appointmentTime, isRTL && styles.textRight]}>
-                        🕐 {apt.appointment_time}
-                      </Text>
-                      <Text style={[styles.clinicName, isRTL && styles.textRight]}>
-                        🏥 {apt.clinic_name}
-                      </Text>
-                    </View>
-                    <View style={[
-                      styles.statusBadge,
-                      apt.status === 'pending' && styles.pendingBadge,
-                      apt.status === 'confirmed' && styles.confirmedBadge,
-                      apt.status === 'completed' && styles.completedBadge,
-                      apt.status === 'cancelled' && styles.cancelledBadge,
-                    ]}>
-                      <Text style={styles.statusText}>
-                        {apt.status === 'pending' ? (isRTL ? 'معلق' : 'Pending') :
-                         apt.status === 'confirmed' ? (isRTL ? 'مؤكد' : 'Confirmed') :
-                         apt.status === 'completed' ? (isRTL ? 'مكتمل' : 'Completed') :
-                         (isRTL ? 'ملغي' : 'Cancelled')}
-                      </Text>
-                    </View>
+              <>
+                <View style={styles.slotsLegend}>
+                  <View style={styles.legendItem}>
+                    <View style={[styles.legendBox, styles.availableSlot]} />
+                    <Text style={styles.legendText}>{isRTL ? 'متاح' : 'Available'}</Text>
+                  </View>
+                  <View style={styles.legendItem}>
+                    <View style={[styles.legendBox, styles.pendingSlot]} />
+                    <Text style={styles.legendText}>{isRTL ? 'معلق' : 'Pending'}</Text>
+                  </View>
+                  <View style={styles.legendItem}>
+                    <View style={[styles.legendBox, styles.takenSlot]} />
+                    <Text style={styles.legendText}>{isRTL ? 'محجوز' : 'Taken'}</Text>
                   </View>
                 </View>
-              ))
+
+                <View style={styles.slotsGrid}>
+                  {timeSlots.map((slot, index) => (
+                    <TouchableOpacity
+                      key={index}
+                      style={[
+                        styles.slotButton,
+                        slot.status === 'available' && styles.availableSlot,
+                        slot.status === 'pending' && styles.pendingSlot,
+                        slot.status === 'taken' && styles.takenSlot,
+                      ]}
+                      onPress={() => handleSlotPress(slot)}
+                      disabled={slot.status === 'available' ? false : false} // All clickable
+                    >
+                      <Text style={[
+                        styles.slotTime,
+                        slot.status === 'available' && styles.availableSlotText,
+                        slot.status === 'pending' && styles.pendingSlotText,
+                        slot.status === 'taken' && styles.takenSlotText,
+                      ]}>
+                        {slot.time}
+                      </Text>
+                      {slot.status === 'pending' && <Text style={styles.slotIcon}>🟡</Text>}
+                      {slot.status === 'taken' && <Text style={styles.slotIcon}>🔴</Text>}
+                    </TouchableOpacity>
+                  ))}
+                </View>
+              </>
             )}
           </View>
         )}
 
         <View style={{ height: 100 }} />
       </ScrollView>
+
+      {/* Appointment Details Modal */}
+      <Modal
+        visible={showAppointmentModal}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setShowAppointmentModal(false)}
+      >
+        <TouchableOpacity 
+          style={styles.modalOverlay}
+          activeOpacity={1}
+          onPress={() => setShowAppointmentModal(false)}
+        >
+          <View style={styles.modalContent} onStartShouldSetResponder={() => true}>
+            <View style={styles.modalHeader}>
+              <Text style={styles.modalTitle}>
+                {isRTL ? 'تفاصيل الموعد' : 'Appointment Details'}
+              </Text>
+              <TouchableOpacity onPress={() => setShowAppointmentModal(false)}>
+                <Ionicons name="close" size={24} color="#6B7280" />
+              </TouchableOpacity>
+            </View>
+
+            {selectedAppointment && (
+              <View style={styles.modalBody}>
+                <View style={styles.detailRow}>
+                  <Text style={styles.detailLabel}>{isRTL ? 'المريض:' : 'Patient:'}</Text>
+                  <Text style={styles.detailValue}>{selectedAppointment.patient_name}</Text>
+                </View>
+                <View style={styles.detailRow}>
+                  <Text style={styles.detailLabel}>{isRTL ? 'التاريخ:' : 'Date:'}</Text>
+                  <Text style={styles.detailValue}>
+                    {new Date(selectedAppointment.appointment_date).toLocaleDateString()}
+                  </Text>
+                </View>
+                <View style={styles.detailRow}>
+                  <Text style={styles.detailLabel}>{isRTL ? 'الوقت:' : 'Time:'}</Text>
+                  <Text style={styles.detailValue}>{selectedAppointment.appointment_time}</Text>
+                </View>
+                <View style={styles.detailRow}>
+                  <Text style={styles.detailLabel}>{isRTL ? 'العيادة:' : 'Clinic:'}</Text>
+                  <Text style={styles.detailValue}>{selectedAppointment.clinic_name}</Text>
+                </View>
+                <View style={styles.detailRow}>
+                  <Text style={styles.detailLabel}>{isRTL ? 'الحالة:' : 'Status:'}</Text>
+                  <View style={[
+                    styles.statusBadge,
+                    selectedAppointment.status === 'pending' && styles.pendingBadge,
+                    selectedAppointment.status === 'confirmed' && styles.confirmedBadge,
+                    selectedAppointment.status === 'completed' && styles.completedBadge,
+                  ]}>
+                    <Text style={styles.statusText}>
+                      {selectedAppointment.status === 'pending' ? (isRTL ? 'معلق' : 'Pending') :
+                       selectedAppointment.status === 'confirmed' ? (isRTL ? 'مؤكد' : 'Confirmed') :
+                       (isRTL ? 'مكتمل' : 'Completed')}
+                    </Text>
+                  </View>
+                </View>
+              </View>
+            )}
+
+            <TouchableOpacity
+              style={styles.closeButton}
+              onPress={() => setShowAppointmentModal(false)}
+            >
+              <Text style={styles.closeButtonText}>{isRTL ? 'إغلاق' : 'Close'}</Text>
+            </TouchableOpacity>
+          </View>
+        </TouchableOpacity>
+      </Modal>
     </View>
   );
 }
@@ -419,11 +687,117 @@ const styles = StyleSheet.create({
     padding: 16,
     marginBottom: 16,
   },
-  sectionTitle: { fontSize: 16, fontWeight: '600', color: '#1F2937', marginBottom: 12 },
+  sectionTitle: { fontSize: 18, fontWeight: '700', color: '#1F2937', marginBottom: 16 },
+  
+  clinicSelector: { marginBottom: 16 },
+  clinicChip: {
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    backgroundColor: '#F3F4F6',
+    borderRadius: 20,
+    marginRight: 8,
+    borderWidth: 2,
+    borderColor: 'transparent',
+  },
+  clinicChipSelected: {
+    backgroundColor: '#DBEAFE',
+    borderColor: '#2563EB',
+  },
+  clinicChipText: { fontSize: 14, color: '#6B7280', fontWeight: '500' },
+  clinicChipTextSelected: { color: '#2563EB', fontWeight: '600' },
+
+  slotsLegend: {
+    flexDirection: 'row',
+    justifyContent: 'center',
+    gap: 12,
+    marginBottom: 16,
+    paddingVertical: 8,
+  },
+  legendBox: {
+    width: 16,
+    height: 16,
+    borderRadius: 4,
+    marginRight: 4,
+  },
+
+  slotsGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 8,
+  },
+  slotButton: {
+    width: '22%',
+    paddingVertical: 12,
+    paddingHorizontal: 8,
+    borderRadius: 8,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 2,
+  },
+  availableSlot: {
+    backgroundColor: '#FFFFFF',
+    borderColor: '#D1D5DB',
+  },
+  pendingSlot: {
+    backgroundColor: '#FEF3C7',
+    borderColor: '#F59E0B',
+  },
+  takenSlot: {
+    backgroundColor: '#FEE2E2',
+    borderColor: '#EF4444',
+  },
+  slotTime: {
+    fontSize: 13,
+    fontWeight: '600',
+  },
+  availableSlotText: { color: '#1F2937' },
+  pendingSlotText: { color: '#92400E' },
+  takenSlotText: { color: '#991B1B' },
+  slotIcon: { fontSize: 10, marginTop: 2 },
   
   emptyState: { alignItems: 'center', padding: 20 },
   emptyIcon: { fontSize: 48, marginBottom: 12 },
   emptyText: { fontSize: 14, color: '#9CA3AF', textAlign: 'center' },
+  
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.5)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 20,
+  },
+  modalContent: {
+    backgroundColor: 'white',
+    borderRadius: 16,
+    padding: 20,
+    width: '100%',
+    maxWidth: 400,
+  },
+  modalHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 20,
+  },
+  modalTitle: { fontSize: 20, fontWeight: '700', color: '#1F2937' },
+  modalBody: { marginBottom: 20 },
+  detailRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingVertical: 12,
+    borderBottomWidth: 1,
+    borderBottomColor: '#F3F4F6',
+  },
+  detailLabel: { fontSize: 14, color: '#6B7280', fontWeight: '500' },
+  detailValue: { fontSize: 14, color: '#1F2937', fontWeight: '600' },
+  closeButton: {
+    backgroundColor: '#2563EB',
+    paddingVertical: 12,
+    borderRadius: 8,
+    alignItems: 'center',
+  },
+  closeButtonText: { color: 'white', fontSize: 16, fontWeight: '600' },
   
   appointmentCard: {
     backgroundColor: '#F9FAFB',

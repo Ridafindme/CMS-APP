@@ -10,6 +10,7 @@ export type Appointment = {
   status: string;
   patient_name: string;
   patient_id: string;
+  clinic_id: string;
   clinic_name: string;
   notes?: string | null;
 };
@@ -130,7 +131,9 @@ export const minutesToTime = (minutes: number) => {
 };
 
 export const getDayKey = (dateString: string) => {
-  const date = new Date(dateString);
+  // Parse date string as local date to avoid timezone issues
+  const [year, month, day] = dateString.split('-').map(Number);
+  const date = new Date(year, month - 1, day);
   return DAY_KEYS[date.getDay()];
 };
 
@@ -210,7 +213,7 @@ export const DoctorProvider = ({ children }: { children: ReactNode }) => {
       // Fetch doctor data
       const { data: doctorResult, error: doctorError } = await supabase
         .from('doctors')
-        .select('id, specialty_code, is_approved, rating, total_reviews, instagram, facebook, experience_years, graduate_year, bio')
+        .select('id, specialty_code, is_approved, rating, total_reviews, instagram, facebook, experience_years, graduation_year, bio')
         .eq('user_id', user.id)
         .single();
 
@@ -236,7 +239,7 @@ export const DoctorProvider = ({ children }: { children: ReactNode }) => {
           instagram: doctorResult.instagram || null,
           facebook: doctorResult.facebook || null,
           experience_years: doctorResult.experience_years || null,
-          graduate_year: doctorResult.graduate_year || null,
+          graduate_year: doctorResult.graduation_year || null,
           bio: doctorResult.bio || null,
         };
         
@@ -281,7 +284,7 @@ export const DoctorProvider = ({ children }: { children: ReactNode }) => {
     }
 
     try {
-      console.log('🔍 Fetching appointments for doctor:', doctorData.id);
+      console.log('🔍 Fetching appointments for doctor:', doctorData.id, 'lookbackDays:', lookbackDays);
       const todayDate = new Date();
       const today = todayDate.toISOString().split('T')[0];
       const startDate = new Date(todayDate);
@@ -292,6 +295,8 @@ export const DoctorProvider = ({ children }: { children: ReactNode }) => {
       futureDate.setDate(futureDate.getDate() + 30);
       const futureStr = futureDate.toISOString().split('T')[0];
 
+      console.log('📅 Date range:', { startStr, futureStr });
+
       const { data: appointmentsData, error } = await supabase
         .from('appointments')
         .select('id, appointment_date, time_slot, status, clinic_id, patient_id')
@@ -300,7 +305,13 @@ export const DoctorProvider = ({ children }: { children: ReactNode }) => {
         .lte('appointment_date', futureStr)
         .order('appointment_date', { ascending: true });
 
-      console.log('📊 Appointments query result:', { count: appointmentsData?.length || 0, error });
+      if (error) {
+        console.error('❌ Appointments query error:', error);
+        setAppointments([]);
+        return;
+      }
+
+      console.log('📊 Appointments query result:', { count: appointmentsData?.length || 0 });
 
       if (appointmentsData && appointmentsData.length > 0) {
         const patientIds = [...new Set(appointmentsData.map(a => a.patient_id).filter(Boolean))];
@@ -337,6 +348,7 @@ export const DoctorProvider = ({ children }: { children: ReactNode }) => {
             status: apt.status || 'pending',
             patient_name: patient.full_name || 'Patient',
             patient_id: apt.patient_id,
+            clinic_id: apt.clinic_id,
             clinic_name: clinic.clinic_name || 'Clinic',
             notes: null,
           };
