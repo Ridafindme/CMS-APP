@@ -6,16 +6,16 @@ import { useRouter } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import React, { useEffect, useState } from 'react';
 import {
-  ActivityIndicator,
-  Alert,
-  KeyboardAvoidingView,
-  Platform,
-  ScrollView,
-  StyleSheet,
-  Text,
-  TextInput,
-  TouchableOpacity,
-  View,
+    ActivityIndicator,
+    Alert,
+    KeyboardAvoidingView,
+    Platform,
+    ScrollView,
+    StyleSheet,
+    Text,
+    TextInput,
+    TouchableOpacity,
+    View,
 } from 'react-native';
 
 const SAVED_CREDENTIALS_KEY = '@saved_credentials';
@@ -117,7 +117,7 @@ export default function SignInScreen() {
           .maybeSingle();
 
         if (doctorData) {
-          router.replace('/doctor-dashboard');
+          router.replace('/(doctor-tabs)/appointments');
         } else {
           router.replace('/(patient-tabs)/home');
         }
