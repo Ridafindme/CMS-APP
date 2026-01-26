@@ -29,7 +29,7 @@ export default function ParallaxScrollView({
   const scrollOffset = useScrollOffset(scrollRef);
   const headerAnimatedStyle = useAnimatedStyle(() => {
     return {
-      transform: [
+      transform: [ 
         {
           translateY: interpolate(
             scrollOffset.value,
@@ -40,7 +40,7 @@ export default function ParallaxScrollView({
         {
           scale: interpolate(scrollOffset.value, [-HEADER_HEIGHT, 0, HEADER_HEIGHT], [2, 1, 1]),
         },
-      ],
+      ] as any,
     };
   });
 

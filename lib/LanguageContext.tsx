@@ -1,8 +1,8 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import React, { createContext, useContext, useEffect, useState } from 'react';
 import { I18nManager } from 'react-native';
-import ar from './i18n/ar';
-import en from './i18n/en';
+import { ar } from './i18n/ar';
+import { en } from './i18n/en';
 
 type Language = 'en' | 'ar';
 type Translations = typeof en;

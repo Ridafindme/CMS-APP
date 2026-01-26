@@ -63,7 +63,8 @@
         {
           "sounds": []
         }
-      ]
+      ],
+      "expo-router"
     ],
     "extra": {
       "eas": {
