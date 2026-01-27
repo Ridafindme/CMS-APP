@@ -1,3 +1,4 @@
+import PhoneInput from '@/components/ui/phone-input';
 import { getDayKey, minutesToTime, timeToMinutes, useDoctorContext } from '@/lib/DoctorContext';
 import { useI18n } from '@/lib/i18n';
 import { supabase } from '@/lib/supabase';
@@ -5,18 +6,18 @@ import { Ionicons } from '@expo/vector-icons';
 import { StatusBar } from 'expo-status-bar';
 import React, { useEffect, useState } from 'react';
 import {
-  ActivityIndicator,
-  Alert,
-  Linking,
-  Modal,
-  Platform,
-  RefreshControl,
-  ScrollView,
-  StyleSheet,
-  Text,
-  TextInput,
-  TouchableOpacity,
-  View
+    ActivityIndicator,
+    Alert,
+    Linking,
+    Modal,
+    Platform,
+    RefreshControl,
+    ScrollView,
+    StyleSheet,
+    Text,
+    TextInput,
+    TouchableOpacity,
+    View
 } from 'react-native';
 
 type TimeSlotData = {
@@ -41,7 +42,16 @@ export default function DailyScheduleScreen() {
   const [editingAppointment, setEditingAppointment] = useState<any>(null);
   const [editWalkInName, setEditWalkInName] = useState('');
   const [editWalkInPhone, setEditWalkInPhone] = useState('');
+  const [editWalkInPhoneLocal, setEditWalkInPhoneLocal] = useState('');
   const [updating, setUpdating] = useState(false);
+  
+  // Walk-in registration modal
+  const [showWalkInModal, setShowWalkInModal] = useState(false);
+  const [selectedTimeSlot, setSelectedTimeSlot] = useState<string | null>(null);
+  const [walkInName, setWalkInName] = useState('');
+  const [walkInPhone, setWalkInPhone] = useState('');
+  const [walkInPhoneLocal, setWalkInPhoneLocal] = useState('');
+  const [registering, setRegistering] = useState(false);
 
   useEffect(() => {
     fetchAppointments();
@@ -180,6 +190,48 @@ export default function DailyScheduleScreen() {
     Linking.openURL(`tel:${phone}`);
   };
 
+  const handleBookWalkIn = (time: string) => {
+    setSelectedTimeSlot(time);
+    setWalkInName('');
+    setWalkInPhone('');
+    setWalkInPhoneLocal('');
+    setShowWalkInModal(true);
+  };
+
+  const handleRegisterWalkIn = async () => {
+    if (!walkInName.trim() || !walkInPhone || !selectedTimeSlot || !selectedClinic) {
+      Alert.alert(t.common.error, isRTL ? 'الرجاء إدخال جميع البيانات' : 'Please fill all fields');
+      return;
+    }
+
+    setRegistering(true);
+    try {
+      const { error } = await supabase
+        .from('appointments')
+        .insert({
+          doctor_id: doctorData?.id,
+          clinic_id: selectedClinic,
+          appointment_date: selectedDate,
+          appointment_time: selectedTimeSlot,
+          booking_type: 'walk-in',
+          walk_in_name: walkInName.trim(),
+          walk_in_phone: walkInPhone.trim(),
+          status: 'confirmed'
+        });
+
+      if (error) throw error;
+
+      await fetchAppointments();
+      setShowWalkInModal(false);
+      Alert.alert(t.common.success, isRTL ? 'تم تسجيل الزائر' : 'Walk-in registered');
+    } catch (error) {
+      console.error('Register walk-in error:', error);
+      Alert.alert(t.common.error, isRTL ? 'فشل التسجيل' : 'Registration failed');
+    } finally {
+      setRegistering(false);
+    }
+  };
+
   const handleEditWalkIn = (appointment: any) => {
     setEditingAppointment(appointment);
     setEditWalkInName(appointment.walk_in_name || '');
@@ -188,7 +240,7 @@ export default function DailyScheduleScreen() {
   };
 
   const handleSaveWalkIn = async () => {
-    if (!editingAppointment || !editWalkInName.trim() || !editWalkInPhone.trim()) {
+    if (!editingAppointment || !editWalkInName.trim() || !editWalkInPhone) {
       Alert.alert(t.common.error, isRTL ? 'الرجاء إدخال الاسم ورقم الهاتف' : 'Please enter name and phone');
       return;
     }
@@ -199,7 +251,7 @@ export default function DailyScheduleScreen() {
         .from('appointments')
         .update({
           walk_in_name: editWalkInName.trim(),
-          walk_in_phone: editWalkInPhone.trim()
+          walk_in_phone: editWalkInPhone
         })
         .eq('id', editingAppointment.id);
 
@@ -393,6 +445,7 @@ export default function DailyScheduleScreen() {
 
       {/* Timeline */}
       <ScrollView 
+        key={`timeline-${appointments.length}-${selectedDate}-${selectedClinic}`}
         style={styles.timeline}
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={handleRefresh} />}
       >
@@ -415,6 +468,13 @@ export default function DailyScheduleScreen() {
                   <Text style={styles.availableText}>
                     {isRTL ? '⚪ متاح' : '⚪ Available'}
                   </Text>
+                  <TouchableOpacity 
+                    style={styles.bookButton}
+                    onPress={() => handleBookWalkIn(slot.time)}
+                  >
+                    <Ionicons name="person-add" size={16} color="#2563EB" />
+                    <Text style={styles.bookButtonText}>{isRTL ? 'تسجيل زائر' : 'Book Walk-in'}</Text>
+                  </TouchableOpacity>
                 </View>
               ) : slot.type === 'blocked' ? (
                 <View style={[styles.slotCard, styles.blockedCard]}>
@@ -448,7 +508,7 @@ export default function DailyScheduleScreen() {
                     </TouchableOpacity>
 
                     <View style={styles.cardRight}>
-                      {slot.appointment.walk_in_phone && (
+                      {slot.type === 'walk-in' && slot.appointment.walk_in_phone && (
                         <TouchableOpacity 
                           style={styles.callButton}
                           onPress={() => handleCall(slot.appointment.walk_in_phone)}
@@ -535,14 +595,17 @@ export default function DailyScheduleScreen() {
                 editable={!updating}
               />
 
-              <Text style={styles.inputLabel}>{isRTL ? 'رقم الهاتف' : 'Phone'}</Text>
-              <TextInput
-                style={[styles.input, isRTL && styles.textRight]}
+              <PhoneInput
                 value={editWalkInPhone}
-                onChangeText={setEditWalkInPhone}
-                placeholder={isRTL ? 'أدخل رقم الهاتف' : 'Enter phone'}
-                keyboardType="phone-pad"
-                editable={!updating}
+                onChangeValue={(e164, local) => {
+                  setEditWalkInPhone(e164);
+                  setEditWalkInPhoneLocal(local);
+                }}
+                type="mobile"
+                label={isRTL ? 'رقم الهاتف' : 'Phone'}
+                icon="📱"
+                isRTL={isRTL}
+                disabled={updating}
               />
             </View>
 
@@ -563,6 +626,67 @@ export default function DailyScheduleScreen() {
                   <ActivityIndicator color="#fff" size="small" />
                 ) : (
                   <Text style={styles.modalButtonPrimaryText}>{t.common.save || 'Save'}</Text>
+                )}
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
+
+      {/* Walk-In Registration Modal */}
+      <Modal visible={showWalkInModal} transparent animationType="fade">
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalContent}>
+            <View style={styles.modalHeader}>
+              <Text style={styles.modalTitle}>
+                {isRTL ? '🚶 تسجيل زائر' : '🚶 Register Walk-In'}
+              </Text>
+              <TouchableOpacity onPress={() => setShowWalkInModal(false)}>
+                <Ionicons name="close" size={24} color="#6B7280" />
+              </TouchableOpacity>
+            </View>
+
+            <View style={styles.modalBody}>
+              <Text style={styles.inputLabel}>{isRTL ? 'الاسم' : 'Name'}</Text>
+              <TextInput
+                style={[styles.input, isRTL && styles.textRight]}
+                value={walkInName}
+                onChangeText={setWalkInName}
+                placeholder={isRTL ? 'أدخل الاسم' : 'Enter name'}
+                editable={!registering}
+              />
+
+              <PhoneInput
+                value={walkInPhone}
+                onChangeValue={(e164, local) => {
+                  setWalkInPhone(e164);
+                  setWalkInPhoneLocal(local);
+                }}
+                type="mobile"
+                label={isRTL ? 'رقم الهاتف' : 'Phone'}
+                icon="📱"
+                isRTL={isRTL}
+                disabled={registering}
+              />
+            </View>
+
+            <View style={styles.modalButtons}>
+              <TouchableOpacity 
+                style={styles.modalButtonSecondary}
+                onPress={() => setShowWalkInModal(false)}
+                disabled={registering}
+              >
+                <Text style={styles.modalButtonSecondaryText}>{t.common.cancel}</Text>
+              </TouchableOpacity>
+              <TouchableOpacity 
+                style={[styles.modalButtonPrimary, registering && styles.buttonDisabled]}
+                onPress={handleRegisterWalkIn}
+                disabled={registering}
+              >
+                {registering ? (
+                  <ActivityIndicator color="#fff" size="small" />
+                ) : (
+                  <Text style={styles.modalButtonPrimaryText}>{isRTL ? 'تسجيل' : 'Register'}</Text>
                 )}
               </TouchableOpacity>
             </View>
@@ -615,26 +739,30 @@ const styles = StyleSheet.create({
   
   clinicFilter: {
     backgroundColor: '#fff',
-    paddingVertical: 12,
+    paddingVertical: 8,
     paddingHorizontal: 16,
     borderBottomWidth: 1,
     borderBottomColor: '#E5E7EB',
+    flexDirection: 'row',
+    flexWrap: 'nowrap',
+    maxHeight: 46,
   },
   clinicChip: {
-    paddingHorizontal: 16,
-    paddingVertical: 8,
+    paddingHorizontal: 12,
+    paddingVertical: 6,
     backgroundColor: '#F3F4F6',
-    borderRadius: 20,
+    borderRadius: 16,
     marginRight: 8,
-    borderWidth: 2,
+    borderWidth: 1.5,
     borderColor: 'transparent',
+    flexShrink: 0,
   },
   clinicChipSelected: {
     backgroundColor: '#DBEAFE',
     borderColor: '#2563EB',
   },
   clinicChipText: {
-    fontSize: 14,
+    fontSize: 13,
     color: '#6B7280',
     fontWeight: '500',
   },
@@ -700,6 +828,22 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: '#9CA3AF',
     textAlign: 'center',
+    marginBottom: 8,
+  },
+  bookButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 6,
+    paddingVertical: 8,
+    paddingHorizontal: 12,
+    backgroundColor: '#DBEAFE',
+    borderRadius: 8,
+  },
+  bookButtonText: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: '#2563EB',
   },
   
   blockedCard: {

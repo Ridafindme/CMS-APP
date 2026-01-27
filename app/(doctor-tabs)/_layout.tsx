@@ -12,7 +12,7 @@ export default function DoctorTabsLayout() {
   
   useEffect(() => {
     // Only handle back button on main tab screens
-    const mainPaths = ['/appointments', '/calendar', '/clinics', '/chat', '/profile'];
+    const mainPaths = ['/appointments', '/daily', '/calendar', '/clinics', '/chat', '/profile'];
     const isMainTab = mainPaths.some(path => pathname.includes(path));
     
     if (!isMainTab) return;
@@ -76,6 +76,19 @@ export default function DoctorTabsLayout() {
           tabBarIcon: ({ color, focused }) => (
             <Ionicons
               name={focused ? 'list' : 'list-outline'}
+              size={24}
+              color={color}
+            />
+          ),
+        }}
+      />
+      <Tabs.Screen
+        name="daily"
+        options={{
+          title: 'Daily',
+          tabBarIcon: ({ color, focused }) => (
+            <Ionicons
+              name={focused ? 'time' : 'time-outline'}
               size={24}
               color={color}
             />
