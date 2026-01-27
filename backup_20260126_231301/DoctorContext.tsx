@@ -13,9 +13,6 @@ export type Appointment = {
   clinic_id: string;
   clinic_name: string;
   notes?: string | null;
-  booking_type: 'appointment' | 'walk-in';
-  walk_in_name?: string | null;
-  walk_in_phone?: string | null;
 };
 
 export type Clinic = {
@@ -288,22 +285,6 @@ export const DoctorProvider = ({ children }: { children: ReactNode }) => {
 
     try {
       console.log('🔍 Fetching appointments for doctor:', doctorData.id, 'lookbackDays:', lookbackDays);
-      
-      // Auto-expire pending appointments older than 15 minutes
-      const fifteenMinutesAgo = new Date(Date.now() - 15 * 60 * 1000).toISOString();
-      const { error: expireError } = await supabase
-        .from('appointments')
-        .update({ status: 'cancelled' })
-        .eq('doctor_id', doctorData.id)
-        .eq('status', 'pending')
-        .lt('created_at', fifteenMinutesAgo);
-
-      if (expireError) {
-        console.error('⚠️ Error expiring old pending appointments:', expireError);
-      } else {
-        console.log('✅ Expired old pending appointments');
-      }
-      
       const todayDate = new Date();
       const today = todayDate.toISOString().split('T')[0];
       const startDate = new Date(todayDate);
@@ -318,7 +299,7 @@ export const DoctorProvider = ({ children }: { children: ReactNode }) => {
 
       const { data: appointmentsData, error } = await supabase
         .from('appointments')
-        .select('id, appointment_date, time_slot, status, clinic_id, patient_id, booking_type, walk_in_name, walk_in_phone')
+        .select('id, appointment_date, time_slot, status, clinic_id, patient_id')
         .eq('doctor_id', doctorData.id)
         .gte('appointment_date', startStr)
         .lte('appointment_date', futureStr)
@@ -359,21 +340,17 @@ export const DoctorProvider = ({ children }: { children: ReactNode }) => {
         const transformed = appointmentsData.map(apt => {
           const patient = patientsMap.get(apt.patient_id) || {};
           const clinic = clinicsMap.get(apt.clinic_id) || {};
-          const bookingType = apt.booking_type || 'appointment';
           
           return {
             id: apt.id,
             appointment_date: apt.appointment_date,
             appointment_time: apt.time_slot || '09:00',
             status: apt.status || 'pending',
-            patient_name: bookingType === 'walk-in' ? (apt.walk_in_name || 'Walk-in Patient') : (patient.full_name || 'Patient'),
+            patient_name: patient.full_name || 'Patient',
             patient_id: apt.patient_id,
             clinic_id: apt.clinic_id,
             clinic_name: clinic.clinic_name || 'Clinic',
             notes: null,
-            booking_type: bookingType,
-            walk_in_name: apt.walk_in_name,
-            walk_in_phone: apt.walk_in_phone,
           };
         });
 

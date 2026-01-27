@@ -1,6 +1,5 @@
 import { useDoctorContext } from '@/lib/DoctorContext';
 import { useI18n } from '@/lib/i18n';
-import { sendRescheduleNotification } from '@/lib/notifications';
 import { supabase } from '@/lib/supabase';
 import { Ionicons } from '@expo/vector-icons';
 import { StatusBar } from 'expo-status-bar';
@@ -17,39 +16,15 @@ import {
     View
 } from 'react-native';
 
-// Import helper functions for slot generation
-const timeToMinutes = (time: string) => {
-  if (!time) return null;
-  const normalized = time.includes(':') ? time : `${time}:00`;
-  const [h, m] = normalized.split(':').map(v => parseInt(v, 10));
-  if (Number.isNaN(h) || Number.isNaN(m)) return null;
-  return h * 60 + m;
-};
-
-const minutesToTime = (minutes: number) => {
-  const h = Math.floor(minutes / 60);
-  const m = minutes % 60;
-  return `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}`;
-};
-
-const DAY_KEYS = ['sun', 'mon', 'tue', 'wed', 'thu', 'fri', 'sat'];
-const getDayKey = (dateString: string) => {
-  const date = new Date(dateString);
-  return DAY_KEYS[date.getDay()] as 'sun' | 'mon' | 'tue' | 'wed' | 'thu' | 'fri' | 'sat';
-};
-
 export default function DoctorAppointmentsScreen() {
   const { t, isRTL } = useI18n();
-  const { loading, appointments, doctorData, fetchAppointments, clinics } = useDoctorContext();
+  const { loading, appointments, doctorData, fetchAppointments } = useDoctorContext();
   
   const [refreshing, setRefreshing] = useState(false);
   const [lookbackDays, setLookbackDays] = useState(7);
   const [showRescheduleModal, setShowRescheduleModal] = useState(false);
   const [rescheduleAppointment, setRescheduleAppointment] = useState<any>(null);
   const [newDate, setNewDate] = useState<string | null>(null);
-  const [newTime, setNewTime] = useState<string | null>(null);
-  const [availableSlots, setAvailableSlots] = useState<string[]>([]);
-  const [loadingSlots, setLoadingSlots] = useState(false);
   const [rescheduling, setRescheduling] = useState(false);
 
   useEffect(() => {
@@ -112,147 +87,21 @@ export default function DoctorAppointmentsScreen() {
   const openRescheduleModal = (appointment: any) => {
     setRescheduleAppointment(appointment);
     setNewDate(null);
-    setNewTime(null);
-    setAvailableSlots([]);
     setShowRescheduleModal(true);
   };
 
-  // Fetch available slots when date is selected
-  useEffect(() => {
-    if (newDate && rescheduleAppointment) {
-      fetchAvailableSlots(newDate, rescheduleAppointment.clinic_id);
-    } else {
-      setAvailableSlots([]);
-      setNewTime(null);
-    }
-  }, [newDate, rescheduleAppointment]);
-
-  const fetchAvailableSlots = async (date: string, clinicId: string) => {
-    setLoadingSlots(true);
-    try {
-      // Get clinic schedule
-      const clinic = clinics.find(c => c.id === clinicId);
-      if (!clinic || !clinic.schedule) {
-        setAvailableSlots([]);
-        return;
-      }
-
-      const dayKey = getDayKey(date);
-      const schedule = clinic.schedule;
-      const slotMinutes = clinic.slot_minutes || 30;
-
-      // Check if day is weekly off
-      if (schedule.weekly_off?.includes(dayKey)) {
-        setAvailableSlots([]);
-        return;
-      }
-
-      // Get schedule for this day
-      const daySchedule = (schedule as any)[dayKey] || schedule.default;
-      if (!daySchedule?.start || !daySchedule?.end) {
-        setAvailableSlots([]);
-        return;
-      }
-
-      const startMin = timeToMinutes(daySchedule.start);
-      const endMin = timeToMinutes(daySchedule.end);
-      if (startMin === null || endMin === null) {
-        setAvailableSlots([]);
-        return;
-      }
-
-      const breakStartMin = daySchedule.break_start ? timeToMinutes(daySchedule.break_start) : null;
-      const breakEndMin = daySchedule.break_end ? timeToMinutes(daySchedule.break_end) : null;
-
-      // Generate all possible slots
-      const allSlots: string[] = [];
-      for (let t = startMin; t + slotMinutes <= endMin; t += slotMinutes) {
-        const slotEnd = t + slotMinutes;
-        if (breakStartMin !== null && breakEndMin !== null) {
-          if (t < breakEndMin && slotEnd > breakStartMin) continue;
-        }
-        allSlots.push(minutesToTime(t));
-      }
-
-      // Get booked/blocked slots
-      const { data: bookedData } = await supabase
-        .from('appointments')
-        .select('time_slot')
-        .eq('doctor_id', doctorData?.id)
-        .eq('clinic_id', clinicId)
-        .eq('appointment_date', date)
-        .in('status', ['pending', 'confirmed'])
-        .neq('id', rescheduleAppointment.id); // Exclude current appointment
-
-      const { data: blockedData } = await supabase
-        .from('doctor_blocked_slots')
-        .select('time_slot')
-        .eq('doctor_id', doctorData?.id)
-        .eq('clinic_id', clinicId)
-        .eq('blocked_date', date);
-
-      const bookedTimes = new Set(bookedData?.map(b => b.time_slot) || []);
-      const blockedTimes = new Set(blockedData?.map(b => b.time_slot) || []);
-
-      // Filter available slots
-      const available = allSlots.filter(slot => !bookedTimes.has(slot) && !blockedTimes.has(slot));
-      setAvailableSlots(available);
-    } catch (error) {
-      console.error('Error fetching available slots:', error);
-      setAvailableSlots([]);
-    } finally {
-      setLoadingSlots(false);
-    }
-  };
-
   const handleReschedule = async () => {
-    if (!rescheduleAppointment || !newDate || !newTime) {
-      Alert.alert(
-        t.common.error,
-        isRTL ? 'الرجاء اختيار التاريخ والوقت' : 'Please select both date and time'
-      );
-      return;
-    }
+    if (!rescheduleAppointment || !newDate) return;
 
     setRescheduling(true);
     try {
       const { error } = await supabase
         .from('appointments')
-        .update({ 
-          appointment_date: newDate,
-          time_slot: newTime
-        })
+        .update({ appointment_date: newDate })
         .eq('id', rescheduleAppointment.id);
 
       if (error) throw error;
-
-      // Send push notification to patient (skip for walk-ins)
-      if (rescheduleAppointment.booking_type !== 'walk-in' && rescheduleAppointment.patient_id) {
-        const clinic = clinics.find(c => c.id === rescheduleAppointment.clinic_id);
-        const { data: profileData } = await supabase
-          .from('profiles')
-          .select('full_name')
-          .eq('id', doctorData?.id)
-          .single();
-        
-        const doctorName = profileData?.full_name || 'Doctor';
-        const clinicName = clinic?.clinic_name || 'Clinic';
-        
-        await sendRescheduleNotification(
-          rescheduleAppointment.patient_id,
-          doctorName,
-          newDate,
-          newTime,
-          clinicName
-        );
-      }
-      
-      Alert.alert(
-        t.common.success, 
-        isRTL 
-          ? `تم إعادة جدولة الموعد إلى ${newDate} في ${newTime}` 
-          : `Appointment rescheduled to ${newDate} at ${newTime}`
-      );
+      Alert.alert(t.common.success, isRTL ? 'تم إعادة جدولة الموعد' : 'Appointment rescheduled');
       setShowRescheduleModal(false);
       await fetchAppointments(lookbackDays);
     } catch (error) {
@@ -336,23 +185,11 @@ export default function DoctorAppointmentsScreen() {
               <View style={[styles.appointmentHeader, isRTL && styles.rowReverse]}>
                 <View style={isRTL ? styles.alignRight : undefined}>
                   <Text style={[styles.patientName, isRTL && styles.textRight]}>
-                    {apt.booking_type === 'walk-in' ? '🚶' : '👤'} {apt.patient_name}
+                    👤 {apt.patient_name}
                   </Text>
-                  {apt.booking_type === 'walk-in' && apt.walk_in_phone && (
-                    <Text style={[styles.phoneText, isRTL && styles.textRight]}>
-                      📱 {apt.walk_in_phone}
-                    </Text>
-                  )}
                   <Text style={[styles.clinicText, isRTL && styles.textRight]}>
                     🏥 {apt.clinic_name}
                   </Text>
-                  {apt.booking_type === 'walk-in' && (
-                    <View style={[styles.walkInBadge, isRTL && styles.alignRight]}>
-                      <Text style={styles.walkInBadgeText}>
-                        {isRTL ? 'مريض زائر' : 'Walk-in'}
-                      </Text>
-                    </View>
-                  )}
                 </View>
               </View>
               
@@ -488,42 +325,6 @@ export default function DoctorAppointmentsScreen() {
               ))}
             </ScrollView>
 
-            {/* Time Slot Selection */}
-            {newDate && (
-              <>
-                <Text style={[styles.label, isRTL && styles.textRight, { marginTop: 20 }]}>
-                  {isRTL ? 'الوقت الجديد' : 'New Time'}
-                </Text>
-                {loadingSlots ? (
-                  <ActivityIndicator size="small" color="#2563EB" style={{ marginVertical: 20 }} />
-                ) : availableSlots.length === 0 ? (
-                  <Text style={[styles.noSlotsText, isRTL && styles.textRight]}>
-                    {isRTL ? 'لا توجد أوقات متاحة في هذا التاريخ' : 'No available slots on this date'}
-                  </Text>
-                ) : (
-                  <View style={styles.timeSlotsGrid}>
-                    {availableSlots.map((slot) => (
-                      <TouchableOpacity
-                        key={slot}
-                        style={[
-                          styles.timeSlotChip,
-                          newTime === slot && styles.timeSlotChipSelected
-                        ]}
-                        onPress={() => setNewTime(slot)}
-                      >
-                        <Text style={[
-                          styles.timeSlotText,
-                          newTime === slot && styles.timeSlotTextSelected
-                        ]}>
-                          {formatTime(slot)}
-                        </Text>
-                      </TouchableOpacity>
-                    ))}
-                  </View>
-                )}
-              </>
-            )}
-
             <View style={styles.modalButtons}>
               <TouchableOpacity 
                 style={styles.modalButtonSecondary} 
@@ -532,12 +333,9 @@ export default function DoctorAppointmentsScreen() {
                 <Text style={styles.modalButtonSecondaryText}>{t.common.cancel}</Text>
               </TouchableOpacity>
               <TouchableOpacity 
-                style={[
-                  styles.modalButtonPrimary, 
-                  (rescheduling || !newDate || !newTime) && styles.buttonDisabled
-                ]}
+                style={[styles.modalButtonPrimary, rescheduling && styles.buttonDisabled]}
                 onPress={handleReschedule}
-                disabled={rescheduling || !newDate || !newTime}
+                disabled={rescheduling || !newDate}
               >
                 {rescheduling ? <ActivityIndicator color="white" size="small" /> : (
                   <Text style={styles.modalButtonPrimaryText}>{t.common.confirm}</Text>
@@ -581,17 +379,7 @@ const styles = StyleSheet.create({
   },
   appointmentHeader: { marginBottom: 12 },
   patientName: { fontSize: 16, fontWeight: '600', color: '#1F2937', marginBottom: 4 },
-  phoneText: { fontSize: 14, color: '#6B7280', marginBottom: 4 },
   clinicText: { fontSize: 14, color: '#6B7280' },
-  walkInBadge: {
-    backgroundColor: '#FEF3C7',
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    borderRadius: 12,
-    marginTop: 6,
-    alignSelf: 'flex-start',
-  },
-  walkInBadgeText: { fontSize: 11, fontWeight: '600', color: '#92400E' },
   appointmentMeta: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginBottom: 12 },
   dateBadge: { 
     backgroundColor: '#EFF6FF', 
@@ -713,40 +501,6 @@ const styles = StyleSheet.create({
   dayName: { fontSize: 12, color: '#6B7280', marginBottom: 4 },
   dayNumber: { fontSize: 18, fontWeight: 'bold', color: '#1F2937' },
   dayTextSelected: { color: '#fff' },
-  
-  timeSlotsGrid: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: 8,
-    marginBottom: 20,
-  },
-  timeSlotChip: {
-    backgroundColor: '#F3F4F6',
-    paddingVertical: 10,
-    paddingHorizontal: 16,
-    borderRadius: 8,
-    borderWidth: 2,
-    borderColor: 'transparent',
-  },
-  timeSlotChipSelected: {
-    backgroundColor: '#DBEAFE',
-    borderColor: '#2563EB',
-  },
-  timeSlotText: {
-    fontSize: 14,
-    fontWeight: '600',
-    color: '#374151',
-  },
-  timeSlotTextSelected: {
-    color: '#2563EB',
-  },
-  noSlotsText: {
-    fontSize: 14,
-    color: '#9CA3AF',
-    textAlign: 'center',
-    paddingVertical: 20,
-  },
-  
   modalButtons: { flexDirection: 'row', gap: 12 },
   modalButtonSecondary: {
     flex: 1,

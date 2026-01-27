@@ -134,6 +134,74 @@ export async function sendMessageNotification(
 }
 
 /**
+ * Send appointment reschedule notification to a patient
+ */
+export async function sendRescheduleNotification(
+  patientUserId: string | null,
+  doctorName: string,
+  newDate: string,
+  newTime: string,
+  clinicName: string
+) {
+  if (!patientUserId) {
+    console.log('No patient user ID - skipping notification (walk-in patient)');
+    return;
+  }
+
+  try {
+    // Get patient's push token
+    const { data: tokenData } = await supabase
+      .from('user_push_tokens')
+      .select('push_token')
+      .eq('user_id', patientUserId)
+      .single();
+
+    if (!tokenData?.push_token) {
+      console.log('No push token for patient');
+      return;
+    }
+
+    // Format date nicely
+    const date = new Date(newDate);
+    const formattedDate = date.toLocaleDateString('en-US', { 
+      weekday: 'short', 
+      month: 'short', 
+      day: 'numeric' 
+    });
+
+    // Send notification via Expo Push API
+    const message = {
+      to: tokenData.push_token,
+      sound: 'default',
+      title: '📅 Appointment Rescheduled',
+      body: `Your appointment with Dr. ${doctorName} has been moved to ${formattedDate} at ${newTime}`,
+      data: { 
+        type: 'appointment_reschedule', 
+        date: newDate,
+        time: newTime,
+        clinic: clinicName 
+      },
+      categoryIdentifier: 'appointment',
+      priority: 'high',
+    };
+
+    const response = await fetch('https://exp.host/--/api/v2/push/send', {
+      method: 'POST',
+      headers: {
+        Accept: 'application/json',
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify(message),
+    });
+
+    const result = await response.json();
+    console.log('📨 Reschedule notification sent:', result);
+  } catch (error) {
+    console.error('Error sending reschedule notification:', error);
+  }
+}
+
+/**
  * Setup notification listeners
  */
 export function setupNotificationListeners(

@@ -1,6 +1,5 @@
 import { getDayKey, minutesToTime, timeToMinutes, useDoctorContext } from '@/lib/DoctorContext';
 import { useI18n } from '@/lib/i18n';
-import { supabase } from '@/lib/supabase';
 import { Ionicons } from '@expo/vector-icons';
 import { StatusBar } from 'expo-status-bar';
 import React, { useEffect, useState } from 'react';
@@ -14,7 +13,6 @@ import {
     ScrollView,
     StyleSheet,
     Text,
-    TextInput,
     TouchableOpacity,
     View
 } from 'react-native';
@@ -29,13 +27,13 @@ type DayAppointment = {
 
 type TimeSlot = {
   time: string;
-  status: 'available' | 'pending' | 'taken' | 'blocked';
+  status: 'available' | 'pending' | 'taken';
   appointment?: any;
 };
 
 export default function DoctorCalendarScreen() {
   const { t, isRTL } = useI18n();
-  const { loading, appointments, clinics, fetchAppointments, doctorData, blockedSlots, fetchBlockedSlots } = useDoctorContext();
+  const { loading, appointments, clinics, fetchAppointments, doctorData } = useDoctorContext();
   
   const [refreshing, setRefreshing] = useState(false);
   const [currentMonth, setCurrentMonth] = useState(new Date());
@@ -43,18 +41,9 @@ export default function DoctorCalendarScreen() {
   const [selectedClinic, setSelectedClinic] = useState<string | null>(null);
   const [showAppointmentModal, setShowAppointmentModal] = useState(false);
   const [selectedAppointment, setSelectedAppointment] = useState<any>(null);
-  const [showWalkInModal, setShowWalkInModal] = useState(false);
-  const [selectedSlot, setSelectedSlot] = useState<TimeSlot | null>(null);
-  const [walkInName, setWalkInName] = useState('');
-  const [walkInPhone, setWalkInPhone] = useState('');
-  const [registering, setRegistering] = useState(false);
-  const [showBlockModal, setShowBlockModal] = useState(false);
-  const [blockReason, setBlockReason] = useState('');
-  const [blocking, setBlocking] = useState(false);
 
   useEffect(() => {
     fetchAppointments();
-    fetchBlockedSlots();
   }, []);
 
   useEffect(() => {
@@ -251,13 +240,6 @@ export default function DoctorCalendarScreen() {
 
       const timeStr = minutesToTime(currentMin);
       
-      // Check if this slot is blocked
-      const isBlocked = blockedSlots.some(bs => 
-        bs.blocked_date === selectedDate && 
-        bs.time_slot === timeStr &&
-        (bs.clinic_id === selectedClinic || bs.clinic_id === null)
-      );
-      
       // Check if this slot has an appointment
       const appointment = appointments.find(apt => 
         apt.appointment_date === selectedDate && 
@@ -265,10 +247,8 @@ export default function DoctorCalendarScreen() {
         apt.clinic_id === selectedClinic
       );
 
-      let status: 'available' | 'pending' | 'taken' | 'blocked' = 'available';
-      if (isBlocked) {
-        status = 'blocked';
-      } else if (appointment) {
+      let status: 'available' | 'pending' | 'taken' = 'available';
+      if (appointment) {
         if (appointment.status === 'pending') {
           status = 'pending';
         } else if (appointment.status === 'confirmed' || appointment.status === 'completed') {
@@ -286,179 +266,20 @@ export default function DoctorCalendarScreen() {
 
   const handleSlotPress = (slot: TimeSlot) => {
     if (slot.status === 'available') {
-      setSelectedSlot(slot);
       Alert.alert(
-        isRTL ? 'اختر إجراء' : 'Choose Action',
-        isRTL ? `الوقت: ${slot.time}` : `Time: ${slot.time}`,
+        isRTL ? 'حجز موعد' : 'Book Appointment',
+        isRTL ? `هل تريد فتح نموذج الحجز للساعة ${slot.time}؟` : `Open booking form for ${slot.time}?`,
         [
           { text: isRTL ? 'إلغاء' : 'Cancel', style: 'cancel' },
-          {
-            text: isRTL ? '📅 حجز لمريض' : '📅 Book for Patient',
-            onPress: () => {
-              Alert.alert(
-                isRTL ? 'قريباً' : 'Coming Soon',
-                isRTL ? 'سيتم إضافة وظيفة الحجز للمرضى المسجلين قريباً' : 'Patient booking feature coming soon'
-              );
-            }
-          },
-          {
-            text: isRTL ? '🚶 تسجيل زائر' : '🚶 Register Walk-In',
-            onPress: () => {
-              setWalkInName('');
-              setWalkInPhone('');
-              setShowWalkInModal(true);
-            }
-          },
-          {
-            text: isRTL ? '🚫 حظر الوقت' : '🚫 Block Slot',
-            style: 'destructive',
-            onPress: () => {
-              setBlockReason('');
-              setShowBlockModal(true);
-            }
-          }
-        ]
-      );
-    } else if (slot.status === 'blocked') {
-      Alert.alert(
-        isRTL ? 'وقت محظور' : 'Blocked Slot',
-        isRTL ? 'هل تريد إلغاء حظر هذا الوقت؟' : 'Do you want to unblock this slot?',
-        [
-          { text: isRTL ? 'إلغاء' : 'Cancel', style: 'cancel' },
-          {
-            text: isRTL ? 'إلغاء الحظر' : 'Unblock',
-            onPress: () => handleUnblockSlot(slot.time)
-          }
+          { text: isRTL ? 'نعم' : 'Yes', onPress: () => {
+            // TODO: Navigate to booking or open booking modal
+            Alert.alert(isRTL ? 'قريباً' : 'Coming Soon', isRTL ? 'سيتم إضافة وظيفة الحجز قريباً' : 'Booking functionality coming soon');
+          }}
         ]
       );
     } else if (slot.appointment) {
       setSelectedAppointment(slot.appointment);
       setShowAppointmentModal(true);
-    }
-  };
-
-  const handleWalkInRegister = async () => {
-    if (!walkInName.trim()) {
-      Alert.alert(t.common.error, isRTL ? 'الرجاء إدخال اسم المريض' : 'Please enter patient name');
-      return;
-    }
-    if (!walkInPhone.trim()) {
-      Alert.alert(t.common.error, isRTL ? 'الرجاء إدخال رقم الهاتف' : 'Please enter phone number');
-      return;
-    }
-    if (!selectedSlot || !selectedDate || !selectedClinic || !doctorData) {
-      Alert.alert(t.common.error, isRTL ? 'معلومات الموعد غير مكتملة' : 'Appointment information incomplete');
-      return;
-    }
-
-    setRegistering(true);
-    try {
-      const { data, error } = await supabase
-        .from('appointments')
-        .insert({
-          doctor_id: doctorData.id,
-          clinic_id: selectedClinic,
-          appointment_date: selectedDate,
-          time_slot: selectedSlot.time,
-          status: 'confirmed',
-          booking_type: 'walk-in',
-          walk_in_name: walkInName.trim(),
-          walk_in_phone: walkInPhone.trim(),
-        })
-        .select()
-        .single();
-
-      if (error) throw error;
-
-      Alert.alert(
-        t.common.success,
-        isRTL 
-          ? `تم تسجيل ${walkInName} بنجاح في ${selectedSlot.time}`
-          : `Walk-in ${walkInName} registered successfully at ${selectedSlot.time}`
-      );
-      
-      setShowWalkInModal(false);
-      setWalkInName('');
-      setWalkInPhone('');
-      setSelectedSlot(null);
-      await fetchAppointments();
-    } catch (error: any) {
-      console.error('Walk-in registration error:', error);
-      Alert.alert(
-        t.common.error,
-        isRTL ? 'فشل تسجيل المريض الزائر' : 'Failed to register walk-in patient'
-      );
-    } finally {
-      setRegistering(false);
-    }
-  };
-
-  const handleBlockSlot = async () => {
-    if (!selectedSlot || !selectedDate || !selectedClinic || !doctorData) {
-      Alert.alert(t.common.error, isRTL ? 'معلومات الوقت غير مكتملة' : 'Slot information incomplete');
-      return;
-    }
-
-    setBlocking(true);
-    try {
-      const { error } = await supabase
-        .from('doctor_blocked_slots')
-        .insert({
-          doctor_id: doctorData.id,
-          clinic_id: selectedClinic,
-          blocked_date: selectedDate,
-          time_slot: selectedSlot.time,
-          reason: blockReason.trim() || null,
-        });
-
-      if (error) throw error;
-
-      Alert.alert(
-        t.common.success,
-        isRTL ? `تم حظر الوقت ${selectedSlot.time} بنجاح` : `Slot ${selectedSlot.time} blocked successfully`
-      );
-      
-      setShowBlockModal(false);
-      setBlockReason('');
-      setSelectedSlot(null);
-      await fetchBlockedSlots();
-    } catch (error: any) {
-      console.error('Block slot error:', error);
-      Alert.alert(
-        t.common.error,
-        isRTL ? 'فشل حظر الوقت' : 'Failed to block slot'
-      );
-    } finally {
-      setBlocking(false);
-    }
-  };
-
-  const handleUnblockSlot = async (timeSlot: string) => {
-    if (!selectedDate || !selectedClinic || !doctorData) return;
-
-    try {
-      const { error } = await supabase
-        .from('doctor_blocked_slots')
-        .delete()
-        .eq('doctor_id', doctorData.id)
-        .eq('clinic_id', selectedClinic)
-        .eq('blocked_date', selectedDate)
-        .eq('time_slot', timeSlot);
-
-      if (error) throw error;
-
-      Alert.alert(
-        t.common.success,
-        isRTL ? `تم إلغاء حظر الوقت ${timeSlot}` : `Slot ${timeSlot} unblocked`
-      );
-      
-      await fetchBlockedSlots();
-    } catch (error: any) {
-      console.error('Unblock slot error:', error);
-      Alert.alert(
-        t.common.error,
-        isRTL ? 'فشل إلغاء الحظر' : 'Failed to unblock slot'
-      );
     }
   };
 
@@ -654,10 +475,6 @@ export default function DoctorCalendarScreen() {
                     <View style={[styles.legendBox, styles.takenSlot]} />
                     <Text style={styles.legendText}>{isRTL ? 'محجوز' : 'Taken'}</Text>
                   </View>
-                  <View style={styles.legendItem}>
-                    <View style={[styles.legendBox, styles.blockedSlot]} />
-                    <Text style={styles.legendText}>{isRTL ? 'محظور' : 'Blocked'}</Text>
-                  </View>
                 </View>
 
                 <View style={styles.slotsGrid}>
@@ -669,22 +486,20 @@ export default function DoctorCalendarScreen() {
                         slot.status === 'available' && styles.availableSlot,
                         slot.status === 'pending' && styles.pendingSlot,
                         slot.status === 'taken' && styles.takenSlot,
-                        slot.status === 'blocked' && styles.blockedSlot,
                       ]}
                       onPress={() => handleSlotPress(slot)}
+                      disabled={slot.status === 'available' ? false : false} // All clickable
                     >
                       <Text style={[
                         styles.slotTime,
                         slot.status === 'available' && styles.availableSlotText,
                         slot.status === 'pending' && styles.pendingSlotText,
                         slot.status === 'taken' && styles.takenSlotText,
-                        slot.status === 'blocked' && styles.blockedSlotText,
                       ]}>
                         {slot.time}
                       </Text>
                       {slot.status === 'pending' && <Text style={styles.slotIcon}>🟡</Text>}
                       {slot.status === 'taken' && <Text style={styles.slotIcon}>🔴</Text>}
-                      {slot.status === 'blocked' && <Text style={styles.slotIcon}>🚫</Text>}
                     </TouchableOpacity>
                   ))}
                 </View>
@@ -762,194 +577,6 @@ export default function DoctorCalendarScreen() {
             >
               <Text style={styles.closeButtonText}>{isRTL ? 'إغلاق' : 'Close'}</Text>
             </TouchableOpacity>
-          </View>
-        </TouchableOpacity>
-      </Modal>
-
-      {/* Walk-In Registration Modal */}
-      <Modal
-        visible={showWalkInModal}
-        transparent
-        animationType="fade"
-        onRequestClose={() => setShowWalkInModal(false)}
-      >
-        <TouchableOpacity 
-          style={styles.modalOverlay}
-          activeOpacity={1}
-          onPress={() => !registering && setShowWalkInModal(false)}
-        >
-          <View style={styles.modalContent} onStartShouldSetResponder={() => true}>
-            <View style={styles.modalHeader}>
-              <Text style={styles.modalTitle}>
-                {isRTL ? '🚶 تسجيل مريض زائر' : '🚶 Register Walk-In Patient'}
-              </Text>
-              <TouchableOpacity 
-                onPress={() => setShowWalkInModal(false)}
-                disabled={registering}
-              >
-                <Ionicons name="close" size={24} color="#6B7280" />
-              </TouchableOpacity>
-            </View>
-
-            {selectedSlot && (
-              <View style={styles.walkInInfo}>
-                <Text style={styles.walkInInfoText}>
-                  📅 {selectedDate && new Date(selectedDate).toLocaleDateString(isRTL ? 'ar' : 'en', { 
-                    weekday: 'long', 
-                    year: 'numeric', 
-                    month: 'long', 
-                    day: 'numeric' 
-                  })}
-                </Text>
-                <Text style={styles.walkInInfoText}>
-                  🕐 {selectedSlot.time}
-                </Text>
-                <Text style={styles.walkInInfoText}>
-                  🏥 {clinics.find(c => c.id === selectedClinic)?.clinic_name}
-                </Text>
-              </View>
-            )}
-
-            <View style={styles.modalBody}>
-              <Text style={[styles.inputLabel, isRTL && styles.textRight]}>
-                {isRTL ? 'اسم المريض *' : 'Patient Name *'}
-              </Text>
-              <TextInput
-                style={[styles.input, isRTL && styles.textRight]}
-                value={walkInName}
-                onChangeText={setWalkInName}
-                placeholder={isRTL ? 'أدخل اسم المريض' : 'Enter patient name'}
-                placeholderTextColor="#9CA3AF"
-                editable={!registering}
-              />
-
-              <Text style={[styles.inputLabel, isRTL && styles.textRight]}>
-                {isRTL ? 'رقم الهاتف *' : 'Phone Number *'}
-              </Text>
-              <TextInput
-                style={[styles.input, isRTL && styles.textRight]}
-                value={walkInPhone}
-                onChangeText={setWalkInPhone}
-                placeholder={isRTL ? 'أدخل رقم الهاتف' : 'Enter phone number'}
-                placeholderTextColor="#9CA3AF"
-                keyboardType="phone-pad"
-                editable={!registering}
-              />
-            </View>
-
-            <View style={styles.modalButtons}>
-              <TouchableOpacity
-                style={styles.modalButtonSecondary}
-                onPress={() => setShowWalkInModal(false)}
-                disabled={registering}
-              >
-                <Text style={styles.modalButtonSecondaryText}>
-                  {isRTL ? 'إلغاء' : 'Cancel'}
-                </Text>
-              </TouchableOpacity>
-
-              <TouchableOpacity
-                style={[styles.modalButtonPrimary, registering && styles.modalButtonDisabled]}
-                onPress={handleWalkInRegister}
-                disabled={registering}
-              >
-                {registering ? (
-                  <ActivityIndicator color="#fff" />
-                ) : (
-                  <Text style={styles.modalButtonPrimaryText}>
-                    {isRTL ? 'تسجيل' : 'Register'}
-                  </Text>
-                )}
-              </TouchableOpacity>
-            </View>
-          </View>
-        </TouchableOpacity>
-      </Modal>
-
-      {/* Block Slot Modal */}
-      <Modal
-        visible={showBlockModal}
-        transparent
-        animationType="fade"
-        onRequestClose={() => setShowBlockModal(false)}
-      >
-        <TouchableOpacity 
-          style={styles.modalOverlay}
-          activeOpacity={1}
-          onPress={() => !blocking && setShowBlockModal(false)}
-        >
-          <View style={styles.modalContent} onStartShouldSetResponder={() => true}>
-            <View style={styles.modalHeader}>
-              <Text style={styles.modalTitle}>
-                {isRTL ? '🚫 حظر وقت' : '🚫 Block Time Slot'}
-              </Text>
-              <TouchableOpacity 
-                onPress={() => setShowBlockModal(false)}
-                disabled={blocking}
-              >
-                <Ionicons name="close" size={24} color="#6B7280" />
-              </TouchableOpacity>
-            </View>
-
-            {selectedSlot && (
-              <View style={styles.walkInInfo}>
-                <Text style={styles.walkInInfoText}>
-                  📅 {selectedDate && new Date(selectedDate).toLocaleDateString(isRTL ? 'ar' : 'en', { 
-                    weekday: 'long', 
-                    year: 'numeric', 
-                    month: 'long', 
-                    day: 'numeric' 
-                  })}
-                </Text>
-                <Text style={styles.walkInInfoText}>
-                  🕐 {selectedSlot.time}
-                </Text>
-                <Text style={styles.walkInInfoText}>
-                  🏥 {clinics.find(c => c.id === selectedClinic)?.clinic_name}
-                </Text>
-              </View>
-            )}
-
-            <View style={styles.modalBody}>
-              <Text style={[styles.inputLabel, isRTL && styles.textRight]}>
-                {isRTL ? 'السبب (اختياري)' : 'Reason (Optional)'}
-              </Text>
-              <TextInput
-                style={[styles.input, isRTL && styles.textRight, { height: 80, textAlignVertical: 'top' }]}
-                value={blockReason}
-                onChangeText={setBlockReason}
-                placeholder={isRTL ? 'مثال: استراحة، اجتماع، إلخ' : 'e.g. Break, Meeting, etc.'}
-                placeholderTextColor="#9CA3AF"
-                multiline
-                editable={!blocking}
-              />
-            </View>
-
-            <View style={styles.modalButtons}>
-              <TouchableOpacity
-                style={styles.modalButtonSecondary}
-                onPress={() => setShowBlockModal(false)}
-                disabled={blocking}
-              >
-                <Text style={styles.modalButtonSecondaryText}>
-                  {isRTL ? 'إلغاء' : 'Cancel'}
-                </Text>
-              </TouchableOpacity>
-
-              <TouchableOpacity
-                style={[styles.modalButtonPrimary, blocking && styles.modalButtonDisabled]}
-                onPress={handleBlockSlot}
-                disabled={blocking}
-              >
-                {blocking ? (
-                  <ActivityIndicator color="#fff" />
-                ) : (
-                  <Text style={styles.modalButtonPrimaryText}>
-                    {isRTL ? 'حظر' : 'Block'}
-                  </Text>
-                )}
-              </TouchableOpacity>
-            </View>
           </View>
         </TouchableOpacity>
       </Modal>
@@ -1119,10 +746,6 @@ const styles = StyleSheet.create({
     backgroundColor: '#FEE2E2',
     borderColor: '#EF4444',
   },
-  blockedSlot: {
-    backgroundColor: '#FCA5A5',
-    borderColor: '#DC2626',
-  },
   slotTime: {
     fontSize: 13,
     fontWeight: '600',
@@ -1130,7 +753,6 @@ const styles = StyleSheet.create({
   availableSlotText: { color: '#1F2937' },
   pendingSlotText: { color: '#92400E' },
   takenSlotText: { color: '#991B1B' },
-  blockedSlotText: { color: '#7F1D1D' },
   slotIcon: { fontSize: 10, marginTop: 2 },
   
   emptyState: { alignItems: 'center', padding: 20 },
@@ -1176,68 +798,6 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   closeButtonText: { color: 'white', fontSize: 16, fontWeight: '600' },
-  
-  walkInInfo: {
-    backgroundColor: '#FEF3C7',
-    padding: 12,
-    borderRadius: 8,
-    marginBottom: 16,
-  },
-  walkInInfoText: {
-    fontSize: 14,
-    color: '#92400E',
-    marginBottom: 4,
-    fontWeight: '500',
-  },
-  inputLabel: {
-    fontSize: 14,
-    fontWeight: '600',
-    color: '#374151',
-    marginBottom: 8,
-    marginTop: 12,
-  },
-  input: {
-    backgroundColor: '#F9FAFB',
-    borderWidth: 1,
-    borderColor: '#D1D5DB',
-    borderRadius: 8,
-    paddingHorizontal: 12,
-    paddingVertical: 10,
-    fontSize: 16,
-    color: '#1F2937',
-  },
-  modalButtons: {
-    flexDirection: 'row',
-    gap: 12,
-    marginTop: 8,
-  },
-  modalButtonSecondary: {
-    flex: 1,
-    paddingVertical: 12,
-    borderRadius: 8,
-    backgroundColor: '#F3F4F6',
-    alignItems: 'center',
-  },
-  modalButtonSecondaryText: {
-    color: '#374151',
-    fontSize: 16,
-    fontWeight: '600',
-  },
-  modalButtonPrimary: {
-    flex: 1,
-    paddingVertical: 12,
-    borderRadius: 8,
-    backgroundColor: '#2563EB',
-    alignItems: 'center',
-  },
-  modalButtonPrimaryText: {
-    color: 'white',
-    fontSize: 16,
-    fontWeight: '600',
-  },
-  modalButtonDisabled: {
-    backgroundColor: '#9CA3AF',
-  },
   
   appointmentCard: {
     backgroundColor: '#F9FAFB',

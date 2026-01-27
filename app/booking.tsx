@@ -17,6 +17,8 @@ import {
 type BookedSlot = {
   appointment_date: string;
   time_slot: string;
+  status?: string;
+  created_at?: string;
 };
 
 type ClinicScheduleDay = {
@@ -72,6 +74,7 @@ export default function BookingScreen() {
   const [selectedTime, setSelectedTime] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [bookedSlots, setBookedSlots] = useState<BookedSlot[]>([]);
+  const [pendingSlots, setPendingSlots] = useState<BookedSlot[]>([]);
   const [blockedSlots, setBlockedSlots] = useState<BookedSlot[]>([]);
   const [loadingSlots, setLoadingSlots] = useState(false);
   const [clinicSchedule, setClinicSchedule] = useState<ClinicSchedule | null>(null);
@@ -141,20 +144,54 @@ export default function BookingScreen() {
     }
   };
 
+  const expireOldPendingAppointments = async () => {
+    try {
+      const fifteenMinutesAgo = new Date(Date.now() - 15 * 60 * 1000).toISOString();
+      
+      const { error } = await supabase
+        .from('appointments')
+        .update({ status: 'cancelled' })
+        .eq('status', 'pending')
+        .lt('created_at', fifteenMinutesAgo);
+
+      if (error) {
+        console.error('Error expiring pending appointments:', error);
+      }
+    } catch (error) {
+      console.error('Error in expireOldPendingAppointments:', error);
+    }
+  };
+
   const fetchBookedSlots = async () => {
     setLoadingSlots(true);
     try {
-      // Get booked appointments for this doctor
-      const { data: appointments, error } = await supabase
+      // Auto-expire pending appointments older than 15 minutes
+      await expireOldPendingAppointments();
+
+      // Get confirmed appointments
+      const { data: confirmed, error: confirmedError } = await supabase
         .from('appointments')
-        .select('appointment_date, time_slot')
+        .select('appointment_date, time_slot, status')
         .eq('doctor_id', doctorId)
         .eq('clinic_id', clinicId)
-        .in('status', ['pending', 'confirmed'])
+        .eq('status', 'confirmed')
         .gte('appointment_date', new Date().toISOString().split('T')[0]);
 
-      if (!error && appointments) {
-        setBookedSlots(appointments);
+      if (!confirmedError && confirmed) {
+        setBookedSlots(confirmed);
+      }
+
+      // Get pending appointments (still within 15-min window)
+      const { data: pending, error: pendingError } = await supabase
+        .from('appointments')
+        .select('appointment_date, time_slot, status, created_at')
+        .eq('doctor_id', doctorId)
+        .eq('clinic_id', clinicId)
+        .eq('status', 'pending')
+        .gte('appointment_date', new Date().toISOString().split('T')[0]);
+
+      if (!pendingError && pending) {
+        setPendingSlots(pending);
       }
 
       // Try to get blocked slots (table may not exist)
@@ -261,12 +298,16 @@ export default function BookingScreen() {
     return bookedSlots.some(s => s.appointment_date === date && s.time_slot === time);
   };
 
+  const isSlotPending = (date: string, time: string) => {
+    return pendingSlots.some(s => s.appointment_date === date && s.time_slot === time);
+  };
+
   const isSlotBlocked = (date: string, time: string) => {
     return blockedSlots.some(s => s.appointment_date === date && s.time_slot === time);
   };
 
   const isSlotAvailable = (date: string, time: string) => {
-    return !isSlotBooked(date, time) && !isSlotBlocked(date, time);
+    return !isSlotBooked(date, time) && !isSlotPending(date, time) && !isSlotBlocked(date, time);
   };
 
   const getAvailableSlotsCount = (date: string) => {
@@ -411,8 +452,9 @@ export default function BookingScreen() {
     <View style={[styles.timeGrid, isRTL && styles.rowReverse]}>
       {slots.map((slot) => {
         const isBooked = selectedDate ? isSlotBooked(selectedDate, slot.time) : false;
+        const isPending = selectedDate ? isSlotPending(selectedDate, slot.time) : false;
         const isBlocked = selectedDate ? isSlotBlocked(selectedDate, slot.time) : false;
-        const isUnavailable = isBooked || isBlocked;
+        const isUnavailable = isBooked || isPending || isBlocked;
         
         return (
           <TouchableOpacity
@@ -420,7 +462,9 @@ export default function BookingScreen() {
             style={[
               styles.timeSlot,
               selectedTime === slot.time && styles.timeSlotSelected,
-              isUnavailable && styles.timeSlotUnavailable,
+              isBooked && styles.timeSlotUnavailable,
+              isPending && styles.timeSlotPending,
+              isBlocked && styles.timeSlotBlocked,
             ]}
             onPress={() => !isUnavailable && setSelectedTime(slot.time)}
             disabled={isUnavailable}
@@ -428,15 +472,19 @@ export default function BookingScreen() {
             <Text style={[
               styles.timeText,
               selectedTime === slot.time && styles.timeTextSelected,
-              isUnavailable && styles.timeTextUnavailable,
+              (isBooked || isBlocked) && styles.timeTextUnavailable,
+              isPending && styles.timeTextPending,
             ]}>
               {formatTime(slot.time)}
             </Text>
             {isBooked && (
               <Text style={styles.bookedLabel}>{isRTL ? 'محجوز' : 'Booked'}</Text>
             )}
+            {isPending && (
+              <Text style={styles.pendingLabel}>{isRTL ? 'قيد الانتظار' : 'Pending'}</Text>
+            )}
             {isBlocked && (
-              <Text style={styles.blockedLabel}>{isRTL ? 'غير متاح' : 'N/A'}</Text>
+              <Text style={styles.blockedLabel}>{isRTL ? 'محظور' : 'Blocked'}</Text>
             )}
           </TouchableOpacity>
         );
@@ -674,11 +722,15 @@ const styles = StyleSheet.create({
   timeSlot: { backgroundColor: 'white', paddingVertical: 12, paddingHorizontal: 8, borderRadius: 10, width: '31%', alignItems: 'center', borderWidth: 1, borderColor: '#E5E7EB' },
   timeSlotSelected: { backgroundColor: '#2563EB', borderColor: '#2563EB' },
   timeSlotUnavailable: { backgroundColor: '#F9FAFB', borderColor: '#E5E7EB' },
+  timeSlotPending: { backgroundColor: '#FEF3C7', borderColor: '#F59E0B' },
+  timeSlotBlocked: { backgroundColor: '#FCA5A5', borderColor: '#DC2626' },
   timeText: { fontSize: 13, color: '#374151', fontWeight: '500' },
   timeTextSelected: { color: 'white' },
   timeTextUnavailable: { color: '#D1D5DB' },
+  timeTextPending: { color: '#92400E' },
   bookedLabel: { fontSize: 9, color: '#EF4444', marginTop: 2 },
-  blockedLabel: { fontSize: 9, color: '#F59E0B', marginTop: 2 },
+  pendingLabel: { fontSize: 9, color: '#F59E0B', marginTop: 2 },
+  blockedLabel: { fontSize: 9, color: '#DC2626', marginTop: 2, fontWeight: '600' },
   summaryCard: { backgroundColor: 'white', borderRadius: 15, padding: 20, marginTop: 20 },
   summaryTitle: { fontSize: 18, fontWeight: 'bold', color: '#1F2937', marginBottom: 15 },
   summaryRow: { flexDirection: 'row', justifyContent: 'space-between', paddingVertical: 10, borderBottomWidth: 1, borderBottomColor: '#F3F4F6' },
