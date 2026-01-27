@@ -338,10 +338,16 @@ export const DoctorProvider = ({ children }: { children: ReactNode }) => {
 
         let patientsMap = new Map();
         if (patientIds.length > 0) {
-          const { data: patients } = await supabase
+          const { data: patients, error: patientsError } = await supabase
             .from('profiles')
-            .select('id, full_name')
+            .select('id, full_name, phone')
             .in('id', patientIds);
+          
+          if (patientsError) {
+            console.error('Error fetching patient profiles:', patientsError);
+          } else {
+            console.log('👥 Fetched patient profiles:', patients);
+          }
           
           patientsMap = new Map(patients?.map(p => [p.id, p]) || []);
         }
@@ -357,19 +363,25 @@ export const DoctorProvider = ({ children }: { children: ReactNode }) => {
         }
 
         const transformed = appointmentsData.map(apt => {
-          const patient = patientsMap.get(apt.patient_id) || {};
-          const clinic = clinicsMap.get(apt.clinic_id) || {};
           const bookingType = apt.booking_type || 'appointment';
+          const patient = patientsMap.get(apt.patient_id) || null;
+          const clinic = clinicsMap.get(apt.clinic_id) || null;
+          
+          // Use full_name, fallback to generic "Patient"
+          const patientDisplayName = bookingType === 'walk-in' 
+            ? (apt.walk_in_name || 'Walk-in Patient')
+            : (patient?.full_name || 'Patient');
           
           return {
             id: apt.id,
             appointment_date: apt.appointment_date,
             appointment_time: apt.time_slot || '09:00',
             status: apt.status || 'pending',
-            patient_name: bookingType === 'walk-in' ? (apt.walk_in_name || 'Walk-in Patient') : (patient.full_name || 'Patient'),
+            patient_name: patientDisplayName,
             patient_id: apt.patient_id,
+            patient_mobile: patient?.phone || null,
             clinic_id: apt.clinic_id,
-            clinic_name: clinic.clinic_name || 'Clinic',
+            clinic_name: clinic?.clinic_name || 'Clinic',
             notes: null,
             booking_type: bookingType,
             walk_in_name: apt.walk_in_name,

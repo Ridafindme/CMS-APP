@@ -5,3 +5,9 @@
     "source.sortMembers": "explicit"
   }
 }
+{
+  "github.copilot.enable": {
+    "*": true
+  },
+  "chat.extensionUnification.enabled": true
+}
