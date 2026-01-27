@@ -1,7 +1,11 @@
 import * as Device from 'expo-device';
 import * as Notifications from 'expo-notifications';
 import { Platform } from 'react-native';
+import Constants from 'expo-constants';
 import { supabase } from './supabase';
+
+// Check if running in Expo Go
+const isExpoGo = Constants.appOwnership === 'expo';
 
 // Configure how notifications should be handled when app is in foreground
 Notifications.setNotificationHandler({
@@ -15,12 +19,81 @@ Notifications.setNotificationHandler({
 });
 
 /**
+ * Test local notifications (works in Expo Go)
+ */
+export async function scheduleTestNotification() {
+  try {
+    // Request permissions first
+    const { status: existingStatus } = await Notifications.getPermissionsAsync();
+    let finalStatus = existingStatus;
+    
+    if (existingStatus !== 'granted') {
+      const { status } = await Notifications.requestPermissionsAsync();
+      finalStatus = status;
+    }
+    
+    if (finalStatus !== 'granted') {
+      console.log('⚠️ Notification permissions not granted');
+      return;
+    }
+
+    // Schedule a local notification
+    await Notifications.scheduleNotificationAsync({
+      content: {
+        title: "📅 Test Notification",
+        body: 'This is a test notification from your CMS app!',
+        data: { type: 'test' },
+        sound: true,
+      },
+      trigger: { seconds: 2 },
+    });
+
+    console.log('✅ Test notification scheduled for 2 seconds from now');
+  } catch (error) {
+    console.error('Error scheduling test notification:', error);
+  }
+}
+
+/**
+ * Send immediate local notification (works in Expo Go)
+ */
+export async function sendLocalNotification(title: string, body: string, data?: any) {
+  try {
+    const { status } = await Notifications.getPermissionsAsync();
+    
+    if (status !== 'granted') {
+      console.log('⚠️ Notification permissions not granted');
+      return;
+    }
+
+    await Notifications.scheduleNotificationAsync({
+      content: {
+        title,
+        body,
+        data: data || {},
+        sound: true,
+      },
+      trigger: null, // immediate
+    });
+
+    console.log('✅ Local notification sent');
+  } catch (error) {
+    console.error('Error sending local notification:', error);
+  }
+}
+
+/**
  * Register for push notifications and get the Expo push token
  */
 export async function registerForPushNotificationsAsync() {
   let token;
 
   // Skip in Expo Go since push notifications don't work there
+  if (isExpoGo) {
+    console.log('⚠️ Push notifications are not available in Expo Go. Use a development build instead.');
+    return null;
+  }
+
   if (!Device.isDevice) {
     console.log('⚠️ Push notifications require a physical device');
     return null;
@@ -208,6 +281,12 @@ export function setupNotificationListeners(
   onNotificationReceived?: (notification: Notifications.Notification) => void,
   onNotificationResponse?: (response: Notifications.NotificationResponse) => void
 ) {
+  // Skip in Expo Go
+  if (isExpoGo) {
+    console.log('⚠️ Notification listeners not available in Expo Go');
+    return () => {}; // Return empty cleanup function
+  }
+
   // Listener for when notification is received while app is in foreground
   const receivedListener = Notifications.addNotificationReceivedListener(notification => {
     console.log('📬 Notification received:', notification);

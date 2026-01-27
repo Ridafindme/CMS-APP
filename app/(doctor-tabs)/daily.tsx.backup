@@ -36,7 +36,6 @@ export default function DailyScheduleScreen() {
   const [refreshing, setRefreshing] = useState(false);
   const [timeSlots, setTimeSlots] = useState<TimeSlotData[]>([]);
   const [showDatePicker, setShowDatePicker] = useState(false);
-  const [calendarDate, setCalendarDate] = useState(new Date());
   
   // Walk-in edit modal
   const [showEditWalkIn, setShowEditWalkIn] = useState(false);
@@ -188,55 +187,6 @@ export default function DailyScheduleScreen() {
 
   const goToToday = () => {
     setSelectedDate(new Date().toISOString().split('T')[0]);
-  };
-
-  const updateSelectedDate = (date: Date) => {
-    setSelectedDate(date.toISOString().split('T')[0]);
-  };
-
-  const openDatePicker = () => {
-    const baseDate = selectedDate ? new Date(selectedDate) : new Date();
-    setCalendarDate(baseDate);
-    setShowDatePicker(true);
-  };
-
-  const closeDatePicker = () => setShowDatePicker(false);
-
-  const changeCalendarMonth = (offset: number) => {
-    const next = new Date(calendarDate);
-    next.setMonth(next.getMonth() + offset);
-    setCalendarDate(next);
-  };
-
-  const handleSelectCalendarDay = (day: number) => {
-    const chosen = new Date(calendarDate.getFullYear(), calendarDate.getMonth(), day);
-    updateSelectedDate(chosen);
-    setShowDatePicker(false);
-  };
-
-  const getCalendarWeeks = () => {
-    const year = calendarDate.getFullYear();
-    const month = calendarDate.getMonth();
-    const firstDay = new Date(year, month, 1);
-    const firstWeekday = firstDay.getDay();
-    const daysInMonth = new Date(year, month + 1, 0).getDate();
-
-    const cells: Array<number | null> = [];
-    for (let i = 0; i < firstWeekday; i++) {
-      cells.push(null);
-    }
-    for (let d = 1; d <= daysInMonth; d++) {
-      cells.push(d);
-    }
-    while (cells.length % 7 !== 0) {
-      cells.push(null);
-    }
-
-    const weeks: Array<Array<number | null>> = [];
-    for (let i = 0; i < cells.length; i += 7) {
-      weeks.push(cells.slice(i, i + 7));
-    }
-    return weeks;
   };
 
   const formatTime = (time: string) => {
@@ -508,238 +458,6 @@ export default function DailyScheduleScreen() {
     }
   };
 
-  const getSlotMeta = (slot: TimeSlotData) => {
-    if (slot.type === 'available') {
-      return {
-        icon: 'flash-outline' as const,
-        iconColor: '#059669',
-        chipStyle: styles.slotTypeChipAvailable,
-        label: isRTL ? 'متاح' : 'Free'
-      };
-    }
-
-    if (slot.type === 'blocked') {
-      return {
-        icon: 'lock-closed-outline' as const,
-        iconColor: '#B91C1C',
-        chipStyle: styles.slotTypeChipBlocked,
-        label: isRTL ? 'محظور' : 'Blocked'
-      };
-    }
-
-    if (slot.type === 'walk-in') {
-      return {
-        icon: 'walk-outline' as const,
-        iconColor: '#F97316',
-        chipStyle: styles.slotTypeChipWalkIn,
-        label: isRTL ? 'زائر' : 'Walk-in'
-      };
-    }
-
-    return {
-      icon: 'medkit-outline' as const,
-      iconColor: '#2563EB',
-      chipStyle: styles.slotTypeChipAppointment,
-      label: isRTL ? 'حجز' : 'Online'
-    };
-  };
-
-  const renderSlotContent = (slot: TimeSlotData) => {
-    const meta = getSlotMeta(slot);
-
-    if (slot.type === 'available') {
-      return (
-        <View style={[styles.slotCardSurface, styles.availableSurface]}>
-          <View style={styles.slotMetaRow}>
-            <View style={[styles.slotTypeChip, meta.chipStyle]}>
-              <Ionicons name={meta.icon} size={14} color={meta.iconColor} />
-              <Text style={styles.slotTypeChipText}>{meta.label}</Text>
-            </View>
-          </View>
-
-          <View style={styles.availableRow}>
-            <Ionicons name="time-outline" size={16} color="#6B7280" />
-            <Text style={styles.availableLabel}>
-              {isRTL ? 'أضف زائر أو احجز كتلة زمنية' : 'Add a walk-in or block this time'}
-            </Text>
-          </View>
-
-          <View style={styles.inlineActions}>
-            <TouchableOpacity 
-              style={styles.iconChip}
-              onPress={() => handleBookWalkIn(slot.time)}
-            >
-              <Ionicons name="person-add-outline" size={16} color="#1D4ED8" />
-              <Text style={styles.iconChipText}>{isRTL ? 'زائر' : 'Walk-in'}</Text>
-            </TouchableOpacity>
-            <TouchableOpacity 
-              style={[styles.iconChip, styles.iconChipDanger]}
-              onPress={() => handleOpenBlockModal(slot.time)}
-            >
-              <Ionicons name="remove-circle-outline" size={16} color="#B91C1C" />
-              <Text style={[styles.iconChipText, styles.iconChipTextDanger]}>{isRTL ? 'حظر' : 'Block'}</Text>
-            </TouchableOpacity>
-          </View>
-        </View>
-      );
-    }
-
-    if (slot.type === 'blocked') {
-      return (
-        <View style={[styles.slotCardSurface, styles.blockedSurface]}>
-          <View style={styles.slotMetaRow}>
-            <View style={[styles.slotTypeChip, meta.chipStyle]}>
-              <Ionicons name={meta.icon} size={14} color={meta.iconColor} />
-              <Text style={styles.slotTypeChipText}>{meta.label}</Text>
-            </View>
-            <View style={[styles.statusPill, styles.statusPillMuted]}>
-              <Text style={styles.statusPillText}>{isRTL ? 'غير متاح' : 'Unavailable'}</Text>
-            </View>
-          </View>
-
-          <View style={styles.blockedRow}>
-            <Ionicons name="lock-closed-outline" size={18} color="#B91C1C" />
-            <View style={styles.blockedCopy}>
-              <Text style={styles.blockedTitleText}>{isRTL ? 'تم حظر هذا الوقت' : 'This slot is blocked'}</Text>
-              {slot.blockedReason && (
-                <Text style={styles.blockedReasonText}>{slot.blockedReason}</Text>
-              )}
-            </View>
-          </View>
-
-          <TouchableOpacity style={styles.linkButton} onPress={() => handleUnblock(slot.time)}>
-            <Ionicons name="refresh-outline" size={14} color="#2563EB" />
-            <Text style={styles.linkButtonText}>{isRTL ? 'إلغاء الحظر' : 'Unblock'}</Text>
-          </TouchableOpacity>
-        </View>
-      );
-    }
-
-    if (!slot.appointment) return null;
-
-    const isWalkIn = slot.type === 'walk-in';
-    const status = slot.appointment.status;
-    const rawPhone = isWalkIn ? slot.appointment.walk_in_phone : slot.appointment.patient_mobile;
-    const contactPhone = rawPhone || '';
-    const showContact = Boolean(contactPhone);
-
-    return (
-      <View style={[styles.slotCardSurface, styles.appointmentSurface]}>
-        <View style={styles.slotMetaRow}>
-          <View style={[styles.slotTypeChip, meta.chipStyle]}>
-            <Ionicons name={meta.icon} size={14} color={meta.iconColor} />
-            <Text style={styles.slotTypeChipText}>{meta.label}</Text>
-          </View>
-          <View style={[
-            styles.statusPill,
-            isWalkIn && styles.statusPillWalkIn,
-            status === 'pending' && styles.statusPillPending,
-            status === 'confirmed' && styles.statusPillConfirmed
-          ]}>
-            <Text style={styles.statusPillText}>
-              {isWalkIn
-                ? (isRTL ? 'زائر' : 'Walk-in')
-                : status === 'pending'
-                ? (isRTL ? 'معلق' : 'Pending')
-                : (isRTL ? 'مؤكد' : 'Confirmed')}
-            </Text>
-          </View>
-        </View>
-
-        <View style={styles.patientRow}>
-          <View style={[styles.patientIcon, isWalkIn && styles.patientIconWalkIn]}>
-            <Ionicons
-              name={isWalkIn ? 'walk-outline' : 'person-circle-outline'}
-              size={18}
-              color={isWalkIn ? '#F97316' : '#2563EB'}
-            />
-          </View>
-          <TouchableOpacity
-            style={styles.patientDetails}
-            activeOpacity={isWalkIn ? 0.8 : 1}
-            onPress={() => isWalkIn && handleEditWalkIn(slot.appointment)}
-          >
-            <Text style={styles.patientNameText} numberOfLines={1}>
-              {slot.appointment.patient_name}
-            </Text>
-            {(isWalkIn || (!isWalkIn && !showContact)) && (
-              <View style={styles.patientMetaRow}>
-                {isWalkIn && (
-                  <Text style={styles.metaHint}>{isRTL ? 'اضغط للتعديل' : 'Tap to edit'}</Text>
-                )}
-                {!isWalkIn && !showContact && (
-                  <Text style={styles.noPhoneLabel}>{isRTL ? 'لا يوجد رقم' : 'No phone'}</Text>
-                )}
-              </View>
-            )}
-          </TouchableOpacity>
-          {showContact && (
-            <View style={styles.contactRow}>
-              <TouchableOpacity
-                style={styles.contactButton}
-                onPress={() => handleCall(contactPhone)}
-              >
-                <Ionicons name="call-outline" size={15} color="#059669" />
-              </TouchableOpacity>
-              <TouchableOpacity
-                style={[styles.contactButton, styles.contactButtonWhatsapp]}
-                onPress={() => handleWhatsApp(contactPhone)}
-              >
-                <Ionicons name="logo-whatsapp" size={15} color="#fff" />
-              </TouchableOpacity>
-            </View>
-          )}
-        </View>
-
-        <View style={styles.actionRow}>
-          {status === 'pending' && (
-            <>
-              <TouchableOpacity
-                style={[styles.actionChip, styles.actionChipSuccess]}
-                onPress={() => handleApprove(slot.appointment.id)}
-              >
-                <Ionicons name="checkmark-outline" size={14} color="#065F46" />
-                <Text style={styles.actionChipText}>{isRTL ? 'قبول' : 'Approve'}</Text>
-              </TouchableOpacity>
-              <TouchableOpacity
-                style={[styles.actionChip, styles.actionChipDanger]}
-                onPress={() => handleReject(slot.appointment.id)}
-              >
-                <Ionicons name="close-outline" size={14} color="#991B1B" />
-                <Text style={styles.actionChipText}>{isRTL ? 'رفض' : 'Reject'}</Text>
-              </TouchableOpacity>
-              <TouchableOpacity
-                style={styles.actionChip}
-                onPress={() => handleOpenReschedule(slot.appointment)}
-              >
-                <Ionicons name="calendar-outline" size={14} color="#1D4ED8" />
-                <Text style={styles.actionChipText}>{isRTL ? 'إعادة' : 'Reschedule'}</Text>
-              </TouchableOpacity>
-            </>
-          )}
-          {status === 'confirmed' && (
-            <>
-              <TouchableOpacity
-                style={styles.actionChip}
-                onPress={() => handleOpenReschedule(slot.appointment)}
-              >
-                <Ionicons name="calendar-outline" size={14} color="#1D4ED8" />
-                <Text style={styles.actionChipText}>{isRTL ? 'إعادة' : 'Reschedule'}</Text>
-              </TouchableOpacity>
-              <TouchableOpacity
-                style={[styles.actionChip, styles.actionChipDanger]}
-                onPress={() => handleCancelAppointment(slot.appointment.id)}
-              >
-                <Ionicons name="trash-outline" size={14} color="#991B1B" />
-                <Text style={styles.actionChipText}>{isRTL ? 'إلغاء' : 'Cancel'}</Text>
-              </TouchableOpacity>
-            </>
-          )}
-        </View>
-      </View>
-    );
-  };
-
   const getStats = () => {
     const confirmed = timeSlots.filter(s => s.type === 'appointment' && s.appointment?.status === 'confirmed').length;
     const pending = timeSlots.filter(s => s.type === 'appointment' && s.appointment?.status === 'pending').length;
@@ -751,8 +469,6 @@ export default function DailyScheduleScreen() {
 
   const stats = getStats();
   const isToday = selectedDate === new Date().toISOString().split('T')[0];
-  const weekdayLabels = isRTL ? ['ح', 'ن', 'ث', 'ر', 'خ', 'ج', 'س'] : ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
-  const calendarWeeks = getCalendarWeeks();
 
   if (loading) {
     return (
@@ -780,20 +496,10 @@ export default function DailyScheduleScreen() {
           <Ionicons name="chevron-back" size={24} color="#2563EB" />
         </TouchableOpacity>
         
-        <TouchableOpacity style={styles.dateDisplay} onPress={openDatePicker}>
-          <Ionicons name="calendar-outline" size={24} color="#2563EB" style={styles.dateIcon} />
-          <Text style={styles.dateDivider}>-</Text>
-          <View style={styles.dateDisplayText}>
-            <Text style={[styles.dateText, isRTL && styles.textRight]}>{formatDate(selectedDate)}</Text>
-            <Text style={[styles.todayHint, isRTL && styles.textRight]}>{isRTL ? 'اضغط لاختيار تاريخ' : 'Pick a date'}</Text>
-          </View>
+        <TouchableOpacity style={styles.dateDisplay} onPress={goToToday}>
+          <Text style={styles.dateText}>{formatDate(selectedDate)}</Text>
+          {!isToday && <Text style={styles.todayHint}>{isRTL ? 'اضغط للعودة لليوم' : 'Tap for today'}</Text>}
         </TouchableOpacity>
-
-        {!isToday && (
-          <TouchableOpacity style={styles.todayPill} onPress={goToToday}>
-            <Text style={styles.todayPillText}>{isRTL ? 'اليوم' : 'Today'}</Text>
-          </TouchableOpacity>
-        )}
         
         <TouchableOpacity style={styles.navButton} onPress={() => changeDate(1)}>
           <Ionicons name="chevron-forward" size={24} color="#2563EB" />
@@ -862,107 +568,180 @@ export default function DailyScheduleScreen() {
           </View>
         ) : (
           timeSlots.map((slot, index) => (
-            <View key={`${slot.time}-${index}`} style={styles.slotRow}>
-              <View style={styles.slotTime}>
-                <Text style={[styles.timeText, isRTL && styles.textRight]}>{formatTime(slot.time)}</Text>
-              </View>
-              <View style={styles.slotDivider} />
-              <View style={styles.slotBody}>{renderSlotContent(slot)}</View>
+            <View key={index} style={styles.slotContainer}>
+              {slot.type === 'available' ? (
+                <View style={[styles.slotCard, styles.availableCard, styles.availableCardFull, styles.availableSlotCard]}>
+                  <Text style={styles.cardTime}>{formatTime(slot.time)}</Text>
+                  <Text style={styles.availableText}>
+                    {isRTL ? '⚪ متاح' : '⚪ Available'}
+                  </Text>
+                  <View style={styles.availableActions}>
+                    <TouchableOpacity 
+                      style={styles.bookButton}
+                      onPress={() => handleBookWalkIn(slot.time)}
+                    >
+                      <Ionicons name="person-add" size={16} color="#2563EB" />
+                      <Text style={styles.bookButtonText}>{isRTL ? 'تسجيل زائر' : 'Book Walk-in'}</Text>
+                    </TouchableOpacity>
+                    <TouchableOpacity 
+                      style={styles.blockButton}
+                      onPress={() => handleOpenBlockModal(slot.time)}
+                    >
+                      <Ionicons name="ban" size={16} color="#DC2626" />
+                      <Text style={styles.blockButtonText}>{isRTL ? 'حظر' : 'Block'}</Text>
+                    </TouchableOpacity>
+                  </View>
+                </View>
+              ) : slot.type === 'blocked' ? (
+                <View style={[styles.slotCard, styles.blockedCard, styles.blockedCardFull]}>
+                  <Text style={styles.cardTime}>{formatTime(slot.time)}</Text>
+                  <View style={styles.cardContent}>
+                    <Text style={styles.blockedTitle}>🚫 {isRTL ? 'محظور' : 'Blocked'}</Text>
+                    {slot.blockedReason && (
+                      <Text style={styles.blockedReason}>{slot.blockedReason}</Text>
+                    )}
+                  </View>
+                  <TouchableOpacity 
+                    style={styles.unblockButton}
+                    onPress={() => handleUnblock(slot.time)}
+                  >
+                    <Text style={styles.unblockButtonText}>{isRTL ? 'إلغاء' : 'Unblock'}</Text>
+                  </TouchableOpacity>
+                </View>
+              ) : (
+                <View style={[styles.slotCard, styles.appointmentCard, styles.appointmentCardFull]}>
+                  <View style={styles.cardMain}>
+                    <View style={styles.cardLeft}>
+                      <Text style={styles.cardTime}>{formatTime(slot.time)}</Text>
+                      <TouchableOpacity 
+                        onPress={() => slot.type === 'walk-in' && handleEditWalkIn(slot.appointment)}
+                        style={styles.patientInfo}
+                      >
+                        <Text style={styles.patientName} numberOfLines={2}>
+                          {slot.type === 'walk-in' ? '🚶 ' : '👤 '}
+                          {slot.appointment.patient_name}
+                        </Text>
+                        {slot.type === 'walk-in' && (
+                          <Text style={styles.editHint}>{isRTL ? '(اضغط للتعديل)' : '(tap to edit)'}</Text>
+                        )}
+                        {slot.type === 'appointment' && !slot.appointment.patient_mobile && (
+                          <Text style={styles.noPhoneHint}>{isRTL ? 'لا يوجد رقم هاتف' : 'No phone'}</Text>
+                        )}
+                      </TouchableOpacity>
+                      <View style={[
+                        styles.statusBadgeInline,
+                        slot.appointment.status === 'pending' && styles.pendingBadge,
+                        slot.appointment.status === 'confirmed' && styles.confirmedBadge,
+                        slot.type === 'walk-in' && styles.walkInBadge
+                      ]}>
+                        <Text style={styles.statusText}>
+                          {slot.type === 'walk-in' 
+                            ? (isRTL ? 'زائر' : 'Walk-in')
+                            : slot.appointment.status === 'pending' 
+                            ? (isRTL ? 'معلق' : 'Pending')
+                            : (isRTL ? 'مؤكد' : 'Confirmed')}
+                        </Text>
+                      </View>
+                    </View>
+
+                    <View style={styles.cardRight}>
+                      {/* Debug call button logic */}
+                      {(() => {
+                        const hasWalkInPhone = slot.type === 'walk-in' && slot.appointment.walk_in_phone;
+                        const hasPatientMobile = slot.type === 'appointment' && slot.appointment.patient_mobile;
+                        const shouldShowCall = hasWalkInPhone || hasPatientMobile;
+                        
+                        console.log('📞 Call button check:', {
+                          slotType: slot.type,
+                          hasWalkInPhone,
+                          hasPatientMobile,
+                          shouldShowCall,
+                          walkInPhone: slot.appointment.walk_in_phone,
+                          patientMobile: slot.appointment.patient_mobile
+                        });
+                        
+                        return shouldShowCall ? (
+                          <View style={styles.contactButtons}>
+                            <TouchableOpacity 
+                              style={styles.callButton}
+                              onPress={() => handleCall(
+                                slot.type === 'walk-in' 
+                                  ? slot.appointment.walk_in_phone 
+                                  : slot.appointment.patient_mobile
+                              )}
+                            >
+                              <Ionicons name="call" size={18} color="#10B981" />
+                            </TouchableOpacity>
+                            <TouchableOpacity 
+                              style={styles.whatsappButton}
+                              onPress={() => handleWhatsApp(
+                                slot.type === 'walk-in' 
+                                  ? slot.appointment.walk_in_phone 
+                                  : slot.appointment.patient_mobile
+                              )}
+                            >
+                              <Ionicons name="logo-whatsapp" size={18} color="#fff" />
+                            </TouchableOpacity>
+                          </View>
+                        ) : null;
+                      })()}
+                    </View>
+                  </View>
+
+                  {/* Quick Actions */}
+                  <View style={styles.actions}>
+                    {slot.appointment.status === 'pending' && (
+                      <>
+                        <TouchableOpacity 
+                          style={styles.actionButton}
+                          onPress={() => handleApprove(slot.appointment.id)}
+                        >
+                          <Ionicons name="checkmark-circle" size={16} color="#10B981" />
+                          <Text style={styles.actionButtonText}>{isRTL ? 'قبول' : 'Approve'}</Text>
+                        </TouchableOpacity>
+                        <TouchableOpacity 
+                          style={styles.actionButton}
+                          onPress={() => handleReject(slot.appointment.id)}
+                        >
+                          <Ionicons name="close-circle" size={16} color="#EF4444" />
+                          <Text style={styles.actionButtonText}>{isRTL ? 'رفض' : 'Reject'}</Text>
+                        </TouchableOpacity>
+                        <TouchableOpacity 
+                          style={styles.actionButton}
+                          onPress={() => handleOpenReschedule(slot.appointment)}
+                        >
+                          <Ionicons name="calendar" size={16} color="#2563EB" />
+                          <Text style={styles.actionButtonText}>{isRTL ? 'إعادة جدولة' : 'Reschedule'}</Text>
+                        </TouchableOpacity>
+                      </>
+                    )}
+                    {slot.appointment.status === 'confirmed' && (
+                      <>
+                        <TouchableOpacity 
+                          style={styles.actionButton}
+                          onPress={() => handleOpenReschedule(slot.appointment)}
+                        >
+                          <Ionicons name="calendar" size={16} color="#2563EB" />
+                          <Text style={styles.actionButtonText}>{isRTL ? 'إعادة جدولة' : 'Reschedule'}</Text>
+                        </TouchableOpacity>
+                        <TouchableOpacity 
+                          style={styles.actionButton}
+                          onPress={() => handleCancelAppointment(slot.appointment.id)}
+                        >
+                          <Ionicons name="trash" size={16} color="#DC2626" />
+                          <Text style={styles.actionButtonText}>{isRTL ? 'إلغاء' : 'Cancel'}</Text>
+                        </TouchableOpacity>
+                      </>
+                    )}
+                  </View>
+                </View>
+              )}
             </View>
           ))
         )}
 
         <View style={{ height: 100 }} />
       </ScrollView>
-
-      {showDatePicker && (
-        <Modal visible={showDatePicker} transparent animationType="fade">
-          <View style={styles.modalOverlay}>
-            <View style={[styles.modalContent, styles.calendarModal]}>
-              <View style={styles.modalHeader}>
-                <Text style={styles.modalTitle}>{isRTL ? '📅 اختر التاريخ' : '📅 Select Date'}</Text>
-                <TouchableOpacity onPress={closeDatePicker}>
-                  <Ionicons name="close" size={24} color="#6B7280" />
-                </TouchableOpacity>
-              </View>
-
-              <View style={styles.calendarControlRow}>
-                <TouchableOpacity style={styles.calendarNavButton} onPress={() => changeCalendarMonth(-1)}>
-                  <Ionicons name={isRTL ? 'chevron-forward' : 'chevron-back'} size={20} color="#1D4ED8" />
-                </TouchableOpacity>
-                <Text style={[styles.calendarMonthText, isRTL && styles.textRight]}>
-                  {calendarDate.toLocaleDateString(isRTL ? 'ar' : 'en', { month: 'long', year: 'numeric' })}
-                </Text>
-                <TouchableOpacity style={styles.calendarNavButton} onPress={() => changeCalendarMonth(1)}>
-                  <Ionicons name={isRTL ? 'chevron-back' : 'chevron-forward'} size={20} color="#1D4ED8" />
-                </TouchableOpacity>
-              </View>
-
-              <View style={styles.calendarWeekRow}>
-                {weekdayLabels.map(label => (
-                  <Text key={label} style={styles.calendarWeekDayLabel}>{label}</Text>
-                ))}
-              </View>
-
-              <View>
-                {calendarWeeks.map((week, weekIndex) => (
-                  <View key={`week-${weekIndex}`} style={styles.calendarWeekRow}>
-                    {week.map((day, dayIndex) => {
-                      if (!day) {
-                        return <View key={`empty-${weekIndex}-${dayIndex}`} style={styles.calendarDayPlaceholder} />;
-                      }
-
-                      const dateKey = new Date(calendarDate.getFullYear(), calendarDate.getMonth(), day).toISOString().split('T')[0];
-                      const isSelectedDay = dateKey === selectedDate;
-                      const isTodayDay = dateKey === new Date().toISOString().split('T')[0];
-
-                      return (
-                        <TouchableOpacity
-                          key={`day-${weekIndex}-${dayIndex}`}
-                          style={[
-                            styles.calendarDay,
-                            isSelectedDay && styles.calendarDaySelected,
-                            !isSelectedDay && isTodayDay && styles.calendarDayToday
-                          ]}
-                          onPress={() => handleSelectCalendarDay(day)}
-                        >
-                          <Text
-                            style={[
-                              styles.calendarDayText,
-                              isSelectedDay && styles.calendarDayTextSelected,
-                              !isSelectedDay && isTodayDay && styles.calendarDayTextToday
-                            ]}
-                          >
-                            {day}
-                          </Text>
-                        </TouchableOpacity>
-                      );
-                    })}
-                  </View>
-                ))}
-              </View>
-
-              <View style={styles.modalButtons}>
-                <TouchableOpacity 
-                  style={styles.modalButtonSecondary}
-                  onPress={closeDatePicker}
-                >
-                  <Text style={styles.modalButtonSecondaryText}>{t.common.cancel}</Text>
-                </TouchableOpacity>
-                <TouchableOpacity 
-                  style={styles.modalButtonPrimary}
-                  onPress={() => {
-                    goToToday();
-                    closeDatePicker();
-                  }}
-                >
-                  <Text style={styles.modalButtonPrimaryText}>{isRTL ? 'اليوم' : 'Jump to Today'}</Text>
-                </TouchableOpacity>
-              </View>
-            </View>
-          </View>
-        </Modal>
-      )}
 
       {/* Edit Walk-In Modal */}
       <Modal visible={showEditWalkIn} transparent animationType="fade">
@@ -1212,9 +991,9 @@ const styles = StyleSheet.create({
   dateNavigator: {
     flexDirection: 'row',
     alignItems: 'center',
+    justifyContent: 'space-between',
     backgroundColor: '#fff',
-    paddingVertical: 12,
-    paddingHorizontal: 16,
+    padding: 16,
     borderBottomWidth: 1,
     borderBottomColor: '#E5E7EB',
   },
@@ -1223,21 +1002,6 @@ const styles = StyleSheet.create({
   },
   dateDisplay: {
     flex: 1,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginHorizontal: 8,
-  },
-  dateIcon: {
-    marginRight: 14,
-  },
-  dateDivider: {
-    fontSize: 16,
-    fontWeight: '600',
-    color: '#94A3B8',
-    marginRight: 10,
-  },
-  dateDisplayText: {
     alignItems: 'center',
   },
   dateText: {
@@ -1249,18 +1013,6 @@ const styles = StyleSheet.create({
     fontSize: 11,
     color: '#2563EB',
     marginTop: 2,
-  },
-  todayPill: {
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderRadius: 999,
-    backgroundColor: '#E0E7FF',
-    marginHorizontal: 8,
-  },
-  todayPillText: {
-    fontSize: 12,
-    fontWeight: '600',
-    color: '#1D4ED8',
   },
   
   clinicFilter: {
@@ -1302,279 +1054,255 @@ const styles = StyleSheet.create({
   stats: {
     flexDirection: 'row',
     backgroundColor: '#fff',
-    paddingVertical: 8,
-    paddingHorizontal: 12,
+    padding: 16,
     borderBottomWidth: 1,
     borderBottomColor: '#E5E7EB',
   },
   statItem: {
     flex: 1,
     alignItems: 'center',
-    paddingVertical: 2,
   },
   statNumber: {
-    fontSize: 18,
-    fontWeight: '700',
+    fontSize: 24,
+    fontWeight: 'bold',
     color: '#1F2937',
-    lineHeight: 20,
   },
   statLabel: {
-    fontSize: 11,
+    fontSize: 12,
     color: '#6B7280',
-    marginTop: 2,
-    lineHeight: 14,
+    marginTop: 4,
   },
   
   timeline: {
     flex: 1,
-    backgroundColor: '#F8FAFC',
   },
-  slotRow: {
+  slotContainer: {
     flexDirection: 'row',
-    paddingHorizontal: 16,
-    paddingVertical: 12,
+    paddingVertical: 8,
+    paddingHorizontal: 12,
     borderBottomWidth: 1,
     borderBottomColor: '#E5E7EB',
-    alignItems: 'flex-start',
-    gap: 12,
   },
-  slotTime: {
-    width: 70,
+  timeLabel: {
+    width: 80,
+    paddingTop: 4,
   },
   timeText: {
-    fontSize: 13,
-    fontWeight: '700',
-    color: '#475569',
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#6B7280',
   },
-  slotDivider: {
-    width: 2,
-    borderRadius: 1,
-    backgroundColor: '#E5E7EB',
-    alignSelf: 'stretch',
-  },
-  slotBody: {
+  
+  slotCard: {
     flex: 1,
-  },
-  slotCardSurface: {
     borderRadius: 12,
+    padding: 12,
+  },
+  availableSlotCard: {
+    padding: 8,
+  },
+  availableCard: {
+    backgroundColor: '#F9FAFB',
     borderWidth: 1,
     borderColor: '#E5E7EB',
-    backgroundColor: '#fff',
-    padding: 12,
-    gap: 10,
-  },
-  availableSurface: {
     borderStyle: 'dashed',
-    backgroundColor: '#F9FAFB',
   },
-  appointmentSurface: {
-    borderColor: '#E0E7FF',
+  availableCardFull: {
+    marginLeft: 0,
   },
-  blockedSurface: {
-    borderColor: '#FECACA',
-    backgroundColor: '#FEF2F2',
+  availableText: {
+    fontSize: 14,
+    color: '#9CA3AF',
+    textAlign: 'center',
+    marginBottom: 4,
   },
-  slotMetaRow: {
+  availableActions: {
     flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    flexWrap: 'wrap',
     gap: 8,
   },
-  slotTypeChip: {
+  bookButton: {
+    flex: 1,
     flexDirection: 'row',
     alignItems: 'center',
-    paddingHorizontal: 12,
-    paddingVertical: 4,
-    borderRadius: 999,
+    justifyContent: 'center',
     gap: 6,
+    paddingVertical: 8,
+    paddingHorizontal: 12,
+    backgroundColor: '#DBEAFE',
+    borderRadius: 8,
   },
-  slotTypeChipText: {
+  bookButtonText: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: '#2563EB',
+  },
+  blockButton: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 6,
+    paddingVertical: 8,
+    paddingHorizontal: 12,
+    backgroundColor: '#FEE2E2',
+    borderRadius: 8,
+  },
+  blockButtonText: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: '#DC2626',
+  },
+  
+  blockedCard: {
+    backgroundColor: '#FEE2E2',
+    borderWidth: 1,
+    borderColor: '#FCA5A5',
+  },
+  blockedCardFull: {
+    marginLeft: 0,
+  },
+  blockedTitle: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#991B1B',
+    marginBottom: 4,
+  },
+  blockedReason: {
+    fontSize: 12,
+    color: '#7F1D1D',
+  },
+  cardContent: {
+    flex: 1,
+  },
+  unblockButton: {
+    marginTop: 8,
+    paddingVertical: 6,
+    paddingHorizontal: 12,
+    backgroundColor: '#fff',
+    borderRadius: 6,
+    alignSelf: 'flex-start',
+  },
+  unblockButtonText: {
     fontSize: 12,
     fontWeight: '600',
-    color: '#111827',
+    color: '#DC2626',
   },
-  slotTypeChipAvailable: {
-    backgroundColor: '#ECFDF5',
+  
+  appointmentCard: {
+    backgroundColor: '#fff',
+    borderWidth: 1,
+    borderColor: '#E5E7EB',
   },
-  slotTypeChipBlocked: {
-    backgroundColor: '#FEE2E2',
+  appointmentCardFull: {
+    marginLeft: 0,
   },
-  slotTypeChipWalkIn: {
+  cardMain: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'flex-start',
+    marginBottom: 12,
+  },
+  cardLeft: {
+    flex: 1,
+    marginRight: 8,
+  },
+  cardTime: {
+    fontSize: 13,
+    fontWeight: '700',
+    color: '#2563EB',
+    marginBottom: 4,
+  },
+  patientInfo: {
+  },
+  patientName: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#1F2937',
+    flexWrap: 'wrap',
+  },
+  editHint: {
+    fontSize: 11,
+    color: '#9CA3AF',
+    marginTop: 2,
+  },
+  noPhoneHint: {
+    fontSize: 11,
+    color: '#F59E0B',
+    marginTop: 2,
+  },
+  
+  cardRight: {
+    flexDirection: 'column',
+    alignItems: 'center',
+    justifyContent: 'center',
+    flexShrink: 0,
+  },
+  contactButtons: {
+    flexDirection: 'column',
+    gap: 8,
+  },
+  callButton: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    backgroundColor: '#D1FAE5',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  whatsappButton: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    backgroundColor: '#25D366',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  
+  statusBadge: {
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 12,
+  },
+  statusBadgeInline: {
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: 12,
+    alignSelf: 'flex-start',
+    marginTop: 6,
+  },
+  pendingBadge: {
     backgroundColor: '#FEF3C7',
   },
-  slotTypeChipAppointment: {
-    backgroundColor: '#DBEAFE',
+  confirmedBadge: {
+    backgroundColor: '#D1FAE5',
   },
-  statusPill: {
-    paddingHorizontal: 12,
-    paddingVertical: 4,
-    borderRadius: 999,
-    backgroundColor: '#E5E7EB',
+  walkInBadge: {
+    backgroundColor: '#FEF3C7',
   },
-  statusPillText: {
+  statusText: {
     fontSize: 12,
     fontWeight: '600',
     color: '#1F2937',
   },
-  statusPillPending: {
-    backgroundColor: '#FEF3C7',
-  },
-  statusPillConfirmed: {
-    backgroundColor: '#D1FAE5',
-  },
-  statusPillWalkIn: {
-    backgroundColor: '#FDE68A',
-  },
-  statusPillMuted: {
-    backgroundColor: '#E5E7EB',
-  },
-  availableRow: {
+  
+  actions: {
     flexDirection: 'row',
-    alignItems: 'center',
     gap: 8,
   },
-  availableLabel: {
+  actionButton: {
     flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 4,
+    paddingVertical: 8,
+    borderRadius: 8,
+    backgroundColor: '#F3F4F6',
+  },
+  actionButtonText: {
     fontSize: 13,
-    color: '#6B7280',
-  },
-  inlineActions: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: 8,
-  },
-  iconChip: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderRadius: 999,
-    borderWidth: 1,
-    borderColor: '#BFDBFE',
-    backgroundColor: '#EFF6FF',
-  },
-  iconChipDanger: {
-    borderColor: '#FECACA',
-    backgroundColor: '#FEF2F2',
-  },
-  iconChipText: {
-    fontSize: 12,
     fontWeight: '600',
-    color: '#1D4ED8',
-  },
-  iconChipTextDanger: {
-    color: '#B91C1C',
-  },
-  blockedRow: {
-    flexDirection: 'row',
-    alignItems: 'flex-start',
-    gap: 10,
-  },
-  blockedCopy: {
-    flex: 1,
-  },
-  blockedTitleText: {
-    fontSize: 14,
-    fontWeight: '600',
-    color: '#991B1B',
-  },
-  blockedReasonText: {
-    fontSize: 12,
-    color: '#7F1D1D',
-    marginTop: 4,
-  },
-  linkButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
-  },
-  linkButtonText: {
-    fontSize: 12,
-    fontWeight: '600',
-    color: '#2563EB',
-  },
-  patientRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 12,
-  },
-  patientIcon: {
-    width: 34,
-    height: 34,
-    borderRadius: 17,
-    backgroundColor: '#EEF2FF',
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  patientIconWalkIn: {
-    backgroundColor: '#FFEDD5',
-  },
-  patientDetails: {
-    flex: 1,
-  },
-  patientNameText: {
-    fontSize: 15,
-    fontWeight: '600',
-    color: '#111827',
-  },
-  patientMetaRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-    marginTop: 2,
-  },
-  metaHint: {
-    fontSize: 11,
-    color: '#9CA3AF',
-  },
-  noPhoneLabel: {
-    fontSize: 11,
-    color: '#F59E0B',
-  },
-  contactRow: {
-    flexDirection: 'row',
-    gap: 8,
-  },
-  contactButton: {
-    width: 34,
-    height: 34,
-    borderRadius: 17,
-    backgroundColor: '#E0F2FE',
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  contactButtonWhatsapp: {
-    backgroundColor: '#22C55E',
-  },
-  actionRow: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: 8,
-  },
-  actionChip: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderRadius: 999,
-    borderWidth: 1,
-    borderColor: '#E5E7EB',
-  },
-  actionChipSuccess: {
-    borderColor: '#A7F3D0',
-    backgroundColor: '#D1FAE5',
-  },
-  actionChipDanger: {
-    borderColor: '#FECACA',
-    backgroundColor: '#FEE2E2',
-  },
-  actionChipText: {
-    fontSize: 12,
-    fontWeight: '600',
-    color: '#111827',
+    color: '#374151',
   },
   
   emptyState: {
@@ -1618,77 +1346,6 @@ const styles = StyleSheet.create({
   },
   modalBody: {
     marginBottom: 20,
-  },
-  calendarModal: {
-    width: '100%',
-    maxWidth: 360,
-  },
-  calendarControlRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    marginBottom: 16,
-    paddingHorizontal: 4,
-  },
-  calendarMonthText: {
-    fontSize: 18,
-    fontWeight: '700',
-    color: '#1F2937',
-  },
-  calendarNavButton: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
-    backgroundColor: '#EEF2FF',
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  calendarWeekRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    marginBottom: 6,
-  },
-  calendarWeekDayLabel: {
-    flex: 1,
-    textAlign: 'center',
-    fontSize: 12,
-    fontWeight: '600',
-    color: '#94A3B8',
-  },
-  calendarDayPlaceholder: {
-    flex: 1,
-    marginHorizontal: 4,
-    aspectRatio: 1,
-  },
-  calendarDay: {
-    flex: 1,
-    aspectRatio: 1,
-    marginHorizontal: 4,
-    borderRadius: 12,
-    backgroundColor: '#F8FAFC',
-    justifyContent: 'center',
-    alignItems: 'center',
-    borderWidth: 1,
-    borderColor: '#E2E8F0',
-  },
-  calendarDaySelected: {
-    backgroundColor: '#2563EB',
-    borderColor: '#1D4ED8',
-  },
-  calendarDayToday: {
-    borderColor: '#FACC15',
-    backgroundColor: '#FEF9C3',
-  },
-  calendarDayText: {
-    fontSize: 15,
-    fontWeight: '600',
-    color: '#0F172A',
-  },
-  calendarDayTextSelected: {
-    color: '#fff',
-  },
-  calendarDayTextToday: {
-    color: '#92400E',
   },
   inputLabel: {
     fontSize: 14,
