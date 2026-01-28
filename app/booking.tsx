@@ -5,13 +5,13 @@ import { useLocalSearchParams, useRouter } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import React, { useEffect, useState } from 'react';
 import {
-  ActivityIndicator,
-  Alert,
-  ScrollView,
-  StyleSheet,
-  Text,
-  TouchableOpacity,
-  View,
+    ActivityIndicator,
+    Alert,
+    ScrollView,
+    StyleSheet,
+    Text,
+    TouchableOpacity,
+    View,
 } from 'react-native';
 
 type BookedSlot = {
@@ -412,6 +412,12 @@ export default function BookingScreen() {
       }
 
       console.log('Appointment created:', data);
+
+      // Note: Appointment reminder notification (24h before) requires a backend scheduling job/cron
+      // To implement: Set up a serverless function or backend job that:
+      // 1. Runs daily to check appointments happening tomorrow
+      // 2. Calls sendAppointmentReminderNotification() for each upcoming appointment
+      // Example: Supabase Edge Function, AWS Lambda, or scheduled task
 
       // Success
       Alert.alert(

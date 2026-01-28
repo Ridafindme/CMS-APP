@@ -4,7 +4,7 @@ import { sendRescheduleNotification } from '@/lib/notifications';
 import { supabase } from '@/lib/supabase';
 import { Ionicons } from '@expo/vector-icons';
 import { StatusBar } from 'expo-status-bar';
-import React, { useEffect, useState } from 'react';
+import { useEffect, useState } from 'react';
 import {
     ActivityIndicator,
     Alert,
@@ -66,12 +66,38 @@ export default function DoctorAppointmentsScreen() {
 
   const handleApprove = async (appointmentId: string) => {
     try {
+      // Find the appointment details
+      const appointment = appointments.find(apt => apt.id === appointmentId);
+      if (!appointment) return;
+
       const { error } = await supabase
         .from('appointments')
         .update({ status: 'confirmed' })
         .eq('id', appointmentId);
 
       if (error) throw error;
+
+      // Send confirmation notification to patient
+      if (appointment.booking_type !== 'walk-in' && appointment.patient_id) {
+        const clinic = clinics.find(c => c.id === appointment.clinic_id);
+        const { data: profileData } = await supabase
+          .from('profiles')
+          .select('full_name')
+          .eq('id', doctorData?.id)
+          .single();
+        
+        const doctorName = profileData?.full_name || 'Doctor';
+        const clinicName = clinic?.clinic_name || 'Clinic';
+        
+        await sendAppointmentConfirmationNotification(
+          appointment.patient_id,
+          doctorName,
+          appointment.appointment_date,
+          appointment.time_slot,
+          clinicName
+        );
+      }
+
       Alert.alert(t.common.success, isRTL ? 'تم تأكيد الموعد' : 'Appointment confirmed');
       await fetchAppointments(lookbackDays);
     } catch (error) {
@@ -91,12 +117,39 @@ export default function DoctorAppointmentsScreen() {
           style: 'destructive',
           onPress: async () => {
             try {
+              // Find the appointment details
+              const appointment = appointments.find(apt => apt.id === appointmentId);
+              if (!appointment) return;
+
               const { error } = await supabase
                 .from('appointments')
                 .update({ status: 'cancelled' })
                 .eq('id', appointmentId);
 
               if (error) throw error;
+
+              // Send cancellation notification to patient
+              if (appointment.booking_type !== 'walk-in' && appointment.patient_id) {
+                const clinic = clinics.find(c => c.id === appointment.clinic_id);
+                const { data: profileData } = await supabase
+                  .from('profiles')
+                  .select('full_name')
+                  .eq('id', doctorData?.id)
+                  .single();
+                
+                const doctorName = profileData?.full_name || 'Doctor';
+                const clinicName = clinic?.clinic_name || 'Clinic';
+                
+                await sendAppointmentCancellationNotification(
+                  appointment.patient_id,
+                  doctorName,
+                  appointment.appointment_date,
+                  appointment.time_slot,
+                  clinicName,
+                  'Doctor rejected the appointment request'
+                );
+              }
+
               Alert.alert(t.common.success, isRTL ? 'تم رفض الموعد' : 'Appointment rejected');
               await fetchAppointments(lookbackDays);
             } catch (error) {

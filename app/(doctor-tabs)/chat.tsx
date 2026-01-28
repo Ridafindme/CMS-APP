@@ -1,22 +1,23 @@
 import { useAuth } from '@/lib/AuthContext';
 import { useDoctorContext } from '@/lib/DoctorContext';
 import { useI18n } from '@/lib/i18n';
+import { sendMessageNotification } from '@/lib/notifications';
 import { supabase } from '@/lib/supabase';
 import { Ionicons } from '@expo/vector-icons';
 import { StatusBar } from 'expo-status-bar';
 import React, { useEffect, useState } from 'react';
 import {
-  ActivityIndicator,
-  Alert,
-  KeyboardAvoidingView,
-  Platform,
-  RefreshControl,
-  ScrollView,
-  StyleSheet,
-  Text,
-  TextInput,
-  TouchableOpacity,
-  View
+    ActivityIndicator,
+    Alert,
+    KeyboardAvoidingView,
+    Platform,
+    RefreshControl,
+    ScrollView,
+    StyleSheet,
+    Text,
+    TextInput,
+    TouchableOpacity,
+    View
 } from 'react-native';
 
 type ChatMessage = {
@@ -91,13 +92,28 @@ export default function DoctorChatScreen() {
     setSendingMessage(true);
     try {
       console.log('📤 Sending message from:', user.id, 'to:', selectedConversation.patient_id);
+      const messageContent = newMessage.trim();
       const { error } = await supabase.from('messages').insert({
         sender_id: user.id,
         receiver_id: selectedConversation.patient_id,
-        content: newMessage.trim(),
+        content: messageContent,
       });
 
       if (error) throw error;
+
+      // Send push notification to patient
+      const { data: doctorProfile } = await supabase
+        .from('profiles')
+        .select('full_name')
+        .eq('id', user.id)
+        .single();
+      
+      const doctorName = doctorProfile?.full_name ? `Dr. ${doctorProfile.full_name}` : 'Doctor';
+      await sendMessageNotification(
+        selectedConversation.patient_id,
+        doctorName,
+        messageContent
+      );
 
       setNewMessage('');
       await fetchMessages(selectedConversation.patient_id);

@@ -1,19 +1,20 @@
 import { useAuth } from '@/lib/AuthContext';
 import { useI18n } from '@/lib/i18n';
+import { sendMessageNotification } from '@/lib/notifications';
 import { supabase } from '@/lib/supabase';
 import { useBottomTabBarHeight } from '@react-navigation/bottom-tabs';
 import { StatusBar } from 'expo-status-bar';
 import React, { useEffect, useRef, useState } from 'react';
 import {
-  ActivityIndicator,
-  FlatList,
-  KeyboardAvoidingView,
-  Platform,
-  StyleSheet,
-  Text,
-  TextInput,
-  TouchableOpacity,
-  View,
+    ActivityIndicator,
+    FlatList,
+    KeyboardAvoidingView,
+    Platform,
+    StyleSheet,
+    Text,
+    TextInput,
+    TouchableOpacity,
+    View,
 } from 'react-native';
 
 type Conversation = {
@@ -412,6 +413,20 @@ export default function ChatTab() {
           is_mine: true,
         };
         setMessages(prev => [...prev, tempMsg]);
+      } else {
+        // Send push notification to doctor
+        const { data: patientProfile } = await supabase
+          .from('profiles')
+          .select('full_name')
+          .eq('id', user.id)
+          .single();
+        
+        const patientName = patientProfile?.full_name || 'Patient';
+        await sendMessageNotification(
+          selectedConversation.doctor_user_id,
+          patientName,
+          messageContent
+        );
       }
       // Real-time subscription will add the message automatically
 

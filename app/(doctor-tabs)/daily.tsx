@@ -1,6 +1,7 @@
 import PhoneInput from '@/components/ui/phone-input';
 import { getDayKey, minutesToTime, timeToMinutes, useDoctorContext } from '@/lib/DoctorContext';
 import { useI18n } from '@/lib/i18n';
+import { scheduleTestNotification, sendAppointmentCancellationNotification, sendAppointmentConfirmationNotification, sendRescheduleNotification } from '@/lib/notifications';
 import { supabase } from '@/lib/supabase';
 import { Ionicons } from '@expo/vector-icons';
 import { StatusBar } from 'expo-status-bar';
@@ -29,7 +30,7 @@ type TimeSlotData = {
 
 export default function DailyScheduleScreen() {
   const { t, isRTL } = useI18n();
-  const { loading, appointments, clinics, blockedSlots, fetchAppointments, fetchBlockedSlots, doctorData } = useDoctorContext();
+  const { loading, appointments, clinics, blockedSlots, fetchAppointments, fetchBlockedSlots, doctorData, profile } = useDoctorContext();
   
   const [selectedDate, setSelectedDate] = useState<string>(new Date().toISOString().split('T')[0]);
   const [selectedClinic, setSelectedClinic] = useState<string | null>(null);
@@ -347,12 +348,33 @@ export default function DailyScheduleScreen() {
 
   const handleApprove = async (appointmentId: string) => {
     try {
+      // Find the appointment to get patient info
+      const appointment = appointments.find(apt => apt.id === appointmentId);
+      if (!appointment) {
+        Alert.alert(t.common.error, 'Appointment not found');
+        return;
+      }
+
       const { error } = await supabase
         .from('appointments')
         .update({ status: 'confirmed' })
         .eq('id', appointmentId);
 
       if (error) throw error;
+
+      // Send confirmation notification to patient (skip for walk-ins)
+      if (appointment.booking_type !== 'walk-in' && appointment.patient_id) {
+        const doctorName = profile?.full_name || 'the doctor';
+        const clinicName = appointment.clinic_name || 'the clinic';
+        await sendAppointmentConfirmationNotification(
+          appointment.patient_id,
+          doctorName,
+          appointment.appointment_date,
+          appointment.appointment_time,
+          clinicName
+        );
+      }
+
       Alert.alert(t.common.success, isRTL ? 'تم تأكيد الموعد' : 'Appointment confirmed');
       await fetchAppointments();
     } catch (error) {
@@ -362,6 +384,13 @@ export default function DailyScheduleScreen() {
   };
 
   const handleReject = async (appointmentId: string) => {
+    // Find the appointment to get patient info
+    const appointment = appointments.find(apt => apt.id === appointmentId);
+    if (!appointment) {
+      Alert.alert(t.common.error, 'Appointment not found');
+      return;
+    }
+
     Alert.alert(
       isRTL ? 'رفض الموعد' : 'Reject Appointment',
       isRTL ? 'هل أنت متأكد؟' : 'Are you sure?',
@@ -378,6 +407,20 @@ export default function DailyScheduleScreen() {
                 .eq('id', appointmentId);
 
               if (error) throw error;
+
+              // Send cancellation notification to patient (skip for walk-ins)
+              if (appointment.booking_type !== 'walk-in' && appointment.patient_id) {
+                const doctorName = profile?.full_name || 'the doctor';
+                const clinicName = appointment.clinic_name || 'the clinic';
+                await sendAppointmentCancellationNotification(
+                  appointment.patient_id,
+                  doctorName,
+                  appointment.appointment_date,
+                  appointment.appointment_time,
+                  clinicName
+                );
+              }
+
               Alert.alert(t.common.success, isRTL ? 'تم رفض الموعد' : 'Appointment rejected');
               await fetchAppointments();
             } catch (error) {
@@ -443,6 +486,19 @@ export default function DailyScheduleScreen() {
         .eq('id', rescheduleAppointment.id);
 
       if (error) throw error;
+
+      // Send reschedule notification to patient (skip for walk-ins)
+      if (rescheduleAppointment.booking_type !== 'walk-in' && rescheduleAppointment.patient_id) {
+        const doctorName = profile?.full_name || 'the doctor';
+        const clinicName = rescheduleAppointment.clinic_name || 'the clinic';
+        await sendRescheduleNotification(
+          rescheduleAppointment.patient_id,
+          doctorName,
+          rescheduleDate,
+          rescheduleTime,
+          clinicName
+        );
+      }
 
       await fetchAppointments();
       setShowRescheduleModal(false);
@@ -845,6 +901,12 @@ export default function DailyScheduleScreen() {
           <Text style={styles.statNumber}>{stats.available}</Text>
           <Text style={styles.statLabel}>{isRTL ? 'متاح' : 'Free'}</Text>
         </View>
+        <TouchableOpacity style={styles.statItem} onPress={scheduleTestNotification}>
+          <Ionicons name="notifications-outline" size={18} color="#2563EB" />
+          <Text style={[styles.statLabel, { color: '#2563EB', marginTop: 4 }]}>
+            {isRTL ? 'اختبار' : 'Test'}
+          </Text>
+        </TouchableOpacity>
       </View>
 
       {/* Timeline */}

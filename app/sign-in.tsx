@@ -117,7 +117,7 @@ export default function SignInScreen() {
           .maybeSingle();
 
         if (doctorData) {
-          router.replace('/(doctor-tabs)/appointments');
+          router.replace('/(doctor-tabs)/daily');
         } else {
           router.replace('/(patient-tabs)/home');
         }

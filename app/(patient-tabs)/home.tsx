@@ -85,6 +85,35 @@ export default function PatientHomeTab() {
     initializeData();
   }, [user]);
 
+  // Recalculate distances when location is obtained
+  useEffect(() => {
+    if (userLocation && clinics.length > 0) {
+      const updatedClinics = clinics.map(clinic => {
+        const distance = calculateDistance(
+          userLocation.latitude, 
+          userLocation.longitude, 
+          clinic.latitude, 
+          clinic.longitude
+        );
+        return {
+          ...clinic,
+          distance,
+          distance_text: distance ? `${distance.toFixed(1)} km` : 'N/A',
+        };
+      });
+      
+      // Sort by distance
+      updatedClinics.sort((a, b) => {
+        if (a.distance === null && b.distance === null) return 0;
+        if (a.distance === null) return 1;
+        if (b.distance === null) return -1;
+        return a.distance - b.distance;
+      });
+      
+      setClinics(updatedClinics);
+    }
+  }, [userLocation]);
+
   useEffect(() => {
     filterClinics();
   }, [selectedSpecialty, clinics, searchQuery]);
@@ -338,7 +367,7 @@ export default function PatientHomeTab() {
         <View style={[styles.headerContent, isRTL && styles.rowReverse]}>
           <View>
             <Text style={[styles.greeting, isRTL && styles.textRight]}>
-              {getGreeting()}, {getUserName()} 👋
+              {getUserName()} 👋
             </Text>
             <Text style={[styles.subtitle, isRTL && styles.textRight]}>{t.home.findNearbyClinics}</Text>
           </View>

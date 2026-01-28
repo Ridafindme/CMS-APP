@@ -1,43 +1,12 @@
 import { useDoctorContext } from '@/lib/DoctorContext';
 import { Ionicons } from '@expo/vector-icons';
-import { Tabs, usePathname } from 'expo-router';
-import React, { useEffect } from 'react';
-import { Alert, BackHandler } from 'react-native';
+import { Tabs } from 'expo-router';
+import React from 'react';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 export default function DoctorTabsLayout() {
   const insets = useSafeAreaInsets();
-  const pathname = usePathname();
   const { unreadChatCount } = useDoctorContext();
-  
-  useEffect(() => {
-    // Only handle back button on main tab screens
-    const mainPaths = ['/appointments', '/daily', '/calendar', '/clinics', '/chat', '/profile'];
-    const isMainTab = mainPaths.some(path => pathname.includes(path));
-    
-    if (!isMainTab) return;
-    
-    const backAction = () => {
-      Alert.alert(
-        'Exit App',
-        'Use Sign Out from the Profile tab to exit properly.',
-        [
-          {
-            text: 'OK',
-            style: 'cancel'
-          }
-        ]
-      );
-      return true; // Prevent exit
-    };
-
-    const backHandler = BackHandler.addEventListener(
-      'hardwareBackPress',
-      backAction
-    );
-
-    return () => backHandler.remove();
-  }, [pathname]);
   
   return (
     <Tabs
@@ -70,38 +39,12 @@ export default function DoctorTabsLayout() {
       }}
     >
       <Tabs.Screen
-        name="appointments"
-        options={{
-          title: 'Appointments',
-          tabBarIcon: ({ color, focused }) => (
-            <Ionicons
-              name={focused ? 'list' : 'list-outline'}
-              size={24}
-              color={color}
-            />
-          ),
-        }}
-      />
-      <Tabs.Screen
         name="daily"
         options={{
           title: 'Daily',
           tabBarIcon: ({ color, focused }) => (
             <Ionicons
               name={focused ? 'time' : 'time-outline'}
-              size={24}
-              color={color}
-            />
-          ),
-        }}
-      />
-      <Tabs.Screen
-        name="calendar"
-        options={{
-          title: 'Calendar',
-          tabBarIcon: ({ color, focused }) => (
-            <Ionicons
-              name={focused ? 'calendar' : 'calendar-outline'}
               size={24}
               color={color}
             />

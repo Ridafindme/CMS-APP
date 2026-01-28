@@ -1,7 +1,7 @@
+import Constants from 'expo-constants';
 import * as Device from 'expo-device';
 import * as Notifications from 'expo-notifications';
 import { Platform } from 'react-native';
-import Constants from 'expo-constants';
 import { supabase } from './supabase';
 
 // Check if running in Expo Go
@@ -45,7 +45,10 @@ export async function scheduleTestNotification() {
         data: { type: 'test' },
         sound: true,
       },
-      trigger: { seconds: 2 },
+      trigger: { 
+        type: Notifications.SchedulableTriggerInputTypes.TIME_INTERVAL,
+        seconds: 2 
+      },
     });
 
     console.log('✅ Test notification scheduled for 2 seconds from now');
@@ -271,6 +274,216 @@ export async function sendRescheduleNotification(
     console.log('📨 Reschedule notification sent:', result);
   } catch (error) {
     console.error('Error sending reschedule notification:', error);
+  }
+}
+
+/**
+ * Send appointment confirmation notification to a patient
+ */
+export async function sendAppointmentConfirmationNotification(
+  patientUserId: string | null,
+  doctorName: string,
+  appointmentDate: string,
+  timeSlot: string,
+  clinicName: string
+) {
+  if (!patientUserId) {
+    console.log('No patient user ID - skipping notification (walk-in patient)');
+    return;
+  }
+
+  try {
+    // Get patient's push token
+    const { data: tokenData } = await supabase
+      .from('user_push_tokens')
+      .select('push_token')
+      .eq('user_id', patientUserId)
+      .single();
+
+    if (!tokenData?.push_token) {
+      console.log('No push token for patient');
+      return;
+    }
+
+    // Format date nicely
+    const date = new Date(appointmentDate);
+    const formattedDate = date.toLocaleDateString('en-US', { 
+      weekday: 'short', 
+      month: 'short', 
+      day: 'numeric' 
+    });
+
+    // Send notification via Expo Push API
+    const message = {
+      to: tokenData.push_token,
+      sound: 'default',
+      title: '✅ Appointment Confirmed',
+      body: `Your appointment with Dr. ${doctorName} is confirmed for ${formattedDate} at ${timeSlot} - ${clinicName}`,
+      data: { 
+        type: 'appointment_confirmation', 
+        date: appointmentDate,
+        time: timeSlot,
+        clinic: clinicName 
+      },
+      categoryIdentifier: 'appointment',
+      priority: 'high',
+    };
+
+    const response = await fetch('https://exp.host/--/api/v2/push/send', {
+      method: 'POST',
+      headers: {
+        Accept: 'application/json',
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify(message),
+    });
+
+    const result = await response.json();
+    console.log('📨 Confirmation notification sent:', result);
+  } catch (error) {
+    console.error('Error sending confirmation notification:', error);
+  }
+}
+
+/**
+ * Send appointment cancellation notification to a patient
+ */
+export async function sendAppointmentCancellationNotification(
+  patientUserId: string | null,
+  doctorName: string,
+  appointmentDate: string,
+  timeSlot: string,
+  clinicName: string,
+  reason?: string
+) {
+  if (!patientUserId) {
+    console.log('No patient user ID - skipping notification (walk-in patient)');
+    return;
+  }
+
+  try {
+    // Get patient's push token
+    const { data: tokenData } = await supabase
+      .from('user_push_tokens')
+      .select('push_token')
+      .eq('user_id', patientUserId)
+      .single();
+
+    if (!tokenData?.push_token) {
+      console.log('No push token for patient');
+      return;
+    }
+
+    // Format date nicely
+    const date = new Date(appointmentDate);
+    const formattedDate = date.toLocaleDateString('en-US', { 
+      weekday: 'short', 
+      month: 'short', 
+      day: 'numeric' 
+    });
+
+    const bodyText = reason 
+      ? `Your appointment with Dr. ${doctorName} on ${formattedDate} at ${timeSlot} has been cancelled. Reason: ${reason}`
+      : `Your appointment with Dr. ${doctorName} on ${formattedDate} at ${timeSlot} has been cancelled. Please contact the clinic for more details.`;
+
+    // Send notification via Expo Push API
+    const message = {
+      to: tokenData.push_token,
+      sound: 'default',
+      title: '❌ Appointment Cancelled',
+      body: bodyText,
+      data: { 
+        type: 'appointment_cancellation', 
+        date: appointmentDate,
+        time: timeSlot,
+        clinic: clinicName,
+        reason: reason || '' 
+      },
+      categoryIdentifier: 'appointment',
+      priority: 'high',
+    };
+
+    const response = await fetch('https://exp.host/--/api/v2/push/send', {
+      method: 'POST',
+      headers: {
+        Accept: 'application/json',
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify(message),
+    });
+
+    const result = await response.json();
+    console.log('📨 Cancellation notification sent:', result);
+  } catch (error) {
+    console.error('Error sending cancellation notification:', error);
+  }
+}
+
+/**
+ * Send appointment reminder notification (call this 24 hours before appointment)
+ */
+export async function sendAppointmentReminderNotification(
+  patientUserId: string | null,
+  doctorName: string,
+  appointmentDate: string,
+  timeSlot: string,
+  clinicName: string
+) {
+  if (!patientUserId) {
+    console.log('No patient user ID - skipping notification (walk-in patient)');
+    return;
+  }
+
+  try {
+    // Get patient's push token
+    const { data: tokenData } = await supabase
+      .from('user_push_tokens')
+      .select('push_token')
+      .eq('user_id', patientUserId)
+      .single();
+
+    if (!tokenData?.push_token) {
+      console.log('No push token for patient');
+      return;
+    }
+
+    // Format date nicely
+    const date = new Date(appointmentDate);
+    const formattedDate = date.toLocaleDateString('en-US', { 
+      weekday: 'short', 
+      month: 'short', 
+      day: 'numeric' 
+    });
+
+    // Send notification via Expo Push API
+    const message = {
+      to: tokenData.push_token,
+      sound: 'default',
+      title: '⏰ Appointment Reminder',
+      body: `Reminder: You have an appointment with Dr. ${doctorName} tomorrow at ${timeSlot} - ${clinicName}`,
+      data: { 
+        type: 'appointment_reminder', 
+        date: appointmentDate,
+        time: timeSlot,
+        clinic: clinicName 
+      },
+      categoryIdentifier: 'appointment',
+      priority: 'high',
+    };
+
+    const response = await fetch('https://exp.host/--/api/v2/push/send', {
+      method: 'POST',
+      headers: {
+        Accept: 'application/json',
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify(message),
+    });
+
+    const result = await response.json();
+    console.log('📨 Reminder notification sent:', result);
+  } catch (error) {
+    console.error('Error sending reminder notification:', error);
   }
 }
 
