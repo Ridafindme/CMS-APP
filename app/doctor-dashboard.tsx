@@ -2494,7 +2494,7 @@ export default function DoctorDashboardScreen() {
               type="mobile"
               label={isRTL ? 'رقم الموبايل' : 'Mobile Number'}
               placeholder="70 123 456"
-              icon="📱"
+              icon="call-outline"
               isRTL={isRTL}
             />
 
@@ -2504,7 +2504,7 @@ export default function DoctorDashboardScreen() {
               type="landline"
               label={isRTL ? 'رقم أرضي (اختياري)' : 'Landline (Optional)'}
               placeholder="01 123 456"
-              icon="☎️"
+              icon="call-sharp"
               isRTL={isRTL}
             />
 
@@ -2894,7 +2894,7 @@ export default function DoctorDashboardScreen() {
                 type="mobile"
                 label={isRTL ? 'رقم الموبايل' : 'Mobile'}
                 placeholder="70 123 456"
-                icon="📱"
+                icon="call-outline"
                 isRTL={isRTL}
               />
 

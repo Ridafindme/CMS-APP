@@ -1,18 +1,25 @@
+import { patientTheme } from '@/constants/patientTheme';
 import { useAuth } from '@/lib/AuthContext';
 import { useI18n } from '@/lib/i18n';
 import { supabase } from '@/lib/supabase';
+import { Ionicons } from '@expo/vector-icons';
+import { LinearGradient } from 'expo-linear-gradient';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import React, { useEffect, useState } from 'react';
 import {
-    ActivityIndicator,
-    Alert,
-    ScrollView,
-    StyleSheet,
-    Text,
-    TouchableOpacity,
-    View,
+  ActivityIndicator,
+  Alert,
+  Modal,
+  Platform,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TouchableOpacity,
+  View,
 } from 'react-native';
+
+const theme = patientTheme;
 
 type BookedSlot = {
   appointment_date: string;
@@ -46,7 +53,6 @@ const DAY_KEYS: DayKey[] = ['sun', 'mon', 'tue', 'wed', 'thu', 'fri', 'sat'];
 
 const timeToMinutes = (time: string) => {
   if (!time) return null;
-  // Normalize format: if no colon, assume it's just hours (e.g., "9" -> "09:00")
   const normalized = time.includes(':') ? time : `${time}:00`;
   const [h, m] = normalized.split(':').map(v => parseInt(v, 10));
   if (Number.isNaN(h) || Number.isNaN(m)) return null;
@@ -68,8 +74,8 @@ export default function BookingScreen() {
   const router = useRouter();
   const params = useLocalSearchParams();
   const { user } = useAuth();
-  const { t, isRTL } = useI18n();
-  
+  const { isRTL } = useI18n();
+
   const [selectedDate, setSelectedDate] = useState<string | null>(null);
   const [selectedTime, setSelectedTime] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
@@ -80,17 +86,18 @@ export default function BookingScreen() {
   const [clinicSchedule, setClinicSchedule] = useState<ClinicSchedule | null>(null);
   const [slotMinutes, setSlotMinutes] = useState<number>(30);
   const [clinicHolidays, setClinicHolidays] = useState<string[]>([]);
+  const [showSuccessModal, setShowSuccessModal] = useState(false);
+  const [successSummary, setSuccessSummary] = useState<{ date: string; time: string } | null>(null);
 
-  // Get params
   const doctorId = params.doctorId as string;
   const clinicId = params.clinicId as string;
-  const doctorName = params.doctorName as string || 'Doctor';
-  const doctorNameAr = params.doctorNameAr as string || 'طبيب';
-  const doctorSpecialty = params.doctorSpecialty as string || 'Specialist';
-  const doctorSpecialtyAr = params.doctorSpecialtyAr as string || 'متخصص';
-  const doctorFee = params.doctorFee as string || '$50';
-  const doctorIcon = params.doctorIcon as string || '🩺';
-  const clinicName = params.clinicName as string || 'Clinic';
+  const doctorName = (params.doctorName as string) || 'Doctor';
+  const doctorNameAr = (params.doctorNameAr as string) || 'طبيب';
+  const doctorSpecialty = (params.doctorSpecialty as string) || 'Specialist';
+  const doctorSpecialtyAr = (params.doctorSpecialtyAr as string) || 'متخصص';
+  const doctorFee = (params.doctorFee as string) || '$50';
+  const doctorIcon = (params.doctorIcon as string) || '🩺';
+  const clinicName = (params.clinicName as string) || 'Clinic';
 
   useEffect(() => {
     if (doctorId && clinicId) {
@@ -113,14 +120,10 @@ export default function BookingScreen() {
         .eq('id', clinicId)
         .single();
 
-      console.log('Fetched clinic schedule:', { clinicId, data, error });
-
       if (!error && data) {
         setClinicSchedule((data as any).schedule || null);
         const rawMinutes = (data as any).slot_minutes ?? 30;
-        const clamped = Math.min(120, Math.max(20, rawMinutes));
-        setSlotMinutes(clamped);
-        console.log('Set clinic schedule:', (data as any).schedule);
+        setSlotMinutes(Math.min(120, Math.max(20, rawMinutes)));
       }
     } catch (error) {
       console.error('Error fetching clinic schedule:', error);
@@ -147,7 +150,6 @@ export default function BookingScreen() {
   const expireOldPendingAppointments = async () => {
     try {
       const fifteenMinutesAgo = new Date(Date.now() - 15 * 60 * 1000).toISOString();
-      
       const { error } = await supabase
         .from('appointments')
         .update({ status: 'cancelled' })
@@ -165,10 +167,8 @@ export default function BookingScreen() {
   const fetchBookedSlots = async () => {
     setLoadingSlots(true);
     try {
-      // Auto-expire pending appointments older than 15 minutes
       await expireOldPendingAppointments();
 
-      // Get confirmed appointments
       const { data: confirmed, error: confirmedError } = await supabase
         .from('appointments')
         .select('appointment_date, time_slot, status')
@@ -181,7 +181,6 @@ export default function BookingScreen() {
         setBookedSlots(confirmed);
       }
 
-      // Get pending appointments (still within 15-min window)
       const { data: pending, error: pendingError } = await supabase
         .from('appointments')
         .select('appointment_date, time_slot, status, created_at')
@@ -194,7 +193,6 @@ export default function BookingScreen() {
         setPendingSlots(pending);
       }
 
-      // Try to get blocked slots (table may not exist)
       try {
         const { data: blocked } = await supabase
           .from('doctor_blocked_slots')
@@ -203,13 +201,15 @@ export default function BookingScreen() {
           .gte('blocked_date', new Date().toISOString().split('T')[0]);
 
         if (blocked) {
-          setBlockedSlots(blocked.map(b => ({
-            appointment_date: b.blocked_date,
-            time_slot: b.time_slot
-          })));
+          setBlockedSlots(
+            blocked.map(b => ({
+              appointment_date: b.blocked_date,
+              time_slot: b.time_slot,
+            })),
+          );
         }
-      } catch (e) {
-        // Table doesn't exist, ignore
+      } catch {
+        // Optional table, ignore if missing
       }
     } catch (error) {
       console.error('Error fetching slots:', error);
@@ -218,15 +218,14 @@ export default function BookingScreen() {
     }
   };
 
-  // Generate next 14 days starting from tomorrow
   const getNextDays = () => {
     const days = [];
     const today = new Date();
-    
+
     for (let i = 1; i < 15; i++) {
       const date = new Date(today);
       date.setDate(today.getDate() + i);
-      
+
       days.push({
         date: date.toISOString().split('T')[0],
         dayName: date.toLocaleDateString(isRTL ? 'ar-SA' : 'en-US', { weekday: 'short' }),
@@ -249,13 +248,12 @@ export default function BookingScreen() {
       console.log(`${dayKey} is weekly off`);
       return null;
     }
-    
-    // Priority: Day-specific schedule > Generic default
+
     const daySpecificSchedule = (clinicSchedule as any)[dayKey] as ClinicScheduleDay | undefined;
     if (daySpecificSchedule && (daySpecificSchedule.start || daySpecificSchedule.end)) {
       return daySpecificSchedule;
     }
-    
+
     return clinicSchedule.default || null;
   };
 
@@ -293,7 +291,6 @@ export default function BookingScreen() {
     return `${hour12}:${minutes.padStart(2, '0')} ${ampm}`;
   };
 
-
   const isSlotBooked = (date: string, time: string) => {
     return bookedSlots.some(s => s.appointment_date === date && s.time_slot === time);
   };
@@ -317,8 +314,8 @@ export default function BookingScreen() {
   const handleBookAppointment = async () => {
     if (!selectedDate || !selectedTime) {
       Alert.alert(
-        isRTL ? 'خطأ' : 'Error', 
-        isRTL ? 'يرجى اختيار التاريخ والوقت' : 'Please select a date and time'
+        isRTL ? 'خطأ' : 'Error',
+        isRTL ? 'يرجى اختيار التاريخ والوقت' : 'Please select a date and time',
       );
       return;
     }
@@ -329,8 +326,8 @@ export default function BookingScreen() {
         isRTL ? 'يرجى تسجيل الدخول لحجز موعد' : 'Please sign in to book an appointment',
         [
           { text: isRTL ? 'إلغاء' : 'Cancel', style: 'cancel' },
-          { text: isRTL ? 'تسجيل الدخول' : 'Sign In', onPress: () => router.push('/sign-in') }
-        ]
+          { text: isRTL ? 'تسجيل الدخول' : 'Sign In', onPress: () => router.push('/sign-in') },
+        ],
       );
       return;
     }
@@ -338,13 +335,12 @@ export default function BookingScreen() {
     if (!doctorId || !clinicId) {
       Alert.alert(
         isRTL ? 'خطأ' : 'Error',
-        isRTL ? 'معلومات الطبيب غير متوفرة' : 'Doctor information is missing. Please go back and try again.'
+        isRTL ? 'معلومات الطبيب غير متوفرة' : 'Doctor information is missing. Please go back and try again.',
       );
       console.log('Missing params:', { doctorId, clinicId });
       return;
     }
 
-    // Check if patient already has an appointment on the same day
     try {
       const { data: existingAppointments, error: checkError } = await supabase
         .from('appointments')
@@ -362,7 +358,7 @@ export default function BookingScreen() {
       if (existingAppointments && existingAppointments.length > 0) {
         Alert.alert(
           isRTL ? 'تنبيه' : 'Already Booked',
-          isRTL 
+          isRTL
             ? 'لديك موعد محجوز بالفعل في هذا اليوم. يرجى اختيار يوم آخر.'
             : 'You already have an appointment booked on this date. Please select a different date.',
         );
@@ -374,7 +370,6 @@ export default function BookingScreen() {
       return;
     }
 
-    // Check if slot is still available
     if (!isSlotAvailable(selectedDate, selectedTime)) {
       Alert.alert(
         isRTL ? 'الموعد غير متاح' : 'Slot Unavailable',
@@ -388,7 +383,6 @@ export default function BookingScreen() {
     setLoading(true);
 
     try {
-      // Insert appointment into database
       const { data, error } = await supabase
         .from('appointments')
         .insert({
@@ -406,42 +400,22 @@ export default function BookingScreen() {
         console.error('Booking error:', error);
         Alert.alert(
           isRTL ? 'خطأ' : 'Error',
-          error.message || (isRTL ? 'فشل في حجز الموعد' : 'Failed to book appointment')
+          error.message || (isRTL ? 'فشل في حجز الموعد' : 'Failed to book appointment'),
         );
         return;
       }
 
       console.log('Appointment created:', data);
 
-      // Note: Appointment reminder notification (24h before) requires a backend scheduling job/cron
-      // To implement: Set up a serverless function or backend job that:
-      // 1. Runs daily to check appointments happening tomorrow
-      // 2. Calls sendAppointmentReminderNotification() for each upcoming appointment
-      // Example: Supabase Edge Function, AWS Lambda, or scheduled task
-
-      // Success
-      Alert.alert(
-        isRTL ? 'تم الحجز بنجاح! ✅' : 'Appointment Booked! ✅',
-        isRTL 
-          ? `تم حجز موعدك مع ${doctorNameAr}\n\n📅 ${selectedDate}\n🕐 ${formatTime(selectedTime)}\n🏥 ${clinicName}\n\nفي انتظار تأكيد الطبيب.`
-          : `Your appointment with ${doctorName} has been scheduled:\n\n📅 ${selectedDate}\n🕐 ${formatTime(selectedTime)}\n🏥 ${clinicName}\n\nWaiting for doctor confirmation.`,
-        [
-          { 
-            text: isRTL ? 'عرض المواعيد' : 'View Appointments', 
-            onPress: () => router.replace('/(patient-tabs)/appointments')
-          },
-          {
-            text: isRTL ? 'تم' : 'Done',
-            onPress: () => router.back()
-          }
-        ]
-      );
-
+      if (selectedDate && selectedTime) {
+        setSuccessSummary({ date: selectedDate, time: formatTime(selectedTime) });
+        setShowSuccessModal(true);
+      }
     } catch (err: any) {
       console.error('Booking error:', err);
       Alert.alert(
-        isRTL ? 'خطأ' : 'Error', 
-        err.message || (isRTL ? 'فشل في حجز الموعد' : 'Failed to book appointment')
+        isRTL ? 'خطأ' : 'Error',
+        err.message || (isRTL ? 'فشل في حجز الموعد' : 'Failed to book appointment'),
       );
     } finally {
       setLoading(false);
@@ -461,7 +435,7 @@ export default function BookingScreen() {
         const isPending = selectedDate ? isSlotPending(selectedDate, slot.time) : false;
         const isBlocked = selectedDate ? isSlotBlocked(selectedDate, slot.time) : false;
         const isUnavailable = isBooked || isPending || isBlocked;
-        
+
         return (
           <TouchableOpacity
             key={slot.time}
@@ -475,12 +449,14 @@ export default function BookingScreen() {
             onPress={() => !isUnavailable && setSelectedTime(slot.time)}
             disabled={isUnavailable}
           >
-            <Text style={[
-              styles.timeText,
-              selectedTime === slot.time && styles.timeTextSelected,
-              (isBooked || isBlocked) && styles.timeTextUnavailable,
-              isPending && styles.timeTextPending,
-            ]}>
+            <Text
+              style={[
+                styles.timeText,
+                selectedTime === slot.time && styles.timeTextSelected,
+                (isBooked || isBlocked) && styles.timeTextUnavailable,
+                isPending && styles.timeTextPending,
+              ]}
+            >
               {formatTime(slot.time)}
             </Text>
             {isBooked && (
@@ -498,111 +474,194 @@ export default function BookingScreen() {
     </View>
   );
 
+  const handleSuccessAction = (action: 'view' | 'done') => {
+    setShowSuccessModal(false);
+    if (action === 'view') {
+      router.replace('/(patient-tabs)/appointments');
+    } else {
+      router.back();
+    }
+  };
+
   return (
     <View style={styles.container}>
       <StatusBar style="light" />
-      
-      {/* Header */}
-      <View style={styles.header}>
-        <TouchableOpacity onPress={() => router.back()} style={styles.backButton}>
-          <Text style={styles.backButtonText}>{isRTL ? '→ رجوع' : '← Back'}</Text>
-        </TouchableOpacity>
-        
-        <Text style={[styles.headerTitle, isRTL && styles.textRight]}>
-          {isRTL ? 'حجز موعد' : 'Book Appointment'}
-        </Text>
-        
-        <View style={[styles.doctorInfo, isRTL && styles.rowReverse]}>
-          <Text style={styles.doctorIcon}>{doctorIcon}</Text>
-          <View style={isRTL ? styles.alignRight : undefined}>
-            <Text style={[styles.doctorName, isRTL && styles.textRight]}>
-              {isRTL ? doctorNameAr : doctorName}
-            </Text>
-            <Text style={[styles.doctorSpecialty, isRTL && styles.textRight]}>
-              {isRTL ? doctorSpecialtyAr : doctorSpecialty}
-            </Text>
-            <Text style={[styles.clinicNameHeader, isRTL && styles.textRight]}>
-              🏥 {clinicName}
-            </Text>
+
+      <ScrollView
+        style={styles.scrollView}
+        contentContainerStyle={styles.scrollContent}
+        showsVerticalScrollIndicator={false}
+      >
+        <View style={styles.heroSection}>
+          <View style={styles.heroShadow}>
+            <LinearGradient
+              colors={[theme.colors.primaryDark, theme.colors.primary]}
+              start={{ x: 0, y: 0 }}
+              end={{ x: 1, y: 1 }}
+              style={styles.heroCard}
+            >
+              <View style={[styles.heroTopRow, isRTL && styles.rowReverse]}>
+                <TouchableOpacity
+                  style={styles.heroBackButton}
+                  onPress={() => router.back()}
+                  accessibilityLabel={isRTL ? 'رجوع' : 'Back'}
+                >
+                  <Ionicons
+                    name={isRTL ? 'arrow-forward' : 'arrow-back'}
+                    size={20}
+                    color={theme.colors.surface}
+                  />
+                </TouchableOpacity>
+                <View style={styles.heroChip}>
+                  <Ionicons name="cash-outline" size={16} color={theme.colors.surface} />
+                  <Text style={styles.heroChipText}>{doctorFee}</Text>
+                </View>
+              </View>
+              <View style={[styles.heroBody, isRTL && styles.alignEnd]}>
+                <View style={styles.heroAvatarWrapper}>
+                  <Text style={styles.heroAvatarIcon}>{doctorIcon}</Text>
+                </View>
+                <Text style={[styles.heroEyebrow, isRTL && styles.textRight]}>
+                  {isRTL ? 'موعدك القادم' : 'Your next visit'}
+                </Text>
+                <Text style={[styles.heroTitle, isRTL && styles.textRight]}>
+                  {isRTL ? doctorNameAr : doctorName}
+                </Text>
+                <Text style={[styles.heroSubtitle, isRTL && styles.textRight]}>
+                  {isRTL ? doctorSpecialtyAr : doctorSpecialty}
+                </Text>
+                <Text style={[styles.heroClinic, isRTL && styles.textRight]}>
+                  {clinicName}
+                </Text>
+
+                <View style={[styles.heroMetaRow, isRTL && styles.rowReverse]}>
+                  <View style={styles.heroMetaBadge}>
+                    <Ionicons name="calendar-outline" size={16} color={theme.colors.surface} />
+                    <Text style={styles.heroMetaText}>
+                      {isRTL ? 'نافذة 14 يوماً' : 'Next 14 days'}
+                    </Text>
+                  </View>
+                  <View style={styles.heroMetaBadge}>
+                    <Ionicons name="time-outline" size={16} color={theme.colors.surface} />
+                    <Text style={styles.heroMetaText}>
+                      {slotMinutes} {isRTL ? 'د/موعد' : 'min slots'}
+                    </Text>
+                  </View>
+                </View>
+              </View>
+            </LinearGradient>
           </View>
         </View>
-      </View>
 
-      <ScrollView style={styles.content} showsVerticalScrollIndicator={false}>
-        {/* Date Selection */}
-        <Text style={[styles.sectionTitle, isRTL && styles.textRight]}>
-          {isRTL ? 'اختر التاريخ' : 'Select Date'}
-        </Text>
-        <ScrollView 
-          horizontal 
-          showsHorizontalScrollIndicator={false}
-          style={styles.dateScroll}
-        >
-          {days.map((day) => {
-            const availableCount = getAvailableSlotsCount(day.date);
-            const isFullyBooked = availableCount === 0;
-            
-            return (
-              <TouchableOpacity
-                key={day.date}
-                style={[
-                  styles.dateCard,
-                  selectedDate === day.date && styles.dateCardSelected,
-                  isFullyBooked && styles.dateCardDisabled,
-                ]}
-                onPress={() => {
-                  if (!isFullyBooked) {
-                    setSelectedDate(day.date);
-                    setSelectedTime(null);
-                  }
-                }}
-                disabled={isFullyBooked}
-              >
-                <Text style={[
-                  styles.dayName,
-                  selectedDate === day.date && styles.dateTextSelected,
-                  isFullyBooked && styles.textDisabled,
-                ]}>
-                  {day.isToday ? (isRTL ? 'اليوم' : 'Today') : day.dayName}
-                </Text>
-                <Text style={[
-                  styles.dayNum,
-                  selectedDate === day.date && styles.dateTextSelected,
-                  isFullyBooked && styles.textDisabled,
-                ]}>
-                  {day.dayNum}
-                </Text>
-                <Text style={[
-                  styles.month,
-                  selectedDate === day.date && styles.dateTextSelected,
-                  isFullyBooked && styles.textDisabled,
-                ]}>
-                  {day.month}
-                </Text>
-                <Text style={[
-                  styles.availableCount,
-                  selectedDate === day.date && styles.dateTextSelected,
-                  isFullyBooked && styles.fullText,
-                ]}>
-                  {isFullyBooked 
-                    ? (isRTL ? 'ممتلئ' : 'Full') 
-                    : `${availableCount} ${isRTL ? 'متاح' : 'free'}`
-                  }
-                </Text>
-              </TouchableOpacity>
-            );
-          })}
-        </ScrollView>
+        <View style={styles.card}>
+          <View style={[styles.cardHeaderRow, isRTL && styles.rowReverse]}>
+            <View style={isRTL ? styles.alignEnd : undefined}>
+              <Text style={[styles.cardEyebrow, isRTL && styles.textRight]}>
+                {isRTL ? 'الخطوة ١' : 'Step 1'}
+              </Text>
+              <Text style={[styles.cardTitle, isRTL && styles.textRight]}>
+                {isRTL ? 'اختر التاريخ' : 'Pick a date'}
+              </Text>
+            </View>
+            <Ionicons name="calendar-outline" size={22} color={theme.colors.primary} />
+          </View>
 
-        {/* Time Selection */}
+          <ScrollView
+            horizontal
+            showsHorizontalScrollIndicator={false}
+            contentContainerStyle={styles.dateScrollContent}
+          >
+            {days.map((day) => {
+              const availableCount = getAvailableSlotsCount(day.date);
+              const isFullyBooked = availableCount === 0;
+
+              return (
+                <TouchableOpacity
+                  key={day.date}
+                  style={[
+                    styles.dateCard,
+                    selectedDate === day.date && styles.dateCardSelected,
+                    isFullyBooked && styles.dateCardDisabled,
+                    isRTL && styles.dateCardRTL,
+                  ]}
+                  onPress={() => {
+                    if (!isFullyBooked) {
+                      setSelectedDate(day.date);
+                      setSelectedTime(null);
+                    }
+                  }}
+                  disabled={isFullyBooked}
+                >
+                  <Text
+                    style={[
+                      styles.dayName,
+                      selectedDate === day.date && styles.dateTextSelected,
+                      isFullyBooked && styles.textDisabled,
+                      isRTL && styles.textRight,
+                    ]}
+                  >
+                    {day.isToday ? (isRTL ? 'اليوم' : 'Today') : day.dayName}
+                  </Text>
+                  <Text
+                    style={[
+                      styles.dayNum,
+                      selectedDate === day.date && styles.dateTextSelected,
+                      isFullyBooked && styles.textDisabled,
+                    ]}
+                  >
+                    {day.dayNum}
+                  </Text>
+                  <Text
+                    style={[
+                      styles.month,
+                      selectedDate === day.date && styles.dateTextSelected,
+                      isFullyBooked && styles.textDisabled,
+                    ]}
+                  >
+                    {day.month}
+                  </Text>
+                  <View style={styles.dateBadgeRow}>
+                    <View
+                      style={[
+                        styles.dateBadge,
+                        isFullyBooked && styles.dateBadgeFull,
+                        isRTL && styles.dateBadgeRTL,
+                      ]}
+                    >
+                      <Text
+                        style={[
+                          styles.dateBadgeText,
+                          isFullyBooked && styles.dateBadgeTextFull,
+                        ]}
+                      >
+                        {isFullyBooked
+                          ? (isRTL ? 'ممتلئ' : 'Full')
+                          : `${availableCount} ${isRTL ? 'متاح' : 'open'}`}
+                      </Text>
+                    </View>
+                  </View>
+                </TouchableOpacity>
+              );
+            })}
+          </ScrollView>
+        </View>
+
         {selectedDate && (
-          <>
-            <Text style={[styles.sectionTitle, isRTL && styles.textRight]}>
-              {isRTL ? 'اختر الوقت' : 'Select Time'}
-            </Text>
-            
+          <View style={styles.card}>
+            <View style={[styles.cardHeaderRow, isRTL && styles.rowReverse]}>
+              <View style={isRTL ? styles.alignEnd : undefined}>
+                <Text style={[styles.cardEyebrow, isRTL && styles.textRight]}>
+                  {isRTL ? 'الخطوة ٢' : 'Step 2'}
+                </Text>
+                <Text style={[styles.cardTitle, isRTL && styles.textRight]}>
+                  {isRTL ? 'اختر الوقت' : 'Pick a time'}
+                </Text>
+              </View>
+              <Ionicons name="time-outline" size={22} color={theme.colors.accent} />
+            </View>
+
             {loadingSlots ? (
-              <ActivityIndicator size="large" color="#2563EB" style={{ marginVertical: 20 }} />
+              <ActivityIndicator size="large" color={theme.colors.primary} style={styles.loadingIndicator} />
             ) : (
               <>
                 <Text style={[styles.periodLabel, isRTL && styles.textRight]}>
@@ -621,133 +680,540 @@ export default function BookingScreen() {
                 {renderTimeSlots(eveningSlots)}
               </>
             )}
-          </>
+          </View>
         )}
 
-        {/* Appointment Summary */}
         {selectedDate && selectedTime && (
-          <View style={styles.summaryCard}>
-            <Text style={[styles.summaryTitle, isRTL && styles.textRight]}>
-              {isRTL ? 'ملخص الموعد' : 'Appointment Summary'}
-            </Text>
-            
-            <View style={[styles.summaryRow, isRTL && styles.rowReverse]}>
-              <Text style={styles.summaryLabel}>{isRTL ? 'الطبيب' : 'Doctor'}</Text>
-              <Text style={styles.summaryValue}>{isRTL ? doctorNameAr : doctorName}</Text>
+          <View style={styles.card}>
+            <View style={[styles.cardHeaderRow, isRTL && styles.rowReverse]}>
+              <View style={isRTL ? styles.alignEnd : undefined}>
+                <Text style={[styles.cardEyebrow, isRTL && styles.textRight]}>
+                  {isRTL ? 'الخطوة ٣' : 'Step 3'}
+                </Text>
+                <Text style={[styles.cardTitle, isRTL && styles.textRight]}>
+                  {isRTL ? 'تأكيد الموعد' : 'Confirm details'}
+                </Text>
+              </View>
+              <Ionicons name="checkmark-circle-outline" size={24} color={theme.colors.success} />
             </View>
-            
-            <View style={[styles.summaryRow, isRTL && styles.rowReverse]}>
-              <Text style={styles.summaryLabel}>{isRTL ? 'العيادة' : 'Clinic'}</Text>
-              <Text style={styles.summaryValue}>{clinicName}</Text>
+
+            <View style={styles.summaryList}>
+              <View style={[styles.summaryRow, isRTL && styles.rowReverse]}>
+                <View style={styles.summaryIconCircle}>
+                  <Ionicons name="person-outline" size={18} color={theme.colors.primaryDark} />
+                </View>
+                <Text style={[styles.summaryLabel, isRTL && styles.textRight]}>{isRTL ? 'الطبيب' : 'Doctor'}</Text>
+                <Text style={[styles.summaryValue, isRTL && styles.textRight]}>
+                  {isRTL ? doctorNameAr : doctorName}
+                </Text>
+              </View>
+              <View style={[styles.summaryRow, isRTL && styles.rowReverse]}>
+                <View style={styles.summaryIconCircle}>
+                  <Ionicons name="business-outline" size={18} color={theme.colors.primaryDark} />
+                </View>
+                <Text style={[styles.summaryLabel, isRTL && styles.textRight]}>{isRTL ? 'العيادة' : 'Clinic'}</Text>
+                <Text style={[styles.summaryValue, isRTL && styles.textRight]}>{clinicName}</Text>
+              </View>
+              <View style={[styles.summaryRow, isRTL && styles.rowReverse]}>
+                <View style={styles.summaryIconCircle}>
+                  <Ionicons name="calendar-outline" size={18} color={theme.colors.primaryDark} />
+                </View>
+                <Text style={[styles.summaryLabel, isRTL && styles.textRight]}>{isRTL ? 'التاريخ' : 'Date'}</Text>
+                <Text style={[styles.summaryValue, isRTL && styles.textRight]}>{selectedDate}</Text>
+              </View>
+              <View style={[styles.summaryRow, isRTL && styles.rowReverse]}>
+                <View style={styles.summaryIconCircle}>
+                  <Ionicons name="time-outline" size={18} color={theme.colors.primaryDark} />
+                </View>
+                <Text style={[styles.summaryLabel, isRTL && styles.textRight]}>{isRTL ? 'الوقت' : 'Time'}</Text>
+                <Text style={[styles.summaryValue, isRTL && styles.textRight]}>{formatTime(selectedTime)}</Text>
+              </View>
+              <View style={[styles.summaryRow, styles.summaryRowTotal, isRTL && styles.rowReverse]}>
+                <View style={[styles.summaryIconCircle, styles.summaryIconFee]}>
+                  <Ionicons name="card-outline" size={18} color={theme.colors.surface} />
+                </View>
+                <Text style={[styles.summaryLabel, isRTL && styles.textRight]}>{isRTL ? 'الرسوم' : 'Fee'}</Text>
+                <Text style={[styles.summaryFee, isRTL && styles.textRight]}>{doctorFee}</Text>
+              </View>
             </View>
-            
-            <View style={[styles.summaryRow, isRTL && styles.rowReverse]}>
-              <Text style={styles.summaryLabel}>{isRTL ? 'التاريخ' : 'Date'}</Text>
-              <Text style={styles.summaryValue}>{selectedDate}</Text>
-            </View>
-            
-            <View style={[styles.summaryRow, isRTL && styles.rowReverse]}>
-              <Text style={styles.summaryLabel}>{isRTL ? 'الوقت' : 'Time'}</Text>
-              <Text style={styles.summaryValue}>
-                {formatTime(selectedTime)}
-              </Text>
-            </View>
-            
-            <View style={[styles.summaryRow, styles.summaryTotal, isRTL && styles.rowReverse]}>
-              <Text style={styles.summaryLabel}>{isRTL ? 'الرسوم' : 'Fee'}</Text>
-              <Text style={styles.summaryFee}>{doctorFee}</Text>
-            </View>
-            
+
             <View style={styles.statusNote}>
-              <Text style={styles.statusNoteText}>
-                ⏳ {isRTL ? 'في انتظار تأكيد الطبيب' : 'Pending doctor confirmation'}
+              <Ionicons name="information-circle-outline" size={16} color={theme.colors.warning} />
+              <Text style={[styles.statusNoteText, isRTL && styles.textRight]}>
+                {isRTL ? 'سيتم تأكيد الموعد من قبل العيادة' : 'Waiting on clinic confirmation'}
               </Text>
             </View>
           </View>
         )}
 
-        <View style={{ height: 120 }} />
+        <View style={styles.footerSpacer} />
       </ScrollView>
 
-      {/* Fixed Bottom Button */}
-      <View style={styles.bottomContainer}>
-        <TouchableOpacity 
-          style={[
-            styles.bookButton,
-            (!selectedDate || !selectedTime) && styles.bookButtonDisabled,
-            loading && styles.bookButtonDisabled,
-          ]}
+      <View style={styles.bottomButton}>
+        <TouchableOpacity
+          activeOpacity={0.9}
           onPress={handleBookAppointment}
           disabled={!selectedDate || !selectedTime || loading}
         >
-          {loading ? (
-            <ActivityIndicator color="white" />
-          ) : (
-            <Text style={styles.bookButtonText}>
-              {selectedDate && selectedTime 
-                ? (isRTL ? `تأكيد الحجز • ${doctorFee}` : `Confirm Booking • ${doctorFee}`)
-                : (isRTL ? 'اختر التاريخ والوقت' : 'Select Date & Time')
-              }
-            </Text>
-          )}
+          <LinearGradient
+            colors={[theme.colors.primaryDark, theme.colors.primary]}
+            start={{ x: 0, y: 0 }}
+            end={{ x: 1, y: 0 }}
+            style={[
+              styles.bookButton,
+              (!selectedDate || !selectedTime || loading) && styles.bookButtonDisabled,
+            ]}
+          >
+            {loading ? (
+              <ActivityIndicator color={theme.colors.surface} />
+            ) : (
+              <View style={[styles.bookButtonContent, isRTL && styles.rowReverse]}>
+                <View style={isRTL ? styles.alignEnd : undefined}>
+                  <Text style={[styles.bookButtonLabel, isRTL && styles.textRight]}>
+                    {selectedDate && selectedTime
+                      ? (isRTL ? 'تأكيد الحجز' : 'Confirm booking')
+                      : (isRTL ? 'اختر التاريخ والوقت' : 'Select date & time')}
+                  </Text>
+                  {selectedDate && selectedTime ? (
+                    <Text style={[styles.bookButtonSub, isRTL && styles.textRight]}>
+                      {isRTL ? 'يشمل رسوم الاستشارة' : 'Includes consultation fee'}
+                    </Text>
+                  ) : (
+                    <Text style={[styles.bookButtonSub, isRTL && styles.textRight]}>
+                      {isRTL ? 'ابدأ من التاريخ' : 'Start by choosing a date'}
+                    </Text>
+                  )}
+                </View>
+                <Text style={styles.bookButtonPrice}>{doctorFee}</Text>
+              </View>
+            )}
+          </LinearGradient>
         </TouchableOpacity>
       </View>
+      <Modal visible={showSuccessModal} transparent animationType="fade">
+        <View style={styles.modalBackdrop}>
+          <View pointerEvents="none" style={styles.modalGlow} />
+          <View style={[styles.modalCard, isRTL && styles.alignEnd]}>
+            <LinearGradient
+              colors={[theme.colors.primaryDark, theme.colors.primary]}
+              start={{ x: 0, y: 0 }}
+              end={{ x: 1, y: 1 }}
+              style={[styles.modalHero, isRTL && styles.alignEnd]}
+            >
+              <View style={styles.modalHeroIconShell}>
+                <Ionicons name="checkmark-circle" size={32} color={theme.colors.surface} />
+              </View>
+              <Text style={[styles.modalTitle, isRTL && styles.textRight]}>
+                {isRTL ? 'تم حجز موعدك!' : 'Appointment booked!'}
+              </Text>
+              <Text style={[styles.modalSubtitle, isRTL && styles.textRight]}>
+                {isRTL ? 'بانتظار تأكيد العيادة' : 'Waiting on clinic confirmation'}
+              </Text>
+              <View style={[styles.modalHeroMetaRow, isRTL && styles.rowReverse]}>
+                <View style={[styles.modalHeroMeta, isRTL && styles.rowReverse]}>
+                  <Ionicons name="calendar-outline" size={16} color={theme.colors.surface} />
+                  <Text style={[styles.modalHeroMetaText, isRTL && styles.textRight]}>
+                    {successSummary?.date || (isRTL ? '—' : '—')}
+                  </Text>
+                </View>
+                <View style={[styles.modalHeroMeta, isRTL && styles.rowReverse]}>
+                  <Ionicons name="time-outline" size={16} color={theme.colors.surface} />
+                  <Text style={[styles.modalHeroMetaText, isRTL && styles.textRight]}>
+                    {successSummary?.time || (isRTL ? '—' : '—')}
+                  </Text>
+                </View>
+              </View>
+            </LinearGradient>
+
+            <View style={styles.modalBody}>
+              <View style={[styles.modalDoctorRow, isRTL && styles.rowReverse]}>
+                <View style={styles.modalDoctorAvatar}>
+                  <Text style={styles.modalDoctorEmoji}>{doctorIcon}</Text>
+                </View>
+                <View style={isRTL ? styles.alignEnd : undefined}>
+                  <Text style={[styles.modalDoctorLabel, isRTL && styles.textRight]}>
+                    {isRTL ? 'الطبيب' : 'Doctor'}
+                  </Text>
+                  <Text style={[styles.modalDoctorName, isRTL && styles.textRight]}>
+                    {isRTL ? doctorNameAr : doctorName}
+                  </Text>
+                  <Text style={[styles.modalDoctorSpecialty, isRTL && styles.textRight]}>
+                    {isRTL ? doctorSpecialtyAr : doctorSpecialty}
+                  </Text>
+                </View>
+              </View>
+
+              <View style={styles.modalDivider} />
+
+              <View style={[styles.modalDetailGrid, isRTL && styles.rowReverse]}>
+                <View style={[styles.modalDetailTile, isRTL && styles.alignEnd]}>
+                  <Ionicons name="business-outline" size={18} color={theme.colors.primary} />
+                  <View style={isRTL ? styles.alignEnd : undefined}>
+                    <Text style={[styles.modalDetailLabel, isRTL && styles.textRight]}>
+                      {isRTL ? 'العيادة' : 'Clinic'}
+                    </Text>
+                    <Text style={[styles.modalDetailValue, isRTL && styles.textRight]}>{clinicName}</Text>
+                  </View>
+                </View>
+                <View style={[styles.modalDetailTile, isRTL && styles.alignEnd]}>
+                  <Ionicons name="card-outline" size={18} color={theme.colors.primary} />
+                  <View style={isRTL ? styles.alignEnd : undefined}>
+                    <Text style={[styles.modalDetailLabel, isRTL && styles.textRight]}>
+                      {isRTL ? 'الرسوم' : 'Fee'}
+                    </Text>
+                    <Text style={[styles.modalDetailValue, isRTL && styles.textRight]}>{doctorFee}</Text>
+                  </View>
+                </View>
+              </View>
+
+              <View style={[styles.modalNote, isRTL && styles.rowReverse]}>
+                <Ionicons name="information-circle-outline" size={18} color={theme.colors.warning} />
+                <Text style={[styles.modalNoteText, isRTL && styles.textRight]}>
+                  {isRTL ? 'سيتم تأكيد الموعد من قبل العيادة' : 'The clinic will confirm shortly.'}
+                </Text>
+              </View>
+            </View>
+
+            <View style={[styles.modalActions, isRTL && styles.rowReverse]}>
+              <TouchableOpacity
+                style={styles.modalSecondary}
+                onPress={() => handleSuccessAction('view')}
+              >
+                <View style={[styles.modalSecondaryContent, isRTL && styles.rowReverse]}>
+                  <Ionicons name="list-outline" size={18} color={theme.colors.textPrimary} />
+                  <Text style={[styles.modalSecondaryText, isRTL && styles.textRight]}>
+                    {isRTL ? 'عرض المواعيد' : 'View appointments'}
+                  </Text>
+                </View>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={styles.modalPrimary}
+                onPress={() => handleSuccessAction('done')}
+              >
+                <LinearGradient
+                  colors={[theme.colors.primaryDark, theme.colors.primary]}
+                  start={{ x: 0, y: 0 }}
+                  end={{ x: 1, y: 0 }}
+                  style={styles.modalPrimaryGradient}
+                >
+                  <View style={[styles.modalPrimaryContent, isRTL && styles.rowReverse]}>
+                    <Text style={styles.modalPrimaryText}>{isRTL ? 'تم' : 'Done'}</Text>
+                    <Ionicons
+                      name={isRTL ? 'arrow-back' : 'arrow-forward'}
+                      size={18}
+                      color={theme.colors.surface}
+                    />
+                  </View>
+                </LinearGradient>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
     </View>
   );
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#F3F4F6' },
-  header: { backgroundColor: '#2563EB', paddingTop: 50, paddingBottom: 25, paddingHorizontal: 20, borderBottomLeftRadius: 25, borderBottomRightRadius: 25 },
-  backButton: { marginBottom: 15 },
-  backButtonText: { color: 'white', fontSize: 16, fontWeight: '600' },
-  headerTitle: { fontSize: 24, fontWeight: 'bold', color: 'white', marginBottom: 20 },
-  doctorInfo: { flexDirection: 'row', alignItems: 'center', backgroundColor: 'rgba(255,255,255,0.15)', padding: 15, borderRadius: 12 },
+  container: { flex: 1, backgroundColor: theme.colors.background },
+  scrollView: { flex: 1 },
+  scrollContent: { paddingBottom: 200 },
+  heroSection: { paddingTop: 52, paddingHorizontal: theme.spacing.lg },
+  heroShadow: {
+    borderRadius: theme.radii.lg + 8,
+    shadowColor: theme.colors.shadow,
+    shadowOffset: { width: 0, height: 16 },
+    shadowOpacity: 0.3,
+    shadowRadius: 28,
+    elevation: 12,
+  },
+  heroCard: { borderRadius: theme.radii.lg + 8, padding: theme.spacing.lg },
+  heroTopRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: theme.spacing.md },
   rowReverse: { flexDirection: 'row-reverse' },
-  alignRight: { alignItems: 'flex-end' },
+  heroBackButton: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    backgroundColor: 'rgba(255,255,255,0.18)',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  heroChip: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    paddingHorizontal: 14,
+    paddingVertical: 8,
+    borderRadius: theme.radii.pill,
+    backgroundColor: 'rgba(255,255,255,0.22)',
+  },
+  heroChipText: { color: theme.colors.surface, fontWeight: '700' },
+  heroBody: { gap: 10 },
+  alignEnd: { alignItems: 'flex-end' },
   textRight: { textAlign: 'right' },
-  doctorIcon: { fontSize: 40, marginHorizontal: 15 },
-  doctorName: { fontSize: 18, fontWeight: '600', color: 'white', marginBottom: 3 },
-  doctorSpecialty: { fontSize: 14, color: '#BFDBFE' },
-  clinicNameHeader: { fontSize: 12, color: '#BFDBFE', marginTop: 3 },
-  content: { flex: 1, padding: 20 },
-  sectionTitle: { fontSize: 18, fontWeight: '600', color: '#1F2937', marginBottom: 15, marginTop: 10 },
-  periodLabel: { fontSize: 14, fontWeight: '600', color: '#6B7280', marginBottom: 10, marginTop: 15 },
-  dateScroll: { marginBottom: 10 },
-  dateCard: { backgroundColor: 'white', paddingVertical: 12, paddingHorizontal: 14, borderRadius: 15, marginRight: 12, alignItems: 'center', minWidth: 80, shadowColor: '#000', shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.1, shadowRadius: 2, elevation: 2 },
-  dateCardSelected: { backgroundColor: '#2563EB' },
-  dateCardDisabled: { backgroundColor: '#F3F4F6' },
-  dayName: { fontSize: 11, color: '#6B7280', marginBottom: 4, fontWeight: '500' },
-  dayNum: { fontSize: 20, fontWeight: 'bold', color: '#1F2937', marginBottom: 2 },
-  month: { fontSize: 11, color: '#9CA3AF' },
-  availableCount: { fontSize: 10, color: '#10B981', marginTop: 4, fontWeight: '600' },
-  fullText: { color: '#EF4444' },
-  dateTextSelected: { color: 'white' },
-  textDisabled: { color: '#9CA3AF' },
-  timeGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 10, marginBottom: 10 },
-  timeSlot: { backgroundColor: 'white', paddingVertical: 12, paddingHorizontal: 8, borderRadius: 10, width: '31%', alignItems: 'center', borderWidth: 1, borderColor: '#E5E7EB' },
-  timeSlotSelected: { backgroundColor: '#2563EB', borderColor: '#2563EB' },
-  timeSlotUnavailable: { backgroundColor: '#F9FAFB', borderColor: '#E5E7EB' },
-  timeSlotPending: { backgroundColor: '#FEF3C7', borderColor: '#F59E0B' },
-  timeSlotBlocked: { backgroundColor: '#FCA5A5', borderColor: '#DC2626' },
-  timeText: { fontSize: 13, color: '#374151', fontWeight: '500' },
-  timeTextSelected: { color: 'white' },
-  timeTextUnavailable: { color: '#D1D5DB' },
+  heroAvatarWrapper: {
+    width: 60,
+    height: 60,
+    borderRadius: 30,
+    backgroundColor: 'rgba(255,255,255,0.18)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginBottom: 8,
+  },
+  heroAvatarIcon: { fontSize: 32, color: theme.colors.surface },
+  heroEyebrow: { color: 'rgba(255,255,255,0.85)', fontSize: 13 },
+  heroTitle: { color: theme.colors.surface, fontSize: 26, fontWeight: '700' },
+  heroSubtitle: { color: 'rgba(255,255,255,0.9)', fontSize: 16 },
+  heroClinic: { color: 'rgba(255,255,255,0.85)', fontSize: 14 },
+  heroMetaRow: { flexDirection: 'row', gap: 10, marginTop: 10, flexWrap: 'wrap' },
+  heroMetaBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: theme.radii.pill,
+    backgroundColor: 'rgba(255,255,255,0.2)',
+  },
+  heroMetaText: { color: theme.colors.surface, fontSize: 13, fontWeight: '600' },
+  card: {
+    marginTop: theme.spacing.lg,
+    marginHorizontal: theme.spacing.lg,
+    backgroundColor: theme.colors.surface,
+    borderRadius: theme.radii.lg,
+    padding: theme.spacing.lg,
+    shadowColor: theme.colors.shadow,
+    shadowOffset: { width: 0, height: 10 },
+    shadowOpacity: 0.08,
+    shadowRadius: 20,
+    elevation: 5,
+  },
+  cardHeaderRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: theme.spacing.md },
+  cardEyebrow: { fontSize: 12, color: theme.colors.textMuted, textTransform: 'uppercase', letterSpacing: 0.6 },
+  cardTitle: { fontSize: 20, fontWeight: '700', color: theme.colors.textPrimary, marginTop: 2 },
+  dateScrollContent: { paddingVertical: 6, gap: 14 },
+  dateCard: {
+    width: 98,
+    paddingVertical: 16,
+    paddingHorizontal: 14,
+    borderRadius: 22,
+    backgroundColor: theme.colors.elevated,
+    shadowColor: theme.colors.shadow,
+    shadowOpacity: 0.06,
+    shadowRadius: 10,
+    shadowOffset: { width: 0, height: 6 },
+    elevation: 4,
+    alignItems: 'flex-start',
+  },
+  dateCardSelected: { backgroundColor: theme.colors.primary },
+  dateCardDisabled: { opacity: 0.4 },
+  dateCardRTL: { alignItems: 'flex-end' },
+  dayName: { fontSize: 12, color: theme.colors.textSecondary, fontWeight: '600' },
+  dayNum: { fontSize: 26, fontWeight: '700', color: theme.colors.textPrimary, marginVertical: 4 },
+  month: { fontSize: 12, color: theme.colors.textMuted },
+  textDisabled: { color: theme.colors.textMuted },
+  dateTextSelected: { color: theme.colors.surface },
+  dateBadgeRow: { marginTop: 10 },
+  dateBadge: {
+    alignSelf: 'flex-start',
+    backgroundColor: 'rgba(34,197,94,0.18)',
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: theme.radii.pill,
+  },
+  dateBadgeRTL: { alignSelf: 'flex-end' },
+  dateBadgeFull: { backgroundColor: 'rgba(239,68,68,0.2)' },
+  dateBadgeText: { fontSize: 11, fontWeight: '600', color: theme.colors.success },
+  dateBadgeTextFull: { color: theme.colors.danger },
+  periodLabel: { fontSize: 14, fontWeight: '600', color: theme.colors.textSecondary, marginTop: 12, marginBottom: 8 },
+  loadingIndicator: { marginVertical: 20 },
+  timeGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 12 },
+  timeSlot: {
+    flexBasis: '30%',
+    minWidth: 96,
+    backgroundColor: theme.colors.elevated,
+    paddingVertical: 14,
+    paddingHorizontal: 10,
+    borderRadius: theme.radii.md,
+    alignItems: 'center',
+    borderWidth: 1,
+    borderColor: theme.colors.cardBorder,
+  },
+  timeSlotSelected: { backgroundColor: theme.colors.primary, borderColor: theme.colors.primary },
+  timeSlotUnavailable: { backgroundColor: theme.colors.background },
+  timeSlotPending: { backgroundColor: 'rgba(251,191,36,0.2)', borderColor: '#FBBF24' },
+  timeSlotBlocked: { backgroundColor: 'rgba(248,113,113,0.2)', borderColor: '#F87171' },
+  timeText: { fontSize: 14, fontWeight: '600', color: theme.colors.textPrimary },
+  timeTextSelected: { color: theme.colors.surface },
+  timeTextUnavailable: { color: theme.colors.textMuted },
   timeTextPending: { color: '#92400E' },
-  bookedLabel: { fontSize: 9, color: '#EF4444', marginTop: 2 },
-  pendingLabel: { fontSize: 9, color: '#F59E0B', marginTop: 2 },
-  blockedLabel: { fontSize: 9, color: '#DC2626', marginTop: 2, fontWeight: '600' },
-  summaryCard: { backgroundColor: 'white', borderRadius: 15, padding: 20, marginTop: 20 },
-  summaryTitle: { fontSize: 18, fontWeight: 'bold', color: '#1F2937', marginBottom: 15 },
-  summaryRow: { flexDirection: 'row', justifyContent: 'space-between', paddingVertical: 10, borderBottomWidth: 1, borderBottomColor: '#F3F4F6' },
-  summaryTotal: { borderBottomWidth: 0, marginTop: 5 },
-  summaryLabel: { fontSize: 14, color: '#6B7280' },
-  summaryValue: { fontSize: 14, color: '#1F2937', fontWeight: '500' },
-  summaryFee: { fontSize: 18, color: '#2563EB', fontWeight: 'bold' },
-  statusNote: { backgroundColor: '#FEF3C7', padding: 12, borderRadius: 8, marginTop: 15 },
-  statusNoteText: { color: '#92400E', fontSize: 13, textAlign: 'center' },
-  bottomContainer: { position: 'absolute', bottom: 0, left: 0, right: 0, backgroundColor: 'white', padding: 20, paddingBottom: 35 },
-  bookButton: { backgroundColor: '#2563EB', padding: 18, borderRadius: 12, alignItems: 'center' },
-  bookButtonDisabled: { backgroundColor: '#9CA3AF' },
-  bookButtonText: { color: 'white', fontSize: 18, fontWeight: 'bold' },
+  bookedLabel: { fontSize: 11, color: '#DC2626', marginTop: 6, fontWeight: '600' },
+  pendingLabel: { fontSize: 11, color: '#B45309', marginTop: 6, fontWeight: '600' },
+  blockedLabel: { fontSize: 11, color: '#B91C1C', marginTop: 6, fontWeight: '700' },
+  summaryList: { gap: 8 },
+  summaryRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    paddingVertical: 10,
+    borderBottomWidth: 1,
+    borderBottomColor: theme.colors.cardBorder,
+  },
+  summaryRowTotal: { borderBottomWidth: 0 },
+  summaryIconCircle: {
+    width: 38,
+    height: 38,
+    borderRadius: 19,
+    backgroundColor: theme.colors.primarySoft,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  summaryIconFee: { backgroundColor: theme.colors.primaryDark },
+  summaryLabel: { flex: 1, fontSize: 14, color: theme.colors.textSecondary, fontWeight: '600' },
+  summaryValue: { flex: 1, fontSize: 14, color: theme.colors.textPrimary, fontWeight: '600' },
+  summaryFee: { fontSize: 20, color: theme.colors.primary, fontWeight: '700' },
+  statusNote: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    backgroundColor: 'rgba(249,115,22,0.2)',
+    borderRadius: theme.radii.md,
+    padding: 12,
+    marginTop: theme.spacing.md,
+  },
+  statusNoteText: { flex: 1, color: theme.colors.warning, fontSize: 13 },
+  footerSpacer: { height: 140 },
+  bottomButton: {
+    position: 'absolute',
+    left: 0,
+    right: 0,
+    bottom: Platform.OS === 'ios' ? 28 : 18,
+    paddingHorizontal: theme.spacing.lg,
+  },
+  bookButton: { borderRadius: theme.radii.lg, padding: theme.spacing.lg },
+  bookButtonDisabled: { opacity: 0.6 },
+  bookButtonContent: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', gap: 16 },
+  bookButtonLabel: { color: theme.colors.surface, fontSize: 18, fontWeight: '700' },
+  bookButtonSub: { color: 'rgba(255,255,255,0.9)', fontSize: 13, marginTop: 4 },
+  bookButtonPrice: { color: theme.colors.surface, fontSize: 22, fontWeight: '800' },
+  modalBackdrop: {
+    flex: 1,
+    backgroundColor: 'rgba(12,17,29,0.78)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: theme.spacing.lg,
+  },
+  modalGlow: {
+    position: 'absolute',
+    width: 280,
+    height: 280,
+    borderRadius: 140,
+    backgroundColor: theme.colors.primarySoft,
+    opacity: 0.35,
+    top: 80,
+    alignSelf: 'center',
+  },
+  modalCard: {
+    width: '100%',
+    borderRadius: theme.radii.lg + 10,
+    backgroundColor: theme.colors.surface,
+    overflow: 'hidden',
+    borderWidth: 1,
+    borderColor: theme.colors.cardBorder,
+  },
+  modalHero: {
+    padding: theme.spacing.lg,
+    gap: theme.spacing.sm,
+    alignItems: 'center',
+  },
+  modalHeroIconShell: {
+    width: 56,
+    height: 56,
+    borderRadius: 28,
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.35)',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 4,
+  },
+  modalTitle: { color: theme.colors.surface, fontSize: 20, fontWeight: '700' },
+  modalSubtitle: { color: 'rgba(255,255,255,0.85)', fontSize: 14 },
+  modalHeroMetaRow: { flexDirection: 'row', gap: 10, marginTop: theme.spacing.sm },
+  modalHeroMeta: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: theme.radii.pill,
+    backgroundColor: 'rgba(255,255,255,0.18)',
+  },
+  modalHeroMetaText: { color: theme.colors.surface, fontWeight: '600' },
+  modalBody: { padding: theme.spacing.lg, gap: theme.spacing.md },
+  modalDoctorRow: { flexDirection: 'row', alignItems: 'center', gap: 14 },
+  modalDoctorAvatar: {
+    width: 56,
+    height: 56,
+    borderRadius: 28,
+    backgroundColor: theme.colors.primarySoft,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  modalDoctorEmoji: { fontSize: 28 },
+  modalDoctorLabel: {
+    fontSize: 12,
+    color: theme.colors.textSecondary,
+    textTransform: 'uppercase',
+    letterSpacing: 0.6,
+  },
+  modalDoctorName: { fontSize: 20, fontWeight: '700', color: theme.colors.textPrimary },
+  modalDoctorSpecialty: { fontSize: 14, color: theme.colors.textSecondary, marginTop: 2 },
+  modalDivider: { height: 1, backgroundColor: theme.colors.cardBorder },
+  modalDetailGrid: { flexDirection: 'row', gap: 12, flexWrap: 'wrap' },
+  modalDetailTile: {
+    flex: 1,
+    minWidth: '48%',
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    padding: 12,
+    borderRadius: theme.radii.md,
+    backgroundColor: theme.colors.elevated,
+  },
+  modalDetailLabel: {
+    fontSize: 12,
+    color: theme.colors.textSecondary,
+    textTransform: 'uppercase',
+    letterSpacing: 0.4,
+  },
+  modalDetailValue: { fontSize: 15, color: theme.colors.textPrimary, fontWeight: '700', marginTop: 2 },
+  modalNote: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    backgroundColor: 'rgba(249,115,22,0.12)',
+    borderRadius: theme.radii.md,
+    padding: 12,
+  },
+  modalNoteText: { flex: 1, color: theme.colors.warning, fontSize: 13 },
+  modalActions: {
+    flexDirection: 'row',
+    gap: theme.spacing.sm,
+    padding: theme.spacing.lg,
+    paddingTop: 0,
+  },
+  modalSecondary: {
+    flex: 1,
+    borderRadius: theme.radii.lg,
+    paddingVertical: theme.spacing.md,
+    borderWidth: 1,
+    borderColor: theme.colors.cardBorder,
+    alignItems: 'center',
+  },
+  modalSecondaryContent: { flexDirection: 'row', alignItems: 'center', gap: 8 },
+  modalSecondaryText: { color: theme.colors.textPrimary, fontWeight: '600' },
+  modalPrimary: { flex: 1, borderRadius: theme.radii.lg, overflow: 'hidden' },
+  modalPrimaryGradient: { paddingVertical: theme.spacing.md, alignItems: 'center' },
+  modalPrimaryContent: { flexDirection: 'row', alignItems: 'center', gap: 8 },
+  modalPrimaryText: { color: theme.colors.surface, fontWeight: '700', fontSize: 16 },
 });

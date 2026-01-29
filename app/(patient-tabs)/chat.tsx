@@ -1,10 +1,13 @@
+import { patientTheme } from '@/constants/patientTheme';
 import { useAuth } from '@/lib/AuthContext';
 import { useI18n } from '@/lib/i18n';
 import { sendMessageNotification } from '@/lib/notifications';
 import { supabase } from '@/lib/supabase';
+import { Ionicons } from '@expo/vector-icons';
 import { useBottomTabBarHeight } from '@react-navigation/bottom-tabs';
+import { LinearGradient } from 'expo-linear-gradient';
 import { StatusBar } from 'expo-status-bar';
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import {
     ActivityIndicator,
     FlatList,
@@ -43,6 +46,8 @@ type PresenceState = {
   typing?: boolean;
 };
 
+const theme = patientTheme;
+
 export default function ChatTab() {
   const { user } = useAuth();
   const { t, isRTL } = useI18n();
@@ -59,6 +64,21 @@ export default function ChatTab() {
   const [messageChannel, setMessageChannel] = useState<any>(null);
   const [isTyping, setIsTyping] = useState(false);
   const [typingTimeout, setTypingTimeout] = useState<NodeJS.Timeout | null>(null);
+  const [searchQuery, setSearchQuery] = useState('');
+
+  const activeChats = conversations.length;
+  const unreadTotal = conversations.reduce((sum, conv) => sum + (conv.unread_count || 0), 0);
+
+  const filteredConversations = useMemo(() => {
+    if (!searchQuery.trim()) return conversations;
+    const query = searchQuery.toLowerCase();
+    return conversations.filter(conv => {
+      const name = conv.doctor_name?.toLowerCase() || '';
+      const message = conv.last_message?.toLowerCase() || '';
+      const clinic = conv.clinic_name?.toLowerCase() || '';
+      return name.includes(query) || message.includes(query) || clinic.includes(query);
+    });
+  }, [conversations, searchQuery]);
 
   useEffect(() => {
     if (user) {
@@ -457,7 +477,7 @@ export default function ChatTab() {
     return (
       <View style={[styles.container, styles.centered]}>
         <StatusBar style="light" />
-        <ActivityIndicator size="large" color="#2563EB" />
+        <ActivityIndicator size="large" color={theme.colors.primary} />
         <Text style={styles.loadingText}>{t.common.loading}</Text>
       </View>
     );
@@ -480,7 +500,11 @@ export default function ChatTab() {
               style={styles.backButton}
               onPress={() => setSelectedConversation(null)}
             >
-              <Text style={styles.backButtonText}>{isRTL ? '→' : '←'}</Text>
+              <Ionicons
+                name={isRTL ? 'chevron-forward' : 'chevron-back'}
+                size={22}
+                color={theme.colors.surface}
+              />
             </TouchableOpacity>
             <View style={styles.chatHeaderInfo}>
               <Text style={styles.chatHeaderName}>{selectedConversation.doctor_name}</Text>
@@ -546,25 +570,37 @@ export default function ChatTab() {
           )}
 
           {/* Input */}
-          <View style={[styles.inputContainer, isRTL && styles.rowReverse, { paddingBottom: tabBarHeight }]}>
-            <TextInput
-              style={[styles.textInput, isRTL && styles.textRight]}
-              placeholder={isRTL ? 'اكتب رسالتك...' : 'Type a message...'}
-              placeholderTextColor="#9CA3AF"
-              value={newMessage}
-              onChangeText={handleTextChange}
-              multiline
-              maxLength={1000}
-            />
+          <View
+            style={[
+              styles.inputContainer,
+              isRTL && styles.rowReverse,
+              { paddingBottom: tabBarHeight + theme.spacing.xs },
+            ]}
+          >
+            <View style={[styles.inputShell, isRTL && styles.rowReverse]}>
+              <TextInput
+                style={[styles.textInput, isRTL && styles.textRight]}
+                placeholder={isRTL ? 'اكتب رسالتك...' : 'Type a message...'}
+                placeholderTextColor={theme.colors.textMuted}
+                value={newMessage}
+                onChangeText={handleTextChange}
+                multiline
+                maxLength={1000}
+              />
+            </View>
             <TouchableOpacity 
               style={[styles.sendButton, !newMessage.trim() && styles.sendButtonDisabled]}
               onPress={sendMessage}
               disabled={!newMessage.trim() || sending}
             >
               {sending ? (
-                <ActivityIndicator size="small" color="white" />
+                <ActivityIndicator size="small" color={theme.colors.surface} />
               ) : (
-                <Text style={styles.sendButtonText}>{isRTL ? '←' : '→'}</Text>
+                <Ionicons
+                  name={isRTL ? 'arrow-back' : 'arrow-forward'}
+                  size={20}
+                  color={theme.colors.surface}
+                />
               )}
             </TouchableOpacity>
           </View>
@@ -587,16 +623,51 @@ export default function ChatTab() {
     <View style={styles.container}>
       <StatusBar style="light" />
       
-      <View style={styles.header}>
-        <Text style={[styles.headerTitle, isRTL && styles.textRight]}>
-          {isRTL ? 'المحادثات' : 'Messages'}
-        </Text>
-        <Text style={[styles.headerSubtitle, isRTL && styles.textRight]}>
-          {isRTL ? 'تواصل مع أطبائك' : 'Chat with your doctors'}
-        </Text>
+      <LinearGradient
+        colors={[theme.colors.primaryDark, theme.colors.primary]}
+        style={styles.heroBanner}
+        start={{ x: 0, y: 0 }}
+        end={{ x: 1, y: 1 }}
+      >
+        <View style={[styles.heroContent, isRTL && styles.alignRight]}>
+          <Text style={[styles.heroEyebrow, isRTL && styles.textRight]}>{t.chat.heroEyebrow}</Text>
+          <Text style={[styles.heroTitle, isRTL && styles.textRight]}>{t.chat.title}</Text>
+          <Text style={[styles.heroSubtitle, isRTL && styles.textRight]}>{t.chat.subtitle}</Text>
+        </View>
+        <View style={[styles.heroStatsRow, isRTL && styles.rowReverse]}>
+          <View style={styles.heroStatCard}>
+            <Text style={styles.heroStatValue}>{activeChats}</Text>
+            <Text style={[styles.heroStatLabel, isRTL && styles.textRight]}>{t.chat.activeChatsLabel}</Text>
+          </View>
+          <View style={styles.heroStatCard}>
+            <Text style={styles.heroStatValue}>{unreadTotal}</Text>
+            <Text style={[styles.heroStatLabel, isRTL && styles.textRight]}>{t.chat.unreadLabel}</Text>
+          </View>
+        </View>
+      </LinearGradient>
+
+      <View style={[styles.searchWrapper, isRTL && styles.rowReverse]}>
+        <Ionicons
+          name="search"
+          size={18}
+          color={theme.colors.primary}
+          style={[styles.searchIcon, isRTL && styles.searchIconRTL]}
+        />
+        <TextInput
+          style={[styles.searchInput, isRTL && styles.textRight]}
+          value={searchQuery}
+          onChangeText={setSearchQuery}
+          placeholder={isRTL ? 'ابحث باسم الطبيب أو الرسالة' : 'Search doctor or message'}
+          placeholderTextColor={theme.colors.textMuted}
+        />
+        {searchQuery.length > 0 && (
+          <TouchableOpacity onPress={() => setSearchQuery('')} style={styles.clearSearchButton}>
+            <Ionicons name="close" size={18} color={theme.colors.primary} />
+          </TouchableOpacity>
+        )}
       </View>
 
-      {conversations.length === 0 ? (
+      {filteredConversations.length === 0 ? (
         <View style={styles.emptyState}>
           <Text style={styles.emptyIcon}>💬</Text>
           <Text style={styles.emptyTitle}>
@@ -610,7 +681,7 @@ export default function ChatTab() {
         </View>
       ) : (
         <FlatList
-          data={conversations}
+          data={filteredConversations}
           keyExtractor={(item) => item.id}
           style={styles.conversationsList}
           renderItem={({ item }) => (
@@ -630,7 +701,7 @@ export default function ChatTab() {
                   </Text>
                 </View>
                 {item.last_message_time && (
-                  <Text style={styles.messageTime}>{item.last_message_time}</Text>
+                  <Text style={styles.conversationTime}>{item.last_message_time}</Text>
                 )}
               </View>
             </TouchableOpacity>
@@ -642,67 +713,215 @@ export default function ChatTab() {
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#F3F4F6' },
-  chatContainer: { flex: 1, backgroundColor: '#F3F4F6' },
+  container: { flex: 1, backgroundColor: theme.colors.background },
+  chatContainer: { flex: 1, backgroundColor: theme.colors.background },
   centered: { justifyContent: 'center', alignItems: 'center' },
-  loadingText: { marginTop: 10, fontSize: 16, color: '#6B7280' },
+  loadingText: { marginTop: 10, fontSize: 16, color: theme.colors.textSecondary },
   textRight: { textAlign: 'right' },
   rowReverse: { flexDirection: 'row-reverse' },
   alignRight: { alignItems: 'flex-end' },
-  
-  header: { backgroundColor: '#2563EB', paddingTop: 50, paddingBottom: 20, paddingHorizontal: 20, borderBottomLeftRadius: 25, borderBottomRightRadius: 25 },
-  headerTitle: { fontSize: 24, fontWeight: 'bold', color: 'white' },
-  headerSubtitle: { fontSize: 14, color: '#BFDBFE', marginTop: 5 },
-  
-  emptyState: { flex: 1, alignItems: 'center', justifyContent: 'center', padding: 40 },
-  emptyIcon: { fontSize: 60, marginBottom: 15 },
-  emptyTitle: { fontSize: 18, fontWeight: '600', color: '#1F2937', marginBottom: 8 },
-  emptyText: { fontSize: 14, color: '#6B7280', textAlign: 'center' },
-  
-  conversationsList: { flex: 1, padding: 15 },
-  conversationCard: { backgroundColor: 'white', borderRadius: 12, padding: 15, marginBottom: 10 },
-  conversationRow: { flexDirection: 'row', alignItems: 'center' },
-  avatarContainer: { width: 50, height: 50, borderRadius: 25, backgroundColor: '#EFF6FF', justifyContent: 'center', alignItems: 'center', marginRight: 12 },
+  heroBanner: {
+    paddingTop: 52,
+    paddingBottom: theme.spacing.lg,
+    paddingHorizontal: theme.spacing.lg,
+    borderBottomLeftRadius: 28,
+    borderBottomRightRadius: 28,
+    gap: theme.spacing.md,
+  },
+  heroContent: {
+    gap: 6,
+  },
+  heroEyebrow: {
+    fontSize: 12,
+    letterSpacing: 1,
+    textTransform: 'uppercase',
+    color: 'rgba(255,255,255,0.75)',
+  },
+  heroTitle: { fontSize: 24, fontWeight: '700', color: theme.colors.surface },
+  heroSubtitle: { fontSize: 14, color: 'rgba(255,255,255,0.85)' },
+  heroStatsRow: {
+    flexDirection: 'row',
+    gap: theme.spacing.sm,
+  },
+  heroStatCard: {
+    flex: 1,
+    padding: theme.spacing.md,
+    borderRadius: theme.radii.md,
+    backgroundColor: 'rgba(255,255,255,0.15)',
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.25)',
+  },
+  heroStatValue: { fontSize: 20, fontWeight: '700', color: theme.colors.surface },
+  heroStatLabel: { fontSize: 12, color: 'rgba(255,255,255,0.85)' },
+  searchWrapper: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginHorizontal: theme.spacing.lg,
+    marginTop: -theme.spacing.lg,
+    marginBottom: theme.spacing.lg,
+    paddingHorizontal: theme.spacing.md,
+    paddingVertical: theme.spacing.sm,
+    borderRadius: theme.radii.lg,
+    backgroundColor: theme.colors.surface,
+    borderWidth: 1,
+    borderColor: theme.colors.cardBorder,
+    shadowColor: '#000000',
+    shadowOpacity: 0.05,
+    shadowOffset: { width: 0, height: 4 },
+    shadowRadius: 8,
+    elevation: 2,
+  },
+  searchIcon: { marginRight: theme.spacing.sm },
+  searchIconRTL: { marginRight: 0, marginLeft: theme.spacing.sm },
+  searchInput: { flex: 1, fontSize: 14, color: theme.colors.textPrimary },
+  clearSearchButton: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    justifyContent: 'center',
+    alignItems: 'center',
+    backgroundColor: theme.colors.primarySoft,
+  },
+  emptyState: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    padding: theme.spacing.xl,
+    gap: theme.spacing.sm,
+  },
+  emptyIcon: { fontSize: 60 },
+  emptyTitle: { fontSize: 18, fontWeight: '600', color: theme.colors.textPrimary },
+  emptyText: { fontSize: 14, color: theme.colors.textSecondary, textAlign: 'center', lineHeight: 20 },
+  conversationsList: { flex: 1, padding: theme.spacing.md },
+  conversationCard: {
+    backgroundColor: theme.colors.surface,
+    borderRadius: theme.radii.lg,
+    padding: theme.spacing.md,
+    marginBottom: theme.spacing.md,
+    borderWidth: 1,
+    borderColor: theme.colors.cardBorder,
+  },
+  conversationRow: { flexDirection: 'row', alignItems: 'center', gap: 12 },
+  avatarContainer: {
+    width: 52,
+    height: 52,
+    borderRadius: theme.radii.md,
+    backgroundColor: theme.colors.primarySoft,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
   avatarEmoji: { fontSize: 24 },
   conversationInfo: { flex: 1 },
-  doctorName: { fontSize: 16, fontWeight: '600', color: '#1F2937' },
-  specialty: { fontSize: 13, color: '#6B7280', marginTop: 2 },
-  lastMessage: { fontSize: 13, color: '#9CA3AF', marginTop: 4 },
-  messageTime: { fontSize: 12, color: '#9CA3AF' },
-  
-  chatHeader: { backgroundColor: '#2563EB', paddingTop: 50, paddingBottom: 15, paddingHorizontal: 15, flexDirection: 'row', alignItems: 'center' },
-  backButton: { width: 40, height: 40, borderRadius: 20, backgroundColor: 'rgba(255,255,255,0.2)', justifyContent: 'center', alignItems: 'center', marginRight: 10 },
-  backButtonText: { fontSize: 20, color: 'white', fontWeight: 'bold' },
+  doctorName: { fontSize: 16, fontWeight: '600', color: theme.colors.textPrimary },
+  specialty: { fontSize: 13, color: theme.colors.textSecondary, marginTop: 2 },
+  lastMessage: { fontSize: 13, color: theme.colors.textMuted, marginTop: 4 },
+  conversationTime: { fontSize: 12, color: theme.colors.textMuted },
+  chatHeader: {
+    backgroundColor: theme.colors.primary,
+    paddingTop: 52,
+    paddingBottom: 18,
+    paddingHorizontal: theme.spacing.md,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+  },
+  backButton: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: 'rgba(255,255,255,0.2)',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
   chatHeaderInfo: { flex: 1 },
-  chatHeaderName: { fontSize: 18, fontWeight: 'bold', color: 'white' },
-  chatHeaderSpecialty: { fontSize: 13, color: '#BFDBFE', marginTop: 2 },
-  
-  messagesList: { flex: 1 },
-  messagesContent: { padding: 15, paddingBottom: 100 },
-  emptyMessages: { flex: 1, alignItems: 'center', justifyContent: 'center', paddingTop: 100 },
-  emptyMessagesIcon: { fontSize: 50, marginBottom: 10 },
-  emptyMessagesText: { fontSize: 16, color: '#6B7280' },
-  errorText: { fontSize: 12, color: '#DC2626', marginTop: 15, textAlign: 'center' },
-  errorBanner: { backgroundColor: '#FEE2E2', padding: 12, borderTopWidth: 1, borderTopColor: '#FCA5A5' },
-  errorBannerText: { fontSize: 12, color: '#DC2626', textAlign: 'center' },
-  
-  messageBubble: { maxWidth: '80%', padding: 12, borderRadius: 16, marginBottom: 8 },
-  myMessage: { alignSelf: 'flex-end', backgroundColor: '#2563EB', borderBottomRightRadius: 4 },
-  theirMessage: { alignSelf: 'flex-start', backgroundColor: 'white', borderBottomLeftRadius: 4 },
+  chatHeaderName: { fontSize: 18, fontWeight: '700', color: theme.colors.surface },
+  chatHeaderSpecialty: { fontSize: 13, color: 'rgba(255,255,255,0.78)', marginTop: 2 },
+  messagesList: { flex: 1, paddingHorizontal: theme.spacing.md, paddingTop: theme.spacing.md },
+  emptyMessages: { flex: 1, alignItems: 'center', justifyContent: 'center', paddingTop: 80, gap: theme.spacing.xs },
+  emptyMessagesIcon: { fontSize: 48 },
+  emptyMessagesText: { fontSize: 15, color: theme.colors.textSecondary },
+  errorText: { fontSize: 12, color: theme.colors.danger, marginTop: theme.spacing.sm, textAlign: 'center' },
+  errorBanner: {
+    backgroundColor: 'rgba(239,68,68,0.14)',
+    padding: theme.spacing.sm,
+    borderTopWidth: 1,
+    borderColor: 'rgba(239,68,68,0.3)',
+  },
+  errorBannerText: { fontSize: 12, color: theme.colors.danger, textAlign: 'center' },
+  messageBubble: { maxWidth: '80%', padding: theme.spacing.sm, borderRadius: theme.radii.lg, marginBottom: 8 },
+  myMessage: { alignSelf: 'flex-end', backgroundColor: theme.colors.primary, borderBottomRightRadius: theme.radii.sm },
+  theirMessage: {
+    alignSelf: 'flex-start',
+    backgroundColor: theme.colors.surface,
+    borderBottomLeftRadius: theme.radii.sm,
+    borderWidth: 1,
+    borderColor: theme.colors.cardBorder,
+  },
   messageText: { fontSize: 15, lineHeight: 20 },
-  myMessageText: { color: 'white' },
-  theirMessageText: { color: '#1F2937' },
-  messageTimeContainer: { marginTop: 4 },
-  myMessageTime: { fontSize: 11, color: 'rgba(255,255,255,0.7)', textAlign: 'right' },
-  theirMessageTime: { fontSize: 11, color: '#9CA3AF' },
-  
-  inputContainer: { flexDirection: 'row', padding: 10, backgroundColor: 'white', borderTopWidth: 1, borderTopColor: '#E5E7EB', alignItems: 'flex-end' },
-  textInput: { flex: 1, backgroundColor: '#F3F4F6', borderRadius: 20, paddingHorizontal: 15, paddingVertical: 10, fontSize: 16, maxHeight: 100, marginRight: 10 },
-  sendButton: { width: 44, height: 44, borderRadius: 22, backgroundColor: '#2563EB', justifyContent: 'center', alignItems: 'center' },
-  sendButtonDisabled: { backgroundColor: '#93C5FD' },
-  sendButtonText: { fontSize: 20, color: 'white', fontWeight: 'bold' },
-  
-  typingIndicator: { position: 'absolute', bottom: 80, left: 15, backgroundColor: '#E5E7EB', paddingHorizontal: 12, paddingVertical: 6, borderRadius: 12 },
-  typingText: { fontSize: 12, color: '#6B7280', fontStyle: 'italic' },
+  myMessageText: { color: theme.colors.surface },
+  theirMessageText: { color: theme.colors.textPrimary },
+  messageTime: { fontSize: 11, color: theme.colors.textMuted },
+  myMessageTime: { fontSize: 11, color: 'rgba(255,255,255,0.8)', textAlign: 'right', marginTop: 6 },
+  theirMessageTime: { fontSize: 11, color: theme.colors.textMuted, marginTop: 6 },
+  inputContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: theme.spacing.sm,
+    paddingHorizontal: theme.spacing.lg,
+    paddingVertical: theme.spacing.md,
+    backgroundColor: theme.colors.surface,
+    borderTopWidth: 1,
+    borderTopColor: theme.colors.border,
+    shadowColor: theme.colors.shadow,
+    shadowOffset: { width: 0, height: -6 },
+    shadowOpacity: 0.08,
+    shadowRadius: 12,
+    elevation: 6,
+  },
+  inputShell: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: theme.colors.elevated,
+    borderRadius: theme.radii.pill,
+    borderWidth: 1,
+    borderColor: theme.colors.cardBorder,
+    paddingHorizontal: theme.spacing.sm,
+    paddingVertical: 6,
+  },
+  textInput: {
+    flex: 1,
+    fontSize: 16,
+    maxHeight: 120,
+    color: theme.colors.textPrimary,
+    paddingHorizontal: theme.spacing.xs,
+    paddingVertical: 6,
+  },
+  sendButton: {
+    width: 52,
+    height: 52,
+    borderRadius: 18,
+    backgroundColor: theme.colors.primary,
+    justifyContent: 'center',
+    alignItems: 'center',
+    shadowColor: theme.colors.primary,
+    shadowOpacity: 0.25,
+    shadowRadius: 10,
+    shadowOffset: { width: 0, height: 6 },
+    elevation: 4,
+  },
+  sendButtonDisabled: { opacity: 0.45 },
+  typingIndicator: {
+    position: 'absolute',
+    bottom: 86,
+    left: 20,
+    backgroundColor: theme.colors.elevated,
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: theme.radii.pill,
+    borderWidth: 1,
+    borderColor: theme.colors.cardBorder,
+  },
+  typingText: { fontSize: 12, color: theme.colors.textSecondary, fontStyle: 'italic' },
   readReceipt: { fontSize: 10, color: 'rgba(255,255,255,0.9)' },
 });

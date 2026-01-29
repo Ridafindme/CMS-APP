@@ -1,10 +1,14 @@
 import { useDoctorContext } from '@/lib/DoctorContext';
 import { useI18n } from '@/lib/i18n';
-import { sendRescheduleNotification } from '@/lib/notifications';
+import {
+    sendAppointmentCancellationNotification,
+    sendAppointmentConfirmationNotification,
+    sendRescheduleNotification,
+} from '@/lib/notifications';
 import { supabase } from '@/lib/supabase';
 import { Ionicons } from '@expo/vector-icons';
 import { StatusBar } from 'expo-status-bar';
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import {
     ActivityIndicator,
     Alert,
@@ -56,7 +60,7 @@ export default function DoctorAppointmentsScreen() {
     if (doctorData) {
       fetchAppointments(lookbackDays);
     }
-  }, [doctorData, lookbackDays]);
+  }, [doctorData, lookbackDays, fetchAppointments]);
 
   const handleRefresh = async () => {
     setRefreshing(true);
@@ -93,7 +97,7 @@ export default function DoctorAppointmentsScreen() {
           appointment.patient_id,
           doctorName,
           appointment.appointment_date,
-          appointment.time_slot,
+          appointment.appointment_time,
           clinicName
         );
       }
@@ -144,7 +148,7 @@ export default function DoctorAppointmentsScreen() {
                   appointment.patient_id,
                   doctorName,
                   appointment.appointment_date,
-                  appointment.time_slot,
+                  appointment.appointment_time,
                   clinicName,
                   'Doctor rejected the appointment request'
                 );
@@ -173,14 +177,14 @@ export default function DoctorAppointmentsScreen() {
   // Fetch available slots when date is selected
   useEffect(() => {
     if (newDate && rescheduleAppointment) {
-      fetchAvailableSlots(newDate, rescheduleAppointment.clinic_id);
+      fetchAvailableSlots(newDate, rescheduleAppointment.clinic_id, rescheduleAppointment.id);
     } else {
       setAvailableSlots([]);
       setNewTime(null);
     }
-  }, [newDate, rescheduleAppointment]);
+  }, [newDate, rescheduleAppointment, fetchAvailableSlots]);
 
-  const fetchAvailableSlots = async (date: string, clinicId: string) => {
+  const fetchAvailableSlots = useCallback(async (date: string, clinicId: string, excludeAppointmentId?: string) => {
     setLoadingSlots(true);
     try {
       // Get clinic schedule
@@ -228,14 +232,19 @@ export default function DoctorAppointmentsScreen() {
       }
 
       // Get booked/blocked slots
-      const { data: bookedData } = await supabase
+      let bookedQuery = supabase
         .from('appointments')
         .select('time_slot')
         .eq('doctor_id', doctorData?.id)
         .eq('clinic_id', clinicId)
         .eq('appointment_date', date)
-        .in('status', ['pending', 'confirmed'])
-        .neq('id', rescheduleAppointment.id); // Exclude current appointment
+        .in('status', ['pending', 'confirmed']);
+
+      if (excludeAppointmentId) {
+        bookedQuery = bookedQuery.neq('id', excludeAppointmentId);
+      }
+
+      const { data: bookedData } = await bookedQuery;
 
       const { data: blockedData } = await supabase
         .from('doctor_blocked_slots')
@@ -256,7 +265,7 @@ export default function DoctorAppointmentsScreen() {
     } finally {
       setLoadingSlots(false);
     }
-  };
+  }, [clinics, doctorData?.id]);
 
   const handleReschedule = async () => {
     if (!rescheduleAppointment || !newDate || !newTime) {

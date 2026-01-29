@@ -96,6 +96,7 @@ export type ChatConversation = {
   id: string;
   patient_id: string;
   patient_name: string;
+  patient_phone?: string | null;
   last_message: string;
   last_message_time: string;
   unread_count: number;
@@ -541,19 +542,28 @@ export const DoctorProvider = ({ children }: { children: ReactNode }) => {
       const patientIds = Array.from(conversationsMap.keys());
       const { data: patients } = await supabase
         .from('profiles')
-        .select('id, full_name')
+        .select('id, full_name, phone')
         .in('id', patientIds);
 
-      const patientsMap = new Map(patients?.map(p => [p.id, p.full_name]) || []);
+      const patientsMap = new Map(
+        patients?.map(p => [p.id, { full_name: p.full_name, phone: p.phone }]) || [],
+      );
 
-      const conversations: ChatConversation[] = Array.from(conversationsMap.entries()).map(([patientId, conv]) => ({
-        id: patientId,
-        patient_id: patientId,
-        patient_name: patientsMap.get(patientId) || 'Patient',
-        last_message: conv.last_message,
-        last_message_time: new Date(conv.last_message_time).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-        unread_count: conv.unread_count,
-      }));
+      const conversations: ChatConversation[] = Array.from(conversationsMap.entries()).map(([patientId, conv]) => {
+        const profile = patientsMap.get(patientId);
+        return {
+          id: patientId,
+          patient_id: patientId,
+          patient_name: profile?.full_name || 'Patient',
+          patient_phone: profile?.phone || null,
+          last_message: conv.last_message,
+          last_message_time: new Date(conv.last_message_time).toLocaleTimeString([], {
+            hour: '2-digit',
+            minute: '2-digit',
+          }),
+          unread_count: conv.unread_count,
+        };
+      });
 
       setChatConversations(conversations);
       setUnreadChatCount(totalUnread);

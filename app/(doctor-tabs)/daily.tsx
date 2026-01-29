@@ -1057,7 +1057,7 @@ export default function DailyScheduleScreen() {
                 }}
                 type="mobile"
                 label={isRTL ? 'رقم الهاتف' : 'Phone'}
-                icon="📱"
+                icon="call-outline"
                 isRTL={isRTL}
                 disabled={updating}
               />
@@ -1118,7 +1118,7 @@ export default function DailyScheduleScreen() {
                 }}
                 type="mobile"
                 label={isRTL ? 'رقم الهاتف' : 'Phone'}
-                icon="📱"
+                icon="call-outline"
                 isRTL={isRTL}
                 disabled={registering}
               />

@@ -1,12 +1,14 @@
 import PhoneInput from '@/components/ui/phone-input';
+import { patientTheme } from '@/constants/patientTheme';
 import { DAY_KEYS, DAY_LABELS, getDayKey, minutesToTime, timeToMinutes, useDoctorContext } from '@/lib/DoctorContext';
 import { useI18n } from '@/lib/i18n';
 import { fromE164, validatePhone } from '@/lib/phone-utils';
 import { supabase } from '@/lib/supabase';
 import { Ionicons } from '@expo/vector-icons';
+import { LinearGradient } from 'expo-linear-gradient';
 import * as Location from 'expo-location';
 import { StatusBar as ExpoStatusBar } from 'expo-status-bar';
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import {
   ActivityIndicator,
   Alert,
@@ -23,9 +25,34 @@ import {
   TouchableOpacity,
   View
 } from 'react-native';
-import MapView, { Marker } from 'react-native-maps';
+import MapView, { Marker, Region } from 'react-native-maps';
 
 import type { Clinic, ClinicSchedule, ClinicScheduleDay, DayKey } from '@/lib/DoctorContext';
+
+const theme = patientTheme;
+
+type ClinicDraft = {
+  clinic_name: string;
+  address: string;
+  consultation_fee: string;
+  latitude: number | null;
+  longitude: number | null;
+};
+
+type EditClinicDraftState = ClinicDraft & {
+  mobile: string;
+  landline: string;
+  whatsapp: string;
+  mobileLocal: string;
+  landlineLocal: string;
+  whatsappLocal: string;
+};
+
+type MapSelection = {
+  latitude: number;
+  longitude: number;
+  address: string;
+};
 
 export default function DoctorClinicsScreen() {
   const { t, isRTL } = useI18n();
@@ -33,43 +60,41 @@ export default function DoctorClinicsScreen() {
     loading, 
     clinics, 
     blockedSlots, 
-    holidays, 
     fetchClinics, 
-    fetchBlockedSlots, 
-    fetchHolidays,
+    fetchBlockedSlots,
     addClinic,
     updateClinic,
     deactivateClinic,
     updateClinicSchedule,
-    addBlockedSlot,
-    removeBlockedSlot,
-    addHoliday,
-    removeHoliday
+    addBlockedSlot
   } = useDoctorContext();
-
   const [refreshing, setRefreshing] = useState(false);
-  const [expandedClinics, setExpandedClinics] = useState<Set<string>>(new Set());
-  
-  // Add Clinic Modal
   const [showAddClinicModal, setShowAddClinicModal] = useState(false);
-  const [newClinic, setNewClinic] = useState({
-    clinic_name: '',
-    address: '',
-    consultation_fee: '',
-    latitude: null as number | null,
-    longitude: null as number | null,
-  });
-  const [addingClinic, setAddingClinic] = useState(false);
-
-  // Edit Clinic Modal
   const [showEditClinicModal, setShowEditClinicModal] = useState(false);
-  const [editClinicId, setEditClinicId] = useState<string | null>(null);
-  const [editClinicDraft, setEditClinicDraft] = useState({
+  const [showScheduleModal, setShowScheduleModal] = useState(false);
+  const [showBlockTimeModal, setShowBlockTimeModal] = useState(false);
+  const [showLocationPickerModal, setShowLocationPickerModal] = useState(false);
+
+  const [addingClinic, setAddingClinic] = useState(false);
+  const [savingClinicEdit, setSavingClinicEdit] = useState(false);
+  const [savingSchedule, setSavingSchedule] = useState(false);
+  const [blockingSlots, setBlockingSlots] = useState(false);
+
+  const [newClinic, setNewClinic] = useState<ClinicDraft>({
     clinic_name: '',
     address: '',
     consultation_fee: '',
-    latitude: null as number | null,
-    longitude: null as number | null,
+    latitude: null,
+    longitude: null,
+  });
+
+  const [editClinicId, setEditClinicId] = useState<string | null>(null);
+  const [editClinicDraft, setEditClinicDraft] = useState<EditClinicDraftState>({
+    clinic_name: '',
+    address: '',
+    consultation_fee: '',
+    latitude: null,
+    longitude: null,
     mobile: '',
     landline: '',
     whatsapp: '',
@@ -77,69 +102,70 @@ export default function DoctorClinicsScreen() {
     landlineLocal: '',
     whatsappLocal: '',
   });
-  const [savingClinicEdit, setSavingClinicEdit] = useState(false);
 
-  // Schedule Modal
-  const [showScheduleModal, setShowScheduleModal] = useState(false);
   const [scheduleClinicId, setScheduleClinicId] = useState<string | null>(null);
   const [scheduleDraft, setScheduleDraft] = useState<ClinicSchedule>({});
-  const [scheduleSlotMinutes, setScheduleSlotMinutes] = useState<number>(30);
+  const [scheduleSlotMinutes, setScheduleSlotMinutes] = useState(30);
   const [scheduleMode, setScheduleMode] = useState<'generic' | 'day-by-day'>('generic');
-  const [savingSchedule, setSavingSchedule] = useState(false);
 
-  // Block Time Modal
-  const [showBlockTimeModal, setShowBlockTimeModal] = useState(false);
+  const [selectedBlockClinicId, setSelectedBlockClinicId] = useState<string | null>(null);
   const [selectedBlockDate, setSelectedBlockDate] = useState<string | null>(null);
   const [selectedBlockSlots, setSelectedBlockSlots] = useState<string[]>([]);
-  const [selectedBlockClinicId, setSelectedBlockClinicId] = useState<string | null>(null);
   const [blockReason, setBlockReason] = useState('');
-  const [blockingSlots, setBlockingSlots] = useState(false);
 
-  // Holiday Modal
-  const [showHolidayModal, setShowHolidayModal] = useState(false);
-  const [holidayClinicIds, setHolidayClinicIds] = useState<string[]>([]);
-  const [holidayDate, setHolidayDate] = useState<string | null>(null);
-  const [holidayReason, setHolidayReason] = useState('');
-  const [savingHoliday, setSavingHoliday] = useState(false);
-
-  // Location Picker Modal
-  const [showLocationPickerModal, setShowLocationPickerModal] = useState(false);
-  const [locationPickerTarget, setLocationPickerTarget] = useState<'new' | 'edit'>('new');
-  const [locationSearchAddress, setLocationSearchAddress] = useState('');
-  const [mapRegion, setMapRegion] = useState<{
-    latitude: number;
-    longitude: number;
-    latitudeDelta: number;
-    longitudeDelta: number;
-  } | null>(null);
+  const [mapSelection, setMapSelection] = useState<MapSelection | null>(null);
   const [mapMarker, setMapMarker] = useState<{ latitude: number; longitude: number } | null>(null);
-  const [mapSelection, setMapSelection] = useState<{
-    latitude: number;
-    longitude: number;
-    address: string;
-  } | null>(null);
+  const [mapRegion, setMapRegion] = useState<Region | null>(null);
+  const [locationSearchAddress, setLocationSearchAddress] = useState('');
+  const [locationPickerTarget, setLocationPickerTarget] = useState<'new' | 'edit'>('new');
+
+  const [expandedClinics, setExpandedClinics] = useState<Set<string>>(new Set());
 
   useEffect(() => {
-    setSelectedBlockSlots([]);
-  }, [selectedBlockDate, selectedBlockClinicId]);
+    fetchClinics();
+    fetchBlockedSlots();
+  }, [fetchClinics, fetchBlockedSlots]);
 
   const handleRefresh = async () => {
     setRefreshing(true);
-    await Promise.all([fetchClinics(), fetchBlockedSlots(), fetchHolidays()]);
-    setRefreshing(false);
+    try {
+      await Promise.all([fetchClinics(), fetchBlockedSlots()]);
+    } finally {
+      setRefreshing(false);
+    }
   };
 
-  // Location Picker Functions
+  const heroStats = useMemo(
+    () => {
+      const activeClinics = clinics.filter(clinic => clinic.is_active).length;
+      const pendingClinics = Math.max(clinics.length - activeClinics, 0);
+      return [
+        {
+          key: 'active',
+          label: t.doctorDashboard?.activeClinics || (isRTL ? 'العيادات النشطة' : 'Active Clinics'),
+          value: String(activeClinics),
+        },
+        {
+          key: 'pending',
+          label: isRTL ? 'بانتظار الموافقة' : 'Pending Approval',
+          value: String(pendingClinics),
+        },
+      ];
+    },
+    [clinics, isRTL, t.doctorDashboard]
+  );
+
   const openLocationPicker = async (
     target: 'new' | 'edit',
-    fallback?: { latitude: number | null; longitude: number | null }
+    fallback?: { latitude: number | null | undefined; longitude: number | null | undefined }
   ) => {
     setLocationPickerTarget(target);
-    setLocationSearchAddress('');
     setMapSelection(null);
     setMapMarker(null);
     setMapRegion(null);
+    setLocationSearchAddress('');
     setShowLocationPickerModal(true);
+
     const fallbackLat = fallback?.latitude ?? null;
     const fallbackLng = fallback?.longitude ?? null;
     if (fallbackLat !== null && fallbackLng !== null) {
@@ -430,6 +456,7 @@ export default function DoctorClinicsScreen() {
     setScheduleDraft(clinic.schedule || {});
     const raw = clinic.slot_minutes ?? 30;
     setScheduleSlotMinutes(Math.min(120, Math.max(20, raw)));
+    setScheduleMode('generic');
     setShowScheduleModal(true);
   };
 
@@ -498,12 +525,6 @@ export default function DoctorClinicsScreen() {
   const getClinicById = (clinicId: string | null) =>
     clinics.find(c => c.id === clinicId) || null;
 
-  const getClinicName = (clinicId: string | null | undefined) =>
-    clinics.find(c => c.id === clinicId)?.clinic_name || null;
-
-  const isHoliday = (clinicId: string | null, dateString: string) =>
-    holidays.some(h => h.clinic_id === clinicId && h.holiday_date === dateString);
-
   const getClinicSlotMinutes = (clinic: Clinic | null) => {
     const raw = clinic?.slot_minutes ?? 30;
     return Math.min(120, Math.max(20, raw));
@@ -518,7 +539,6 @@ export default function DoctorClinicsScreen() {
   };
 
   const generateSlotsForClinicDate = (clinicId: string | null, dateString: string) => {
-    if (isHoliday(clinicId, dateString)) return [];
     const clinic = getClinicById(clinicId);
     const schedule = getScheduleForDate(clinic, dateString);
     if (!schedule?.start || !schedule?.end) return [];
@@ -612,82 +632,7 @@ export default function DoctorClinicsScreen() {
     }
   };
 
-  const handleUnblockSlot = async (slotId: string) => {
-    Alert.alert(
-      isRTL ? 'إلغاء الحظر' : 'Unblock Slot',
-      isRTL ? 'هل تريد إلغاء حظر هذا الوقت؟' : 'Do you want to unblock this time slot?',
-      [
-        { text: t.common.cancel, style: 'cancel' },
-        {
-          text: t.common.confirm,
-          onPress: async () => {
-            const success = await removeBlockedSlot(slotId);
-            if (!success) {
-              Alert.alert(t.common.error, 'Failed to unblock slot');
-            }
-          },
-        },
-      ]
-    );
-  };
-
-  // Holiday Functions
-  const openHolidayModal = () => {
-    const defaultClinicId =
-      clinics.find(c => c.is_active)?.id || clinics[0]?.id || null;
-    setHolidayClinicIds(defaultClinicId ? [defaultClinicId] : []);
-    setHolidayDate(null);
-    setHolidayReason('');
-    setShowHolidayModal(true);
-  };
-
-  const handleAddHoliday = async () => {
-    if (holidayClinicIds.length === 0 || !holidayDate) {
-      Alert.alert(t.common.error, t.doctorDashboard?.selectClinicAndDateError || 'Select clinic(s) and date');
-      return;
-    }
-    setSavingHoliday(true);
-    
-    try {
-      let allSuccess = true;
-      for (const clinicId of holidayClinicIds) {
-        const success = await addHoliday(clinicId, holidayDate, holidayReason);
-        if (!success) allSuccess = false;
-      }
-      
-      if (allSuccess) {
-        Alert.alert(t.common.success, isRTL ? 'تمت إضافة العطلة' : 'Holiday added successfully');
-        setShowHolidayModal(false);
-      } else {
-        Alert.alert(t.common.error, 'Failed to add holiday for some clinics');
-      }
-    } finally {
-      setSavingHoliday(false);
-    }
-  };
-
-  const handleRemoveHoliday = async (holidayId: string) => {
-    const success = await removeHoliday(holidayId);
-    if (!success) {
-      Alert.alert(t.common.error, 'Failed to remove holiday');
-    }
-  };
-
   // Utility Functions
-  const formatDate = (dateString: string) => {
-    const date = new Date(dateString);
-    const today = new Date();
-    const todayStr = today.toISOString().split('T')[0];
-    
-    if (dateString === todayStr) return t.appointments?.today || 'Today';
-    
-    return date.toLocaleDateString(isRTL ? 'ar-SA' : 'en-US', { 
-      weekday: 'short', 
-      month: 'short', 
-      day: 'numeric' 
-    });
-  };
-
   const formatTime = (time: string) => {
     const [hours, minutes = '00'] = time.split(':');
     const hour = parseInt(hours);
@@ -722,7 +667,7 @@ export default function DoctorClinicsScreen() {
     const isExpanded = expandedClinics.has(clinic.id);
 
     return (
-      <View key={clinic.id} style={styles.clinicCard}>
+      <View key={clinic.id} style={styles.scheduleCard}>
         <TouchableOpacity
           style={[styles.clinicHeader, isRTL && styles.rowReverse]}
           onPress={() => toggleClinicExpanded(clinic.id)}
@@ -829,13 +774,74 @@ export default function DoctorClinicsScreen() {
         style={styles.content}
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={handleRefresh} />}
       >
+        <View style={styles.heroCardWrapper}>
+          <LinearGradient
+            colors={[theme.colors.primary, theme.colors.accent]}
+            start={{ x: 0, y: 0 }}
+            end={{ x: 1, y: 1 }}
+            style={styles.heroCard}
+          >
+            <View style={[styles.heroHeader, isRTL && styles.rowReverse]}>
+              <View style={[styles.heroTextGroup, isRTL && styles.alignRight]}>
+                <Text style={styles.heroEyebrow}>{isRTL ? 'لوحة التحكم' : 'Clinics Dashboard'}</Text>
+                <Text style={[styles.heroTitle, isRTL && styles.textRight]}>
+                  {isRTL ? 'انشر جدولك وابق منظماً' : 'Publish schedules & stay organized'}
+                </Text>
+                <Text style={[styles.heroSubtitle, isRTL && styles.textRight]}>
+                  {isRTL
+                    ? 'قم بتحديث مواقع العيادة، الأجور، الجداول، والعطل من مكان واحد.'
+                    : 'Update clinic locations, fees, schedules, and off days from one place.'}
+                </Text>
+              </View>
+              <View style={styles.heroIconBubble}>
+                <Ionicons name="business-outline" size={32} color="#FFFFFF" />
+              </View>
+            </View>
+
+            <View style={styles.heroStatsGrid}>
+              {heroStats.map((stat) => (
+                <View key={stat.key} style={styles.heroStatCard}>
+                  <Text style={styles.heroStatValue}>{stat.value}</Text>
+                  <Text style={styles.heroStatLabel}>{stat.label}</Text>
+                </View>
+              ))}
+            </View>
+
+            <View style={[styles.heroCtaRow, isRTL && styles.rowReverse]}>
+              <TouchableOpacity
+                style={styles.heroPrimaryCta}
+                onPress={() => setShowAddClinicModal(true)}
+              >
+                <Ionicons name="add-circle-outline" size={18} color="#FFFFFF" />
+                <Text style={[styles.heroPrimaryCtaText, isRTL && styles.ctaTextRtl]}>
+                  {isRTL ? 'عيادة جديدة' : 'New Clinic'}
+                </Text>
+              </TouchableOpacity>
+              <TouchableOpacity style={styles.heroSecondaryCta} onPress={openBlockTimeModal}>
+                <Ionicons name="time-outline" size={18} color={theme.colors.primary} />
+                <Text style={[styles.heroSecondaryCtaText, isRTL && styles.ctaTextRtl]}>
+                  {t.doctorDashboard?.blockTime || (isRTL ? 'حظر وقت' : 'Block Time')}
+                </Text>
+              </TouchableOpacity>
+            </View>
+          </LinearGradient>
+        </View>
+
         {/* Clinics List */}
         <View style={[styles.tabHeader, isRTL && styles.rowReverse]}>
-          <Text style={[styles.tabTitle, isRTL && styles.textRight]}>
-            {t.doctorDashboard?.myClinics || 'My Clinics'}
-          </Text>
+          <View style={styles.sectionHeadingText}>
+            <Text style={[styles.tabTitle, isRTL && styles.textRight]}>
+              {t.doctorDashboard?.myClinics || 'My Clinics'}
+            </Text>
+            <Text style={[styles.sectionHint, isRTL && styles.textRight]}>
+              {isRTL
+                ? 'قم بإدارة بيانات كل عيادة بسهولة'
+                : 'Tap a clinic card to edit its details'}
+            </Text>
+          </View>
           <TouchableOpacity style={styles.addButton} onPress={() => setShowAddClinicModal(true)}>
-            <Text style={styles.addButtonText}>+ {isRTL ? 'إضافة' : 'Add'}</Text>
+            <Ionicons name="add" size={16} color="#FFFFFF" />
+            <Text style={styles.addButtonText}>{isRTL ? 'إضافة' : 'Add'}</Text>
           </TouchableOpacity>
         </View>
         
@@ -846,44 +852,99 @@ export default function DoctorClinicsScreen() {
             <Text style={styles.emptyText}>{t.doctorDashboard?.noClinicsDesc || 'Add your first clinic'}</Text>
           </View>
         ) : (
-          clinics.map((clinic) => (
-            <TouchableOpacity
-              key={clinic.id}
-              style={styles.clinicCard}
-              activeOpacity={0.9}
-              onPress={() => openEditClinicModal(clinic)}
-            >
-              <View style={[styles.clinicHeader, isRTL && styles.rowReverse]}>
-                <Text style={[styles.clinicName, isRTL && styles.textRight]}>{clinic.clinic_name}</Text>
-                <View style={[styles.statusBadge, clinic.is_active ? styles.activeBadge : styles.inactiveBadge]}>
-                  <Text style={[styles.statusText, !clinic.is_active && { color: '#92400E' }]}>
-                    {clinic.is_active ? (isRTL ? 'نشط' : 'Active') : (isRTL ? 'معلق' : 'Pending')}
-                  </Text>
+          clinics.map((clinic) => {
+            const statusLabel = clinic.is_active ? (isRTL ? 'نشط' : 'Active') : (isRTL ? 'معلق' : 'Pending');
+            return (
+              <TouchableOpacity
+                key={clinic.id}
+                style={styles.clinicCard}
+                activeOpacity={0.9}
+                onPress={() => openEditClinicModal(clinic)}
+              >
+                <View style={[styles.clinicCardTop, isRTL && styles.rowReverse]}>
+                  <View style={[styles.clinicIdentity, isRTL && styles.rowReverse]}>
+                    <View style={styles.clinicAvatar}>
+                      <Ionicons name="medkit-outline" size={20} color={theme.colors.primary} />
+                    </View>
+                    <View style={[styles.clinicTextGroup, isRTL && styles.alignRight]}>
+                      <Text style={styles.clinicName}>{clinic.clinic_name}</Text>
+                      <Text style={[styles.clinicAddress, isRTL && styles.textRight]} numberOfLines={1}>
+                        {clinic.address}
+                      </Text>
+                    </View>
+                  </View>
+                  <View style={[styles.statusPill, clinic.is_active ? styles.activeBadge : styles.inactiveBadge]}>
+                    <Text style={[styles.statusText, !clinic.is_active && styles.statusPendingText]}>{statusLabel}</Text>
+                  </View>
                 </View>
-              </View>
-              <Text style={styles.clinicAddress}>📍 {clinic.address}</Text>
-              {clinic.consultation_fee && (
-                <Text style={styles.clinicFee}>💰 {clinic.consultation_fee}</Text>
-              )}
-              <View style={[styles.clinicActionRow, isRTL && styles.rowReverse]}>
-                <TouchableOpacity
-                  style={styles.clinicIconButton}
-                  onPress={() => openEditClinicModal(clinic)}
-                  accessibilityLabel={t.common.edit}
-                >
-                  <Ionicons name="create-outline" size={16} color="#1E40AF" />
-                </TouchableOpacity>
-                <TouchableOpacity
-                  style={[styles.clinicIconButton, styles.clinicIconDanger, !clinic.is_active && styles.clinicIconDisabled]}
-                  onPress={() => handleDeactivateClinic(clinic.id)}
-                  disabled={!clinic.is_active}
-                  accessibilityLabel={t.doctorDashboard?.deactivateClinic || 'Deactivate'}
-                >
-                  <Ionicons name="power-outline" size={16} color={clinic.is_active ? '#DC2626' : '#9CA3AF'} />
-                </TouchableOpacity>
-              </View>
-            </TouchableOpacity>
-          ))
+
+                <View style={styles.clinicMetaRow}>
+                  {clinic.consultation_fee ? (
+                    <View style={styles.infoChip}>
+                      <Ionicons name="cash-outline" size={14} color={theme.colors.accent} />
+                      <Text style={styles.infoChipText}>{clinic.consultation_fee}</Text>
+                    </View>
+                  ) : null}
+
+                  {clinic.mobile ? (
+                    <View style={styles.infoChip}>
+                      <Ionicons name="call-outline" size={14} color={theme.colors.accent} />
+                      <Text style={styles.infoChipText}>{clinic.mobile}</Text>
+                    </View>
+                  ) : null}
+                </View>
+
+                <View style={[styles.clinicActionRow, isRTL && styles.rowReverse]}>
+                  <TouchableOpacity
+                    style={styles.clinicActionButton}
+                    onPress={(event) => {
+                      event.stopPropagation();
+                      openScheduleModal(clinic);
+                    }}
+                    accessibilityLabel={t.doctorDashboard?.clinicScheduleTitle || 'Schedule'}
+                  >
+                    <Ionicons name="calendar-outline" size={16} color={theme.colors.accent} />
+                    <Text style={[styles.clinicActionLabel, isRTL && styles.actionTextRtl]}>
+                      {isRTL ? 'الجدول' : 'Schedule'}
+                    </Text>
+                  </TouchableOpacity>
+
+                  <TouchableOpacity
+                    style={styles.clinicActionButton}
+                    onPress={(event) => {
+                      event.stopPropagation();
+                      openEditClinicModal(clinic);
+                    }}
+                    accessibilityLabel={t.common.edit}
+                  >
+                    <Ionicons name="create-outline" size={16} color={theme.colors.accent} />
+                    <Text style={[styles.clinicActionLabel, isRTL && styles.actionTextRtl]}>
+                      {t.common.edit}
+                    </Text>
+                  </TouchableOpacity>
+
+                  <TouchableOpacity
+                    style={[styles.clinicActionButton, styles.clinicActionDanger, !clinic.is_active && styles.clinicIconDisabled]}
+                    onPress={(event) => {
+                      event.stopPropagation();
+                      handleDeactivateClinic(clinic.id);
+                    }}
+                    disabled={!clinic.is_active}
+                    accessibilityLabel={t.doctorDashboard?.deactivateClinic || 'Deactivate'}
+                  >
+                    <Ionicons
+                      name="power-outline"
+                      size={16}
+                      color={clinic.is_active ? theme.colors.danger : theme.colors.textMuted}
+                    />
+                    <Text style={[styles.clinicActionLabel, styles.clinicActionDangerText, isRTL && styles.actionTextRtl]}>
+                      {isRTL ? 'إيقاف' : 'Deactivate'}
+                    </Text>
+                  </TouchableOpacity>
+                </View>
+              </TouchableOpacity>
+            );
+          })
         )}
 
         <View style={styles.sectionDivider} />
@@ -906,102 +967,6 @@ export default function DoctorClinicsScreen() {
           clinics.map(renderClinicWorkingHours)
         )}
 
-        <View style={styles.sectionDivider} />
-
-        {/* Blocked Slots */}
-        <View style={[styles.tabHeader, isRTL && styles.rowReverse]}>
-          <Text style={[styles.sectionSubtitle, isRTL && styles.textRight]}>
-            {isRTL ? 'الأوقات المحظورة' : 'Blocked Times'}
-          </Text>
-          <TouchableOpacity style={styles.addButton} onPress={openBlockTimeModal}>
-            <Text style={styles.addButtonText}>+ {t.doctorDashboard?.blockTime || 'Block'}</Text>
-          </TouchableOpacity>
-        </View>
-        {blockedSlots.length === 0 ? (
-          <View style={styles.emptyState}>
-            <Text style={styles.emptyIcon}>🕐</Text>
-            <Text style={styles.emptyTitle}>{isRTL ? 'لا أوقات محظورة' : 'No Blocked Times'}</Text>
-            <Text style={styles.emptyText}>
-              {isRTL ? 'جميع أوقاتك متاحة' : 'All time slots available'}
-            </Text>
-          </View>
-        ) : (
-          clinics.map((clinic) => {
-            const clinicSlots = blockedSlots.filter(slot => slot.clinic_id === clinic.id);
-            if (clinicSlots.length === 0) return null;
-            return (
-              <View key={clinic.id}>
-                <Text style={[styles.clinicSubtitle, isRTL && styles.textRight]}>
-                  {clinic.clinic_name}
-                </Text>
-                {clinicSlots.map((slot) => (
-                  <View key={slot.id} style={styles.blockedSlotCard}>
-                    <View style={[styles.blockedSlotInfo, isRTL && styles.rowReverse]}>
-                      <View>
-                        <Text style={styles.blockedDate}>📅 {formatDate(slot.blocked_date)}</Text>
-                        <Text style={styles.blockedTime}>🕐 {formatTime(slot.time_slot)}</Text>
-                        {slot.reason && <Text style={styles.blockedReason}>💬 {slot.reason}</Text>}
-                      </View>
-                      <TouchableOpacity style={styles.unblockBtn} onPress={() => handleUnblockSlot(slot.id)}>
-                        <Text style={styles.unblockBtnText}>{isRTL ? 'إلغاء' : 'Unblock'}</Text>
-                      </TouchableOpacity>
-                    </View>
-                  </View>
-                ))}
-              </View>
-            );
-          })
-        )}
-
-        <View style={styles.sectionDivider} />
-
-        {/* Holidays */}
-        <View style={[styles.tabHeader, isRTL && styles.rowReverse]}>
-          <Text style={[styles.sectionSubtitle, isRTL && styles.textRight]}>
-            {t.doctorDashboard?.holidays || 'Holidays'}
-          </Text>
-          <TouchableOpacity style={styles.secondaryButton} onPress={openHolidayModal}>
-            <Text style={styles.secondaryButtonText}>+ {t.doctorDashboard?.addHoliday || 'Holiday'}</Text>
-          </TouchableOpacity>
-        </View>
-        {holidays.length === 0 ? (
-          <View style={styles.emptyState}>
-            <Text style={styles.emptyIcon}>🎉</Text>
-            <Text style={styles.emptyTitle}>{t.doctorDashboard?.noHolidaysTitle || 'No Holidays'}</Text>
-            <Text style={styles.emptyText}>
-              {t.doctorDashboard?.noHolidaysDesc || 'No holidays set'}
-            </Text>
-          </View>
-        ) : (
-          holidays.map((holiday) => (
-            <View key={holiday.id} style={styles.blockedSlotCard}>
-              <View style={[styles.blockedSlotInfo, isRTL && styles.rowReverse]}>
-                <View>
-                  <View style={styles.inlineIconRow}>
-                    <Ionicons name="calendar-outline" size={14} color="#6B7280" />
-                    <Text style={styles.blockedDate}>{formatDate(holiday.holiday_date)}</Text>
-                  </View>
-                  {getClinicName(holiday.clinic_id) && (
-                    <View style={styles.inlineIconRow}>
-                      <Ionicons name="business-outline" size={14} color="#9CA3AF" />
-                      <Text style={styles.blockedReason}>{getClinicName(holiday.clinic_id)}</Text>
-                    </View>
-                  )}
-                  {holiday.reason && (
-                    <View style={styles.inlineIconRow}>
-                      <Ionicons name="information-circle-outline" size={14} color="#9CA3AF" />
-                      <Text style={styles.blockedReason}>{holiday.reason}</Text>
-                    </View>
-                  )}
-                </View>
-                <TouchableOpacity style={styles.unblockBtn} onPress={() => handleRemoveHoliday(holiday.id)}>
-                  <Text style={styles.unblockBtnText}>{t.doctorDashboard?.removeHoliday || 'Remove'}</Text>
-                </TouchableOpacity>
-              </View>
-            </View>
-          ))
-        )}
-
         <View style={{ height: 100 }} />
       </ScrollView>
 
@@ -1009,7 +974,14 @@ export default function DoctorClinicsScreen() {
       <Modal visible={showAddClinicModal} transparent animationType="slide">
         <View style={styles.modalOverlay}>
           <View style={styles.modalContent}>
-            <Text style={styles.modalTitle}>{t.doctorDashboard?.addNewClinic || 'Add New Clinic'}</Text>
+            <ModalHero
+              title={t.doctorDashboard?.addNewClinic || 'Add New Clinic'}
+              subtitle={
+                isRTL
+                  ? 'أضف عنوان العيادة والرسوم لتفعيلها في التطبيق.'
+                  : 'Share your clinic address and fees to make it discoverable.'
+              }
+            />
             
             <View style={styles.inputGroup}>
               <Text style={styles.label}>{t.doctorApp?.clinicName || 'Clinic Name'} *</Text>
@@ -1077,7 +1049,14 @@ export default function DoctorClinicsScreen() {
                 contentContainerStyle={{ paddingBottom: 20 }}
                 showsVerticalScrollIndicator={true}
               >
-                <Text style={styles.modalTitle}>{t.common.edit}</Text>
+                <ModalHero
+                  title={t.common.edit}
+                  subtitle={
+                    isRTL
+                      ? 'حدث بيانات العيادة ووسائل التواصل من هنا.'
+                      : 'Refresh clinic details, fees, and contact info.'
+                  }
+                />
 
                 <View style={styles.inputGroup}>
                   <Text style={styles.label}>{t.doctorApp?.clinicName || 'Clinic Name'}</Text>
@@ -1119,7 +1098,7 @@ export default function DoctorClinicsScreen() {
                   type="mobile"
                   label={isRTL ? 'رقم الموبايل' : 'Mobile Number'}
                   placeholder="70 123 456"
-                  icon="📱"
+                  icon="call-outline"
                   isRTL={isRTL}
                 />
 
@@ -1129,7 +1108,7 @@ export default function DoctorClinicsScreen() {
                   type="landline"
                   label={isRTL ? 'رقم أرضي (اختياري)' : 'Landline (Optional)'}
                   placeholder="01 123 456"
-                  icon="☎️"
+                  icon="call-sharp"
                   isRTL={isRTL}
                 />
 
@@ -1168,7 +1147,14 @@ export default function DoctorClinicsScreen() {
         <View style={styles.modalOverlay}>
           <View style={[styles.modalContent, { maxHeight: '85%' }]}>
             <ScrollView keyboardShouldPersistTaps="handled" showsVerticalScrollIndicator={true}>
-              <Text style={styles.modalTitle}>{t.doctorDashboard?.clinicScheduleTitle || 'Clinic Schedule'}</Text>
+              <ModalHero
+                title={t.doctorDashboard?.clinicScheduleTitle || 'Clinic Schedule'}
+                subtitle={
+                  isRTL
+                    ? 'حدد مدة الجلسات وأوقات العمل لتعكس التوفر الحقيقي.'
+                    : 'Set slot duration, working hours, and weekly breaks.'
+                }
+              />
 
               <View style={styles.inputGroup}>
                 <Text style={styles.label}>{t.doctorDashboard?.slotMinutesLabel || 'Slot Minutes'}</Text>
@@ -1357,69 +1343,82 @@ export default function DoctorClinicsScreen() {
       <Modal visible={showBlockTimeModal} transparent animationType="slide">
         <View style={styles.modalOverlay}>
           <View style={[styles.modalContent, { maxHeight: '80%' }]}>
-            <Text style={styles.modalTitle}>{isRTL ? 'حظر وقت' : 'Block Time'}</Text>
+            <ModalHero
+              title={isRTL ? 'حظر وقت' : 'Block Time'}
+              subtitle={
+                isRTL
+                  ? 'حدد العيادة والتاريخ لضمان عدم حجز تلك الفترات.'
+                  : 'Select clinics, dates, and slots to pause bookings.'
+              }
+            />
             
-            <Text style={styles.label}>{t.doctorDashboard?.clinicLabel || 'Clinic'}</Text>
-            {clinics.length === 0 ? (
-              <Text style={styles.emptyText}>
-                {t.doctorDashboard?.noClinicsAvailable || 'No clinics available'}
-              </Text>
-            ) : (
-              <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.daysScroll}>
-                {clinics.map((clinic) => (
-                  <TouchableOpacity
-                    key={clinic.id}
-                    style={[styles.clinicChip, selectedBlockClinicId === clinic.id && styles.clinicChipSelected]}
-                    onPress={() => setSelectedBlockClinicId(clinic.id)}
-                  >
-                    <Text style={[
-                      styles.clinicChipText,
-                      selectedBlockClinicId === clinic.id && styles.clinicChipTextSelected
-                    ]}>
-                      {clinic.clinic_name}
-                    </Text>
-                  </TouchableOpacity>
-                ))}
-              </ScrollView>
-            )}
-            
-            <Text style={styles.label}>{t.doctorDashboard?.dateLabel || 'Date'}</Text>
-            <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.daysScroll}>
-              {getNextDays().map((day) => (
-                <TouchableOpacity
-                  key={day.date}
-                  style={[styles.dayCard, selectedBlockDate === day.date && styles.dayCardSelected]}
-                  onPress={() => setSelectedBlockDate(day.date)}
-                >
-                  <Text style={[styles.dayName, selectedBlockDate === day.date && styles.dayTextSelected]}>{day.dayName}</Text>
-                  <Text style={[styles.dayNumber, selectedBlockDate === day.date && styles.dayTextSelected]}>{day.dayNumber}</Text>
-                </TouchableOpacity>
-              ))}
-            </ScrollView>
-
-            <Text style={[styles.label, { marginTop: 15 }]}>{isRTL ? 'الأوقات' : 'Times'}</Text>
-            <View style={styles.timeSlotsGrid}>
-              {blockSlots.length === 0 ? (
+            <View style={styles.modalSectionCard}>
+              <Text style={styles.modalSectionHeading}>{t.doctorDashboard?.clinicLabel || 'Clinic'}</Text>
+              {clinics.length === 0 ? (
                 <Text style={styles.emptyText}>
-                  {t.doctorDashboard?.noAvailableSlotsForDay || 'No available slots for this day'}
+                  {t.doctorDashboard?.noClinicsAvailable || 'No clinics available'}
                 </Text>
               ) : (
-                blockSlots.map((slot) => (
-                  <TouchableOpacity
-                    key={slot}
-                    style={[styles.timeSlot, selectedBlockSlots.includes(slot) && styles.timeSlotSelected]}
-                    onPress={() => toggleBlockSlot(slot)}
-                  >
-                    <Text style={[styles.timeSlotText, selectedBlockSlots.includes(slot) && styles.timeSlotTextSelected]}>
-                      {formatTime(slot)}
-                    </Text>
-                  </TouchableOpacity>
-                ))
+                <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.daysScroll}>
+                  {clinics.map((clinic) => (
+                    <TouchableOpacity
+                      key={clinic.id}
+                      style={[styles.clinicChip, selectedBlockClinicId === clinic.id && styles.clinicChipSelected]}
+                      onPress={() => setSelectedBlockClinicId(clinic.id)}
+                    >
+                      <Text style={[
+                        styles.clinicChipText,
+                        selectedBlockClinicId === clinic.id && styles.clinicChipTextSelected
+                      ]}>
+                        {clinic.clinic_name}
+                      </Text>
+                    </TouchableOpacity>
+                  ))}
+                </ScrollView>
               )}
             </View>
 
-            <View style={styles.inputGroup}>
-              <Text style={styles.label}>{t.doctorDashboard?.reasonLabel || 'Reason'}</Text>
+            <View style={styles.modalSectionCard}>
+              <Text style={styles.modalSectionHeading}>{t.doctorDashboard?.dateLabel || 'Date'}</Text>
+              <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.daysScroll}>
+                {getNextDays().map((day) => (
+                  <TouchableOpacity
+                    key={day.date}
+                    style={[styles.dayCard, selectedBlockDate === day.date && styles.dayCardSelected]}
+                    onPress={() => setSelectedBlockDate(day.date)}
+                  >
+                    <Text style={[styles.dayName, selectedBlockDate === day.date && styles.dayTextSelected]}>{day.dayName}</Text>
+                    <Text style={[styles.dayNumber, selectedBlockDate === day.date && styles.dayTextSelected]}>{day.dayNumber}</Text>
+                  </TouchableOpacity>
+                ))}
+              </ScrollView>
+            </View>
+
+            <View style={styles.modalSectionCard}>
+              <Text style={styles.modalSectionHeading}>{isRTL ? 'الأوقات' : 'Times'}</Text>
+              <View style={styles.timeSlotsGrid}>
+                {blockSlots.length === 0 ? (
+                  <Text style={styles.emptyText}>
+                    {t.doctorDashboard?.noAvailableSlotsForDay || 'No available slots for this day'}
+                  </Text>
+                ) : (
+                  blockSlots.map((slot) => (
+                    <TouchableOpacity
+                      key={slot}
+                      style={[styles.timeSlot, selectedBlockSlots.includes(slot) && styles.timeSlotSelected]}
+                      onPress={() => toggleBlockSlot(slot)}
+                    >
+                      <Text style={[styles.timeSlotText, selectedBlockSlots.includes(slot) && styles.timeSlotTextSelected]}>
+                        {formatTime(slot)}
+                      </Text>
+                    </TouchableOpacity>
+                  ))
+                )}
+              </View>
+            </View>
+
+            <View style={styles.modalSectionCard}>
+              <Text style={styles.modalSectionHeading}>{t.doctorDashboard?.reasonLabel || 'Reason'}</Text>
               <TextInput
                 style={styles.input}
                 placeholder={isRTL ? 'اختياري...' : 'Optional...'}
@@ -1447,95 +1446,18 @@ export default function DoctorClinicsScreen() {
         </View>
       </Modal>
 
-      {/* Holiday Modal */}
-      <Modal visible={showHolidayModal} transparent animationType="slide">
-        <View style={styles.modalOverlay}>
-          <View style={[styles.modalContent, { maxHeight: '80%' }]}>
-            <Text style={styles.modalTitle}>{t.doctorDashboard?.specialHolidayTitle || 'Add Holiday'}</Text>
-
-            <Text style={styles.label}>{t.doctorDashboard?.clinicLabel || 'Clinics'} ({isRTL ? 'يمكن اختيار أكثر من عيادة' : 'Select one or more'})</Text>
-            {clinics.length === 0 ? (
-              <Text style={styles.emptyText}>
-                {t.doctorDashboard?.noClinicsAvailable || 'No clinics available'}
-              </Text>
-            ) : (
-              <View style={styles.clinicCheckboxGrid}>
-                {clinics.map((clinic) => (
-                  <TouchableOpacity
-                    key={clinic.id}
-                    style={[styles.clinicCheckbox, holidayClinicIds.includes(clinic.id) && styles.clinicCheckboxSelected]}
-                    onPress={() => {
-                      if (holidayClinicIds.includes(clinic.id)) {
-                        setHolidayClinicIds(holidayClinicIds.filter(id => id !== clinic.id));
-                      } else {
-                        setHolidayClinicIds([...holidayClinicIds, clinic.id]);
-                      }
-                    }}
-                  >
-                    <Ionicons 
-                      name={holidayClinicIds.includes(clinic.id) ? 'checkbox' : 'square-outline'} 
-                      size={20} 
-                      color={holidayClinicIds.includes(clinic.id) ? '#2563EB' : '#9CA3AF'} 
-                    />
-                    <Text style={[
-                      styles.clinicCheckboxText,
-                      holidayClinicIds.includes(clinic.id) && styles.clinicCheckboxTextSelected
-                    ]}>
-                      {clinic.clinic_name}
-                    </Text>
-                  </TouchableOpacity>
-                ))}
-              </View>
-            )}
-
-            <Text style={styles.label}>{t.doctorDashboard?.dateLabel || 'Date'}</Text>
-            <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.daysScroll}>
-              {getNextDays(30).map((day) => (
-                <TouchableOpacity
-                  key={day.date}
-                  style={[styles.dayCard, holidayDate === day.date && styles.dayCardSelected]}
-                  onPress={() => setHolidayDate(day.date)}
-                >
-                  <Text style={[styles.dayName, holidayDate === day.date && styles.dayTextSelected]}>{day.dayName}</Text>
-                  <Text style={[styles.dayNumber, holidayDate === day.date && styles.dayTextSelected]}>{day.dayNumber}</Text>
-                </TouchableOpacity>
-              ))}
-            </ScrollView>
-
-            <View style={styles.inputGroup}>
-              <Text style={styles.label}>{t.doctorDashboard?.reasonLabel || 'Reason'}</Text>
-              <TextInput
-                style={styles.input}
-                placeholder={t.doctorDashboard?.publicHolidayExample || 'e.g., National Holiday'}
-                placeholderTextColor="#9CA3AF"
-                value={holidayReason}
-                onChangeText={setHolidayReason}
-              />
-            </View>
-
-            <View style={styles.modalButtons}>
-              <TouchableOpacity style={styles.modalButtonSecondary} onPress={() => setShowHolidayModal(false)}>
-                <Text style={styles.modalButtonSecondaryText}>{t.common.cancel}</Text>
-              </TouchableOpacity>
-              <TouchableOpacity
-                style={[styles.modalButtonPrimary, savingHoliday && styles.buttonDisabled]}
-                onPress={handleAddHoliday}
-                disabled={savingHoliday}
-              >
-                {savingHoliday ? <ActivityIndicator color="white" size="small" /> : (
-                  <Text style={styles.modalButtonPrimaryText}>{t.common.save}</Text>
-                )}
-              </TouchableOpacity>
-            </View>
-          </View>
-        </View>
-      </Modal>
-
       {/* Location Picker Modal */}
       <Modal visible={showLocationPickerModal} transparent animationType="slide">
         <View style={styles.modalOverlay}>
           <View style={styles.modalContent}>
-            <Text style={styles.modalTitle}>{isRTL ? 'اختر موقع العيادة' : 'Select Clinic Location'}</Text>
+            <ModalHero
+              title={isRTL ? 'اختر موقع العيادة' : 'Select Clinic Location'}
+              subtitle={
+                isRTL
+                  ? 'حدد الموقع على الخريطة أو استخدم البحث للحصول على عنوان دقيق.'
+                  : 'Drop a precise map pin or search for the address.'
+              }
+            />
             
             <View style={styles.inputGroup}>
               <Text style={styles.label}>{isRTL ? 'ابحث عن العنوان' : 'Search Address'}</Text>
@@ -1607,142 +1529,185 @@ export default function DoctorClinicsScreen() {
   );
 }
 
+type ModalHeroProps = {
+  title: string;
+  subtitle: string;
+};
+
+const ModalHero = ({ title, subtitle }: ModalHeroProps) => (
+  <LinearGradient
+    colors={[theme.colors.primary, theme.colors.accent]}
+    start={{ x: 0, y: 0 }}
+    end={{ x: 1, y: 1 }}
+    style={styles.modalHero}
+  >
+    <Text style={styles.modalHeroTitle}>{title}</Text>
+    <Text style={styles.modalHeroSubtitle}>{subtitle}</Text>
+  </LinearGradient>
+);
+
 const styles = StyleSheet.create({
-  container: { 
-    flex: 1, 
-    backgroundColor: '#F3F4F6',
-    paddingTop: Platform.OS === 'android' ? StatusBar.currentHeight : 0
+  container: {
+    flex: 1,
+    backgroundColor: theme.colors.background,
+    paddingTop: Platform.OS === 'android' ? StatusBar.currentHeight : 0,
   },
   centered: { justifyContent: 'center', alignItems: 'center' },
-  loadingText: { marginTop: 10, fontSize: 16, color: '#6B7280' },
+  loadingText: { marginTop: 10, fontSize: 16, color: theme.colors.textSecondary },
   textRight: { textAlign: 'right' },
   rowReverse: { flexDirection: 'row-reverse' },
   alignRight: { alignItems: 'flex-end' },
-  
-  content: { flex: 1, padding: 20 },
-  tabHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 15 },
+  content: { flex: 1, padding: theme.spacing.lg },
+
+  heroCardWrapper: { marginBottom: theme.spacing.lg },
+  heroCard: {
+    borderRadius: theme.radii.lg,
+    padding: theme.spacing.lg,
+    ...theme.shadow.card,
+  },
+  heroHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: theme.spacing.md },
+  heroTextGroup: { flex: 1, gap: 6 },
+  heroEyebrow: { color: 'rgba(255,255,255,0.75)', fontSize: 12, letterSpacing: 1, textTransform: 'uppercase' },
+  heroTitle: { color: '#FFFFFF', fontSize: 22, fontWeight: '700', lineHeight: 30 },
+  heroSubtitle: { color: 'rgba(255,255,255,0.9)', fontSize: 14, lineHeight: 20 },
+  heroIconBubble: { width: 56, height: 56, borderRadius: 28, backgroundColor: 'rgba(255,255,255,0.2)', alignItems: 'center', justifyContent: 'center', marginLeft: 16 },
+  heroStatsGrid: { flexDirection: 'row', flexWrap: 'wrap', marginBottom: theme.spacing.md },
+  heroStatCard: { flexBasis: '50%', padding: theme.spacing.sm, borderRadius: theme.radii.md, backgroundColor: 'rgba(255,255,255,0.18)' },
+  heroStatValue: { fontSize: 22, fontWeight: '700', color: '#FFFFFF' },
+  heroStatLabel: { fontSize: 12, color: 'rgba(255,255,255,0.85)', marginTop: 4 },
+  heroCtaRow: { flexDirection: 'row', alignItems: 'center', gap: 10 },
+  heroPrimaryCta: { flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', backgroundColor: 'rgba(255,255,255,0.2)', borderRadius: theme.radii.md, paddingVertical: 12 },
+  heroPrimaryCtaText: { color: '#FFFFFF', fontWeight: '600', marginLeft: 8 },
+  heroSecondaryCta: { flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', backgroundColor: theme.colors.surface, borderRadius: theme.radii.md, paddingVertical: 12 },
+  heroSecondaryCtaText: { color: theme.colors.primary, fontWeight: '600', marginLeft: 8 },
+  ctaTextRtl: { marginLeft: 0, marginRight: 8 },
+
+  tabHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: theme.spacing.md },
   tabActions: { flexDirection: 'row', gap: 8 },
-  tabTitle: { fontSize: 18, fontWeight: '600', color: '#1F2937', marginBottom: 15 },
-  
-  emptyState: { alignItems: 'center', padding: 40, backgroundColor: 'white', borderRadius: 16 },
+  sectionHeadingText: { flex: 1 },
+  tabTitle: { fontSize: 20, fontWeight: '700', color: theme.colors.textPrimary },
+  sectionHint: { fontSize: 13, color: theme.colors.textSecondary, marginTop: 4 },
+
+  emptyState: { alignItems: 'center', padding: theme.spacing.xl, backgroundColor: theme.colors.surface, borderRadius: theme.radii.lg, borderWidth: 1, borderColor: theme.colors.cardBorder, marginBottom: theme.spacing.lg },
   emptyIcon: { fontSize: 50, marginBottom: 15 },
-  emptyTitle: { fontSize: 18, fontWeight: '600', color: '#1F2937', marginBottom: 8 },
-  emptyText: { fontSize: 14, color: '#6B7280', textAlign: 'center' },
-  
-  clinicCard: { backgroundColor: 'white', borderRadius: 12, padding: 15, marginBottom: 10 },
+  emptyTitle: { fontSize: 18, fontWeight: '700', color: theme.colors.textPrimary, marginBottom: 8 },
+  emptyText: { fontSize: 14, color: theme.colors.textSecondary, textAlign: 'center' },
+
+  clinicCard: { backgroundColor: theme.colors.surface, borderRadius: theme.radii.lg, padding: theme.spacing.md, marginBottom: theme.spacing.md, borderWidth: 1, borderColor: theme.colors.cardBorder, ...theme.shadow.card },
   clinicHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
   clinicHeaderLeft: { flexDirection: 'row', alignItems: 'center', gap: 8, flex: 1 },
-  clinicName: { fontSize: 16, fontWeight: '600', color: '#1F2937', flex: 1 },
-  statusBadge: { paddingHorizontal: 10, paddingVertical: 4, borderRadius: 12 },
-  activeBadge: { backgroundColor: '#D1FAE5' },
-  inactiveBadge: { backgroundColor: '#FEF3C7' },
-  statusText: { fontSize: 12, fontWeight: '600', color: '#065F46' },
-  clinicAddress: { fontSize: 13, color: '#6B7280', marginBottom: 5 },
-  clinicFee: { fontSize: 13, color: '#6B7280' },
-  clinicActionRow: { flexDirection: 'row', alignItems: 'center', gap: 10, marginTop: 12 },
-  clinicIconButton: { width: 34, height: 34, borderRadius: 17, backgroundColor: '#EFF6FF', alignItems: 'center', justifyContent: 'center' },
-  clinicIconDanger: { backgroundColor: '#FEE2E2' },
-  clinicIconDisabled: { backgroundColor: '#E5E7EB' },
-  
-  addButton: { backgroundColor: '#2563EB', paddingHorizontal: 15, paddingVertical: 8, borderRadius: 8 },
-  addButtonText: { color: 'white', fontWeight: '600', fontSize: 13 },
-  secondaryButton: { backgroundColor: '#FEF3C7', paddingHorizontal: 15, paddingVertical: 8, borderRadius: 8 },
-  secondaryButtonText: { color: '#92400E', fontWeight: '600', fontSize: 13 },
-  
-  sectionDivider: { height: 1, backgroundColor: '#E5E7EB', marginVertical: 20 },
-  sectionSubtitle: { fontSize: 16, fontWeight: '600', color: '#1F2937', marginBottom: 10 },
-  clinicSubtitle: { fontSize: 14, fontWeight: '600', color: '#1F2937', marginBottom: 8, marginTop: 10 },
-  scheduleInfoText: { fontSize: 13, color: '#6B7280', marginTop: 6 },
-  
-  editScheduleButton: { flexDirection: 'row', alignItems: 'center', gap: 4, backgroundColor: '#EFF6FF', paddingHorizontal: 10, paddingVertical: 6, borderRadius: 8 },
-  editScheduleText: { fontSize: 12, fontWeight: '600', color: '#1E40AF' },
-  
-  scheduleContainer: { marginTop: 8, paddingLeft: 4 },
-  dayScheduleRow: { flexDirection: 'row', justifyContent: 'space-between', paddingVertical: 3 },
-  dayLabel: { fontSize: 13, color: '#6B7280' },
-  dayScheduleText: { fontSize: 13, color: '#374151', textAlign: 'right' },
-  
-  blockedSlotCard: { backgroundColor: 'white', borderRadius: 12, padding: 15, marginBottom: 10 },
-  blockedSlotInfo: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
-  blockedDate: { fontSize: 15, fontWeight: '600', color: '#1F2937' },
-  blockedTime: { fontSize: 14, color: '#6B7280', marginTop: 3 },
-  blockedReason: { fontSize: 13, color: '#9CA3AF', marginTop: 3 },
-  inlineIconRow: { flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 4 },
-  unblockBtn: { backgroundColor: '#FEE2E2', paddingHorizontal: 15, paddingVertical: 8, borderRadius: 8 },
-  unblockBtnText: { color: '#DC2626', fontWeight: '600', fontSize: 13 },
-  
-  modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.6)', justifyContent: 'center', alignItems: 'center', padding: 20 },
-  modalContent: { backgroundColor: 'white', borderRadius: 20, padding: 25, width: '90%', maxWidth: 400 },
-  modalTitle: { fontSize: 20, fontWeight: 'bold', color: '#1F2937', marginBottom: 20, textAlign: 'center' },
-  inputGroup: { marginBottom: 15 },
-  label: { fontSize: 14, fontWeight: '600', color: '#374151', marginBottom: 8 },
-  input: { backgroundColor: '#F9FAFB', borderWidth: 1, borderColor: '#E5E7EB', borderRadius: 10, padding: 12, fontSize: 16 },
-  locationButton: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#F9FAFB', borderWidth: 1, borderColor: '#E5E7EB', borderRadius: 10, padding: 12 },
-  locationIcon: { fontSize: 20, marginRight: 10 },
-  locationText: { flex: 1, fontSize: 14, color: '#1F2937' },
-  locationPlaceholder: { flex: 1, fontSize: 14, color: '#9CA3AF' },
-  modalButtons: { flexDirection: 'row', gap: 10, marginTop: 10 },
-  modalButtonSecondary: { flex: 1, backgroundColor: '#F3F4F6', paddingVertical: 12, borderRadius: 10, alignItems: 'center' },
-  modalButtonSecondaryText: { color: '#374151', fontWeight: '600' },
-  modalButtonPrimary: { flex: 1, backgroundColor: '#2563EB', paddingVertical: 12, borderRadius: 10, alignItems: 'center' },
-  modalButtonPrimaryText: { color: 'white', fontWeight: '600' },
-  buttonDisabled: { opacity: 0.7 },
-  
-  daysScroll: { marginVertical: 10 },
-  dayCard: { width: 60, padding: 10, marginRight: 10, borderRadius: 12, backgroundColor: '#F3F4F6', alignItems: 'center' },
-  dayCardSelected: { backgroundColor: '#2563EB' },
-  dayName: { fontSize: 12, color: '#6B7280' },
-  dayNumber: { fontSize: 18, fontWeight: 'bold', color: '#1F2937', marginTop: 5 },
-  dayTextSelected: { color: 'white' },
+  clinicCardTop: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
+  clinicIdentity: { flexDirection: 'row', alignItems: 'center', flex: 1 },
+  clinicAvatar: { width: 44, height: 44, borderRadius: 22, backgroundColor: theme.colors.primarySoft, justifyContent: 'center', alignItems: 'center', marginRight: 12 },
+  clinicTextGroup: { flex: 1 },
+  clinicName: { fontSize: 17, fontWeight: '700', color: theme.colors.textPrimary },
+  statusPill: { paddingHorizontal: 12, paddingVertical: 6, borderRadius: theme.radii.pill },
+  statusBadge: { paddingHorizontal: 12, paddingVertical: 6, borderRadius: theme.radii.pill },
+  activeBadge: { backgroundColor: 'rgba(34,197,94,0.15)', borderWidth: 1, borderColor: 'rgba(34,197,94,0.3)' },
+  inactiveBadge: { backgroundColor: 'rgba(251,191,36,0.15)', borderWidth: 1, borderColor: 'rgba(251,191,36,0.3)' },
+  statusText: { fontSize: 12, fontWeight: '700', color: theme.colors.success },
+  statusPendingText: { color: theme.colors.warning },
+  clinicAddress: { fontSize: 13, color: theme.colors.textSecondary, marginTop: 4 },
+  clinicFee: { fontSize: 13, color: theme.colors.textSecondary },
+  clinicMetaRow: { flexDirection: 'row', flexWrap: 'wrap', marginTop: theme.spacing.sm, gap: 8 },
+  infoChip: { flexDirection: 'row', alignItems: 'center', borderRadius: theme.radii.pill, paddingHorizontal: 12, paddingVertical: 6, backgroundColor: theme.colors.primarySoft },
+  infoChipText: { fontSize: 12, color: theme.colors.primaryDark, marginLeft: 6 },
+  clinicActionRow: { flexDirection: 'row', justifyContent: 'space-between', marginTop: theme.spacing.md },
+  clinicIconButton: { width: 40, height: 40, borderRadius: 20, backgroundColor: theme.colors.primarySoft, alignItems: 'center', justifyContent: 'center' },
+  clinicIconDanger: { backgroundColor: 'rgba(239,68,68,0.15)' },
+  clinicIconDisabled: { opacity: 0.4 },
+  clinicActionButton: { flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', backgroundColor: theme.colors.elevated, borderRadius: theme.radii.md, paddingVertical: 10, marginHorizontal: 4, borderWidth: 1, borderColor: theme.colors.border },
+  clinicActionLabel: { fontSize: 13, fontWeight: '600', color: theme.colors.textPrimary, marginLeft: 6 },
+  actionTextRtl: { marginLeft: 0, marginRight: 6 },
+  clinicActionDanger: { backgroundColor: 'rgba(239,68,68,0.08)', borderColor: 'rgba(239,68,68,0.2)' },
+  clinicActionDangerText: { color: theme.colors.danger },
 
-  clinicChip: { paddingHorizontal: 12, paddingVertical: 8, marginRight: 10, borderRadius: 20, backgroundColor: '#F3F4F6' },
-  clinicChipSelected: { backgroundColor: '#2563EB' },
-  clinicChipText: { fontSize: 12, color: '#374151', fontWeight: '500' },
-  clinicChipTextSelected: { color: 'white' },
-  
-  clinicCheckboxGrid: { flexDirection: 'column', gap: 10, marginVertical: 10 },
-  clinicCheckbox: { flexDirection: 'row', alignItems: 'center', padding: 12, borderRadius: 10, backgroundColor: '#F9FAFB', borderWidth: 1, borderColor: '#E5E7EB' },
-  clinicCheckboxSelected: { backgroundColor: '#EFF6FF', borderColor: '#2563EB' },
-  clinicCheckboxText: { fontSize: 14, color: '#374151', fontWeight: '500', marginLeft: 10 },
-  clinicCheckboxTextSelected: { color: '#2563EB', fontWeight: '600' },
-  
+  addButton: { flexDirection: 'row', alignItems: 'center', backgroundColor: theme.colors.primary, paddingHorizontal: 16, paddingVertical: 10, borderRadius: theme.radii.md, gap: 6 },
+  addButtonText: { color: '#FFFFFF', fontWeight: '600', fontSize: 14 },
+  sectionDivider: { height: 1, backgroundColor: theme.colors.border, marginVertical: theme.spacing.lg },
+  sectionSubtitle: { fontSize: 16, fontWeight: '700', color: theme.colors.textPrimary, marginBottom: 10 },
+  scheduleInfoText: { fontSize: 13, color: theme.colors.textSecondary, marginTop: 6 },
+
+  editScheduleButton: { flexDirection: 'row', alignItems: 'center', backgroundColor: theme.colors.primarySoft, paddingHorizontal: 12, paddingVertical: 6, borderRadius: theme.radii.md },
+  editScheduleText: { fontSize: 12, fontWeight: '600', color: theme.colors.primaryDark },
+
+  scheduleCard: { backgroundColor: theme.colors.surface, borderRadius: theme.radii.lg, padding: theme.spacing.md, marginBottom: theme.spacing.md, borderWidth: 1, borderColor: theme.colors.cardBorder },
+  scheduleContainer: { marginTop: 8, paddingLeft: 4 },
+  dayScheduleRow: { flexDirection: 'row', justifyContent: 'space-between', paddingVertical: 4 },
+  dayLabel: { fontSize: 13, color: theme.colors.textSecondary },
+  dayScheduleText: { fontSize: 13, color: theme.colors.textPrimary, textAlign: 'right' },
+
+  modalOverlay: { flex: 1, backgroundColor: 'rgba(5, 7, 22, 0.65)', justifyContent: 'center', alignItems: 'center', padding: theme.spacing.lg },
+  modalContent: { backgroundColor: theme.colors.surface, borderRadius: theme.radii.lg, padding: theme.spacing.lg, width: '92%', maxWidth: 420, borderWidth: 1, borderColor: theme.colors.cardBorder },
+  modalHero: { borderRadius: theme.radii.md, padding: theme.spacing.md, marginBottom: theme.spacing.md },
+  modalHeroTitle: { color: '#FFFFFF', fontSize: 18, fontWeight: '700', marginBottom: 6 },
+  modalHeroSubtitle: { color: 'rgba(255,255,255,0.85)', fontSize: 13, lineHeight: 18 },
+  modalTitle: { fontSize: 20, fontWeight: 'bold', color: theme.colors.textPrimary, marginBottom: 20, textAlign: 'center' },
+  inputGroup: { marginBottom: 15 },
+  label: { fontSize: 14, fontWeight: '600', color: theme.colors.textPrimary, marginBottom: 8 },
+  input: { backgroundColor: theme.colors.elevated, borderWidth: 1, borderColor: theme.colors.border, borderRadius: theme.radii.md, padding: 12, fontSize: 16, color: theme.colors.textPrimary },
+  locationButton: { flexDirection: 'row', alignItems: 'center', backgroundColor: theme.colors.elevated, borderWidth: 1, borderColor: theme.colors.border, borderRadius: theme.radii.md, padding: 12 },
+  locationIcon: { fontSize: 20, marginRight: 10 },
+  locationText: { flex: 1, fontSize: 14, color: theme.colors.textPrimary },
+  locationPlaceholder: { flex: 1, fontSize: 14, color: theme.colors.textMuted },
+  modalButtons: { flexDirection: 'row', gap: 10, marginTop: 10 },
+  modalSectionCard: { backgroundColor: theme.colors.elevated, borderRadius: theme.radii.lg, padding: theme.spacing.md, marginTop: theme.spacing.md, borderWidth: 1, borderColor: theme.colors.cardBorder },
+  modalSectionHeading: { fontSize: 12, fontWeight: '700', color: theme.colors.textSecondary, marginBottom: 10, textTransform: 'uppercase', letterSpacing: 0.5 },
+  modalButtonSecondary: { flex: 1, backgroundColor: theme.colors.elevated, paddingVertical: 12, borderRadius: theme.radii.md, alignItems: 'center', borderWidth: 1, borderColor: theme.colors.border },
+  modalButtonSecondaryText: { color: theme.colors.textPrimary, fontWeight: '600' },
+  modalButtonPrimary: { flex: 1, backgroundColor: theme.colors.primary, paddingVertical: 12, borderRadius: theme.radii.md, alignItems: 'center' },
+  modalButtonPrimaryText: { color: '#FFFFFF', fontWeight: '600' },
+  buttonDisabled: { opacity: 0.6 },
+
+  daysScroll: { marginVertical: 10 },
+  dayCard: { width: 64, paddingVertical: 10, paddingHorizontal: 8, marginRight: 10, borderRadius: theme.radii.md, backgroundColor: theme.colors.elevated, alignItems: 'center', borderWidth: 1, borderColor: theme.colors.border },
+  dayCardSelected: { backgroundColor: theme.colors.primary },
+  dayName: { fontSize: 12, color: theme.colors.textSecondary },
+  dayNumber: { fontSize: 18, fontWeight: '700', color: theme.colors.textPrimary, marginTop: 4 },
+  dayTextSelected: { color: '#FFFFFF' },
+
+  clinicChip: { paddingHorizontal: 12, paddingVertical: 8, marginRight: 10, borderRadius: theme.radii.pill, backgroundColor: theme.colors.elevated },
+  clinicChipSelected: { backgroundColor: theme.colors.primary },
+  clinicChipText: { fontSize: 12, color: theme.colors.textPrimary, fontWeight: '500' },
+  clinicChipTextSelected: { color: '#FFFFFF' },
+
   timeSlotsGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginVertical: 10 },
-  timeSlot: { paddingHorizontal: 12, paddingVertical: 8, borderRadius: 8, backgroundColor: '#F3F4F6' },
-  timeSlotSelected: { backgroundColor: '#2563EB' },
-  timeSlotText: { fontSize: 12, color: '#374151', fontWeight: '500' },
-  timeSlotTextSelected: { color: 'white' },
-  
-  helperText: { fontSize: 12, color: '#6B7280', marginTop: 6 },
-  mapContainer: { height: 200, borderRadius: 12, overflow: 'hidden', borderWidth: 1, borderColor: '#E5E7EB', marginTop: 10 },
+  timeSlot: { paddingHorizontal: 12, paddingVertical: 8, borderRadius: theme.radii.md, backgroundColor: theme.colors.elevated, borderWidth: 1, borderColor: theme.colors.border },
+  timeSlotSelected: { backgroundColor: theme.colors.primary, borderColor: theme.colors.primary },
+  timeSlotText: { fontSize: 12, color: theme.colors.textPrimary, fontWeight: '500' },
+  timeSlotTextSelected: { color: '#FFFFFF' },
+
+  helperText: { fontSize: 12, color: theme.colors.textMuted, marginTop: 6 },
+  mapContainer: { height: 200, borderRadius: theme.radii.lg, overflow: 'hidden', borderWidth: 1, borderColor: theme.colors.border, marginTop: 10 },
   mapView: { flex: 1 },
-  mapPlaceholder: { height: 200, alignItems: 'center', justifyContent: 'center', backgroundColor: '#F9FAFB' },
-  locationActionRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 10, marginTop: 12 },
-  locationActionButton: { flex: 1, height: 44, borderRadius: 12, alignItems: 'center', justifyContent: 'center' },
-  locationActionSecondary: { backgroundColor: '#F3F4F6' },
-  locationActionPrimary: { backgroundColor: '#2563EB' },
-  
+  mapPlaceholder: { height: 200, alignItems: 'center', justifyContent: 'center', backgroundColor: theme.colors.elevated },
+  locationActionRow: { flexDirection: 'row', alignItems: 'center', gap: 10, marginTop: 12 },
+  locationActionButton: { flex: 1, height: 44, borderRadius: theme.radii.md, alignItems: 'center', justifyContent: 'center' },
+  locationActionSecondary: { backgroundColor: theme.colors.elevated },
+  locationActionPrimary: { backgroundColor: theme.colors.primary },
+
   scheduleSection: { marginBottom: 15 },
   scheduleRow: { flexDirection: 'row', alignItems: 'center', marginBottom: 8, gap: 8 },
-  scheduleLabel: { fontSize: 12, color: '#6B7280' },
-  scheduleInput: { flex: 1, backgroundColor: 'white', borderWidth: 1, borderColor: '#E5E7EB', borderRadius: 8, paddingVertical: 8, paddingHorizontal: 10, fontSize: 12 },
+  scheduleLabel: { fontSize: 12, color: theme.colors.textSecondary },
+  scheduleInput: { flex: 1, backgroundColor: theme.colors.surface, borderWidth: 1, borderColor: theme.colors.border, borderRadius: theme.radii.md, paddingVertical: 8, paddingHorizontal: 10, fontSize: 12 },
   weeklyOffGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
-  weeklyOffChip: { paddingHorizontal: 12, paddingVertical: 8, borderRadius: 16, backgroundColor: '#F3F4F6' },
-  weeklyOffChipSelected: { backgroundColor: '#F59E0B' },
-  weeklyOffText: { fontSize: 12, color: '#374151', fontWeight: '500' },
-  weeklyOffTextSelected: { color: 'white' },
-  
-  scheduleModeToggle: { flexDirection: 'row', backgroundColor: '#F3F4F6', borderRadius: 10, padding: 4 },
-  scheduleModeOption: { flex: 1, paddingVertical: 10, paddingHorizontal: 16, borderRadius: 8, alignItems: 'center' },
-  scheduleModeOptionActive: { backgroundColor: 'white', shadowColor: '#000', shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.1, shadowRadius: 2, elevation: 2 },
-  scheduleModeText: { fontSize: 14, fontWeight: '500', color: '#6B7280' },
-  scheduleModeTextActive: { color: '#2563EB', fontWeight: '600' },
-  
-  dayScheduleCard: { marginBottom: 16, borderWidth: 1, borderColor: '#E5E7EB', borderRadius: 10, padding: 12, backgroundColor: 'white' },
+  weeklyOffChip: { paddingHorizontal: 12, paddingVertical: 8, borderRadius: theme.radii.pill, backgroundColor: theme.colors.elevated },
+  weeklyOffChipSelected: { backgroundColor: theme.colors.warning },
+  weeklyOffText: { fontSize: 12, color: theme.colors.textPrimary, fontWeight: '500' },
+  weeklyOffTextSelected: { color: '#FFFFFF' },
+
+  scheduleModeToggle: { flexDirection: 'row', backgroundColor: theme.colors.elevated, borderRadius: theme.radii.md, padding: 4 },
+  scheduleModeOption: { flex: 1, paddingVertical: 10, paddingHorizontal: 16, borderRadius: theme.radii.md, alignItems: 'center' },
+  scheduleModeOptionActive: { backgroundColor: theme.colors.surface, ...theme.shadow.card },
+  scheduleModeText: { fontSize: 14, fontWeight: '500', color: theme.colors.textSecondary },
+  scheduleModeTextActive: { color: theme.colors.primary, fontWeight: '700' },
+
+  dayScheduleCard: { marginBottom: 16, borderWidth: 1, borderColor: theme.colors.border, borderRadius: theme.radii.md, padding: 12, backgroundColor: theme.colors.surface },
   dayScheduleHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 },
-  dayScheduleDay: { fontSize: 16, fontWeight: '600', color: '#1F2937' },
-  dayOffToggle: { paddingHorizontal: 12, paddingVertical: 6, borderRadius: 6, backgroundColor: '#10B981', borderWidth: 1, borderColor: '#10B981' },
-  dayOffToggleActive: { backgroundColor: '#EF4444', borderColor: '#EF4444' },
-  dayOffToggleText: { fontSize: 12, fontWeight: '600', color: 'white' },
-  dayOffToggleTextActive: { color: 'white' },
+  dayScheduleDay: { fontSize: 16, fontWeight: '600', color: theme.colors.textPrimary },
+  dayOffToggle: { paddingHorizontal: 12, paddingVertical: 6, borderRadius: 6, backgroundColor: theme.colors.success, borderColor: 'transparent', borderWidth: 1 },
+  dayOffToggleActive: { backgroundColor: theme.colors.danger },
+  dayOffToggleText: { fontSize: 12, fontWeight: '600', color: '#FFFFFF' },
+  dayOffToggleTextActive: { color: '#FFFFFF' },
   dayScheduleInputs: { marginTop: 8 },
 });

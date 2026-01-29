@@ -455,7 +455,7 @@ export default function ApplyAsDoctorScreen() {
                 type="mobile"
                 label="Mobile Number"
                 placeholder="70 123 456"
-                icon="📱"
+                icon="call-outline"
               />
 
               <PhoneInput
@@ -464,7 +464,7 @@ export default function ApplyAsDoctorScreen() {
                 type="landline"
                 label="Landline (Optional)"
                 placeholder="01 123 456"
-                icon="☎️"
+                icon="call-sharp"
               />
 
               <PhoneInput

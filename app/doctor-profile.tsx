@@ -1,10 +1,39 @@
+import { patientTheme } from '@/constants/patientTheme';
 import { useI18n } from '@/lib/i18n';
 import { supabase } from '@/lib/supabase';
 import { Ionicons } from '@expo/vector-icons';
+import { LinearGradient } from 'expo-linear-gradient';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import React, { useEffect, useState } from 'react';
 import { ActivityIndicator, Image, Linking, Platform, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+
+type HeroHighlight = {
+  key: string;
+  icon: keyof typeof Ionicons.glyphMap;
+  label: string;
+  value: string;
+};
+
+type InfoRow = {
+  key: string;
+  icon: keyof typeof Ionicons.glyphMap;
+  label: string;
+  value: string;
+  onPress?: () => void;
+  isLink?: boolean;
+  hint?: string;
+};
+
+type ContactAction = {
+  key: string;
+  label: string;
+  icon: keyof typeof Ionicons.glyphMap;
+  color: string;
+  onPress: () => void;
+};
+
+const theme = patientTheme;
 
 export default function DoctorProfileScreen() {
   const router = useRouter();
@@ -122,9 +151,59 @@ export default function DoctorProfileScreen() {
     { key: 'facebook', label: 'Facebook', iconName: 'logo-facebook', color: '#1877F2', url: buildSocialUrl('facebook', facebook) },
   ].filter(link => link.url);
 
-  const handleOpenLink = (url: string) => {
-    Linking.openURL(url);
-  };
+  const heroHighlights: HeroHighlight[] = (
+    [
+      {
+        key: 'rating',
+        icon: 'star',
+        label: isRTL ? 'التقييم' : 'Rating',
+        value: `${rating} • ${reviews} ${isRTL ? 'تقييم' : 'reviews'}`,
+      },
+      {
+        key: 'experience',
+        icon: 'medal-outline',
+        label: isRTL ? 'الخبرة' : 'Experience',
+        value: experience,
+      },
+      {
+        key: 'fee',
+        icon: 'cash-outline',
+        label: isRTL ? 'الرسوم' : 'Consultation Fee',
+        value: fee,
+      },
+      distance
+        ? {
+            key: 'distance',
+            icon: theme.icons.distance as keyof typeof Ionicons.glyphMap,
+            label: isRTL ? 'المسافة' : 'Distance',
+            value: distance,
+          }
+        : null,
+    ] as (HeroHighlight | null)[]
+  ).filter((highlight): highlight is HeroHighlight => Boolean(highlight && highlight.value));
+
+  const contactActions: ContactAction[] = (
+    [
+      phone
+        ? {
+            key: 'call',
+            label: isRTL ? 'اتصال' : 'Call',
+            icon: 'call-outline',
+            color: theme.colors.primaryDark,
+            onPress: handleCall,
+          }
+        : null,
+      whatsapp
+        ? {
+            key: 'whatsapp',
+            label: 'WhatsApp',
+            icon: 'logo-whatsapp',
+            color: '#25D366',
+            onPress: handleWhatsApp,
+          }
+        : null,
+    ] as (ContactAction | null)[]
+  ).filter((action): action is ContactAction => Boolean(action));
 
   const openMaps = () => {
     const addressParam = params.address as string;
@@ -156,6 +235,42 @@ export default function DoctorProfileScreen() {
     }
   };
 
+  const handleOpenLink = (url: string) => {
+    Linking.openURL(url);
+  };
+
+  const infoRows: InfoRow[] = (
+    [
+      {
+        key: 'clinic',
+        icon: theme.icons.clinic as keyof typeof Ionicons.glyphMap,
+        label: isRTL ? 'العيادة' : 'Clinic',
+        value: clinicName,
+      },
+      {
+        key: 'location',
+        icon: theme.icons.location as keyof typeof Ionicons.glyphMap,
+        label: isRTL ? 'الموقع' : 'Location',
+        value: distance ? `${address} • ${distance}` : address,
+        onPress: openMaps,
+        isLink: true,
+        hint: isRTL ? 'اضغط لفتح الخرائط' : 'Tap to open maps',
+      },
+      {
+        key: 'experience',
+        icon: 'medal-outline',
+        label: isRTL ? 'الخبرة' : 'Experience',
+        value: experience,
+      },
+      {
+        key: 'fee',
+        icon: 'card-outline',
+        label: isRTL ? 'رسوم الاستشارة' : 'Consultation Fee',
+        value: fee,
+      },
+    ] as InfoRow[]
+  ).filter((row) => row.value && row.value.trim().length > 0);
+
   const handleBookAppointment = () => {
     router.push({
       pathname: '/booking',
@@ -176,120 +291,207 @@ export default function DoctorProfileScreen() {
   return (
     <View style={styles.container}>
       <StatusBar style="light" />
-      
-      {/* Header */}
-      <View style={styles.header}>
-        <TouchableOpacity onPress={() => router.back()} style={styles.backButton}>
-          <Text style={styles.backButtonText}>{isRTL ? '→ رجوع' : '← Back'}</Text>
-        </TouchableOpacity>
-        
-        <View style={styles.doctorHeader}>
-          {avatarUrl ? (
-            <Image source={{ uri: avatarUrl }} style={styles.doctorAvatar} />
-          ) : (
-            <Text style={styles.doctorIcon}>{icon}</Text>
-          )}
-          <Text style={styles.doctorName}>{isRTL ? doctorNameAr : doctorName}</Text>
-          <Text style={styles.doctorSpecialty}>{isRTL ? specialtyAr : specialty}</Text>
-          <View style={styles.ratingContainer}>
-            <Text style={styles.rating}>⭐ {rating}</Text>
-            <Text style={styles.reviews}>({reviews} {isRTL ? 'تقييم' : 'reviews'})</Text>
+
+      <ScrollView
+        style={styles.scrollView}
+        contentContainerStyle={styles.scrollContent}
+        showsVerticalScrollIndicator={false}
+      >
+        <View style={styles.heroSection}>
+          <View style={styles.heroShadow}>
+            <LinearGradient
+              colors={[theme.colors.primaryDark, theme.colors.primary]}
+              start={{ x: 0, y: 0 }}
+              end={{ x: 1, y: 1 }}
+              style={styles.heroCard}
+            >
+              <View style={[styles.heroTopRow, isRTL && styles.rowReverse]}>
+                <TouchableOpacity
+                  style={styles.heroNavButton}
+                  onPress={() => router.back()}
+                  accessibilityLabel={isRTL ? 'رجوع' : 'Back'}
+                >
+                  <Ionicons
+                    name={isRTL ? 'arrow-forward' : 'arrow-back'}
+                    size={20}
+                    color={theme.colors.surface}
+                  />
+                </TouchableOpacity>
+
+                <View style={[styles.heroMetaChip, isRTL && styles.rowReverse]}>
+                  <Ionicons
+                    name={theme.icons.location as keyof typeof Ionicons.glyphMap}
+                    size={18}
+                    color={theme.colors.surface}
+                  />
+                  <Text style={[styles.heroMetaText, isRTL && styles.textRight]} numberOfLines={1}>
+                    {distance}
+                  </Text>
+                </View>
+              </View>
+
+              <View style={[styles.heroBody, isRTL && styles.alignEnd]}>
+                <View style={styles.avatarWrapper}>
+                  {avatarUrl ? (
+                    <Image source={{ uri: avatarUrl }} style={styles.heroAvatar} />
+                  ) : (
+                    <Text style={styles.avatarFallback}>{icon}</Text>
+                  )}
+                </View>
+
+                <Text style={[styles.heroName, isRTL && styles.textRight]} numberOfLines={2}>
+                  {isRTL ? doctorNameAr : doctorName}
+                </Text>
+
+                <View style={[styles.heroSpecialtyChip, isRTL && styles.rowReverse]}>
+                  <Ionicons
+                    name={theme.icons.doctor as keyof typeof Ionicons.glyphMap}
+                    size={16}
+                    color={theme.colors.surface}
+                  />
+                  <Text style={[styles.heroSpecialty, isRTL && styles.textRight]}>
+                    {isRTL ? specialtyAr : specialty}
+                  </Text>
+                </View>
+
+                <View style={[styles.heroRatingRow, isRTL && styles.rowReverse]}>
+                  <Ionicons name="star" size={18} color="#FACC15" />
+                  <Text style={styles.heroRatingText}>{rating}</Text>
+                  <Text style={[styles.heroRatingReviews, isRTL && styles.textRight]}>
+                    ({reviews} {isRTL ? 'تقييم' : 'reviews'})
+                  </Text>
+                </View>
+
+                {bio ? (
+                  <Text style={[styles.heroBio, isRTL && styles.textRight]} numberOfLines={4}>
+                    {bio}
+                  </Text>
+                ) : null}
+
+                <View style={[styles.heroClinicChip, isRTL && styles.rowReverse]}>
+                  <Ionicons
+                    name={theme.icons.clinic as keyof typeof Ionicons.glyphMap}
+                    size={16}
+                    color={theme.colors.surface}
+                  />
+                  <Text style={[styles.heroClinicText, isRTL && styles.textRight]} numberOfLines={1}>
+                    {clinicName}
+                  </Text>
+                </View>
+
+                {heroHighlights.length > 0 && (
+                  <View style={styles.heroHighlights}>
+                    {heroHighlights.map((highlight) => (
+                      <View key={highlight.key} style={styles.heroHighlight}>
+                        <View style={styles.heroHighlightIcon}>
+                          <Ionicons name={highlight.icon} size={16} color={theme.colors.surface} />
+                        </View>
+                        <Text style={[styles.heroHighlightLabel, isRTL && styles.textRight]}>
+                          {highlight.label}
+                        </Text>
+                        <Text style={[styles.heroHighlightValue, isRTL && styles.textRight]} numberOfLines={1}>
+                          {highlight.value}
+                        </Text>
+                      </View>
+                    ))}
+                  </View>
+                )}
+              </View>
+            </LinearGradient>
           </View>
-          {bio ? (
-            <Text style={[styles.bioInHeader, isRTL && styles.textRight]}>
-              {bio}
+        </View>
+
+        {infoRows.length > 0 && (
+          <View style={styles.card}>
+            <Text style={[styles.cardTitle, isRTL && styles.textRight]}>
+              {isRTL ? 'معلومات' : 'About'}
             </Text>
-          ) : null}
-        </View>
-      </View>
 
-      <ScrollView style={styles.content} showsVerticalScrollIndicator={false}>
-        {/* About Section */}
-        <View style={styles.card}>
-          <Text style={[styles.cardTitle, isRTL && styles.textRight]}>
-            {isRTL ? 'معلومات' : 'About'}
-          </Text>
-          
-          <View style={[styles.infoRow, isRTL && styles.rowReverse]}>
-            <Text style={styles.infoIcon}>🏥</Text>
-            <View style={[styles.infoText, isRTL && styles.alignRight]}>
-              <Text style={[styles.infoLabel, isRTL && styles.textRight]}>
-                {isRTL ? 'العيادة' : 'Clinic'}
-              </Text>
-              <Text style={[styles.infoValue, isRTL && styles.textRight]}>{clinicName}</Text>
-            </View>
-          </View>
-          
-          <View style={[styles.infoRow, isRTL && styles.rowReverse]}>
-            <Text style={styles.infoIcon}>📍</Text>
-            <View style={[styles.infoText, isRTL && styles.alignRight]}>
-              <Text style={[styles.infoLabel, isRTL && styles.textRight]}>
-                {isRTL ? 'الموقع' : 'Location'}
-              </Text>
-              <TouchableOpacity onPress={openMaps}>
-                <Text style={[styles.infoValue, styles.clickableAddress, isRTL && styles.textRight]}>{address} • {distance}</Text>
+            {infoRows.map((row, index) => (
+              <TouchableOpacity
+                key={row.key}
+                style={[
+                  styles.infoRow,
+                  isRTL && styles.rowReverse,
+                  index === infoRows.length - 1 && styles.infoRowLast,
+                ]}
+                onPress={row.onPress}
+                disabled={!row.onPress}
+                activeOpacity={row.onPress ? 0.85 : 1}
+              >
+                <View style={styles.infoIconWrap}>
+                  <Ionicons name={row.icon} size={18} color={theme.colors.primary} />
+                </View>
+                <View style={[styles.infoTextWrap, isRTL && styles.alignEnd]}>
+                  <Text style={[styles.infoLabel, isRTL && styles.textRight]}>{row.label}</Text>
+                  <Text
+                    style={[styles.infoValue, row.isLink && styles.infoValueInteractive, isRTL && styles.textRight]}
+                    numberOfLines={2}
+                  >
+                    {row.value}
+                  </Text>
+                  {row.hint && (
+                    <Text style={[styles.infoHint, isRTL && styles.textRight]}>
+                      {row.hint}
+                    </Text>
+                  )}
+                </View>
+                {row.isLink && (
+                  <Ionicons
+                    name={isRTL ? 'arrow-back' : 'arrow-forward'}
+                    size={16}
+                    color={theme.colors.textMuted}
+                  />
+                )}
               </TouchableOpacity>
-            </View>
+            ))}
           </View>
-          
-          <View style={[styles.infoRow, isRTL && styles.rowReverse]}>
-            <Text style={styles.infoIcon}>⏰</Text>
-            <View style={[styles.infoText, isRTL && styles.alignRight]}>
-              <Text style={[styles.infoLabel, isRTL && styles.textRight]}>
-                {isRTL ? 'الخبرة' : 'Experience'}
-              </Text>
-              <Text style={[styles.infoValue, isRTL && styles.textRight]}>{experience}</Text>
-            </View>
-          </View>
-          
-          <View style={[styles.infoRow, isRTL && styles.rowReverse]}>
-            <Text style={styles.infoIcon}>💰</Text>
-            <View style={[styles.infoText, isRTL && styles.alignRight]}>
-              <Text style={[styles.infoLabel, isRTL && styles.textRight]}>
-                {isRTL ? 'رسوم الاستشارة' : 'Consultation Fee'}
-              </Text>
-              <Text style={[styles.infoValue, styles.feeText, isRTL && styles.textRight]}>{fee}</Text>
-            </View>
-          </View>
-        </View>
+        )}
 
-        {/* Contact Section */}
-        <View style={styles.card}>
-          <Text style={[styles.cardTitle, isRTL && styles.textRight]}>
-            {isRTL ? 'التواصل' : 'Contact'}
-          </Text>
-          
-          <View style={styles.contactButtons}>
-            {phone && (
-              <TouchableOpacity style={styles.contactButton} onPress={handleCall}>
-                <Ionicons name="call-outline" size={20} color="#1F2937" style={styles.contactButtonIcon} />
-                <Text style={styles.contactButtonText}>{isRTL ? 'اتصال' : 'Call'}</Text>
-              </TouchableOpacity>
-            )}
-            
-            {whatsapp && (
-              <TouchableOpacity style={[styles.contactButton, styles.whatsappButton]} onPress={handleWhatsApp}>
-                <Ionicons name="logo-whatsapp" size={20} color="#25D366" style={styles.contactButtonIcon} />
-                <Text style={styles.contactButtonText}>WhatsApp</Text>
-              </TouchableOpacity>
-            )}
+        {contactActions.length > 0 && (
+          <View style={styles.card}>
+            <Text style={[styles.cardTitle, isRTL && styles.textRight]}>
+              {isRTL ? 'التواصل' : 'Contact'}
+            </Text>
+
+            <View style={[styles.contactRow, isRTL && styles.rowReverse]}>
+              {contactActions.map((action) => (
+                <TouchableOpacity
+                  key={action.key}
+                  style={styles.contactButton}
+                  onPress={action.onPress}
+                >
+                  <View
+                    style={[
+                      styles.contactIconWrap,
+                      action.key === 'whatsapp' && styles.contactIconWhatsapp,
+                    ]}
+                  >
+                    <Ionicons name={action.icon} size={18} color={action.color} />
+                  </View>
+                  <Text style={styles.contactText}>{action.label}</Text>
+                </TouchableOpacity>
+              ))}
+            </View>
           </View>
-        </View>
+        )}
 
         {socialLinks.length > 0 && (
           <View style={styles.card}>
             <Text style={[styles.cardTitle, isRTL && styles.textRight]}>
-              Social Media
+              {isRTL ? 'وسائل التواصل الاجتماعي' : 'Social Media'}
             </Text>
 
-            <View style={styles.socialButtons}>
+            <View style={[styles.socialButtons, isRTL && styles.rowReverseWrap]}>
               {socialLinks.map((link) => (
                 <TouchableOpacity
                   key={link.key}
-                  style={[styles.socialButton, isRTL && styles.rowReverse]}
+                  style={styles.socialButton}
                   onPress={() => handleOpenLink(link.url)}
                 >
-                    <Ionicons name={link.iconName as any} size={20} color={link.color} style={styles.socialIcon} />
+                  <View style={[styles.socialIconWrap, { backgroundColor: `${link.color}22` }]}>
+                    <Ionicons name={link.iconName as keyof typeof Ionicons.glyphMap} size={16} color={link.color} />
+                  </View>
                   <Text style={[styles.socialText, isRTL && styles.textRight]}>{link.label}</Text>
                 </TouchableOpacity>
               ))}
@@ -297,30 +499,25 @@ export default function DoctorProfileScreen() {
           </View>
         )}
 
-
-
-        {/* Working Hours */}
         <View style={styles.card}>
           <Text style={[styles.cardTitle, isRTL && styles.textRight]}>
             {isRTL ? 'ساعات العمل' : 'Working Hours'}
           </Text>
-          
+
           {loadingSchedule ? (
-            <ActivityIndicator size="small" color="#2563EB" style={{ marginVertical: 20 }} />
+            <ActivityIndicator size="small" color={theme.colors.primary} style={styles.scheduleLoader} />
           ) : clinicSchedule ? (
             <>
-              {/* Days with working hours */}
               {['mon', 'tue', 'wed', 'thu', 'fri', 'sat', 'sun'].map((day) => {
                 const isWeeklyOff = clinicSchedule.weekly_off?.includes(day);
-                // Priority: Day-specific schedule > Generic default
                 const daySchedule = clinicSchedule[day];
-                const schedule = (daySchedule && (daySchedule.start || daySchedule.end)) 
-                  ? daySchedule 
+                const schedule = (daySchedule && (daySchedule.start || daySchedule.end))
+                  ? daySchedule
                   : clinicSchedule.default;
-                
+
                 return (
                   <View key={day} style={[styles.scheduleRow, isRTL && styles.rowReverse]}>
-                    <Text style={styles.scheduleDay}>{getDayName(day)}</Text>
+                    <Text style={[styles.scheduleDay, isRTL && styles.textRight]}>{getDayName(day)}</Text>
                     {isWeeklyOff ? (
                       <Text style={[styles.scheduleTime, styles.closedText]}>
                         {isRTL ? 'مغلق' : 'Closed'}
@@ -339,21 +536,35 @@ export default function DoctorProfileScreen() {
               })}
             </>
           ) : (
-            <Text style={[styles.scheduleTime, { textAlign: 'center', paddingVertical: 20 }]}>
+            <Text style={[styles.scheduleEmpty, isRTL && styles.textRight]}>
               {isRTL ? 'لا توجد ساعات عمل محددة' : 'No schedule available'}
             </Text>
           )}
         </View>
 
-        <View style={{ height: 120 }} />
+        <View style={styles.footerSpacer} />
       </ScrollView>
 
-      {/* Fixed Bottom Button */}
       <View style={styles.bottomButton}>
-        <TouchableOpacity style={styles.bookButton} onPress={handleBookAppointment}>
-          <Text style={styles.bookButtonText}>
-            {isRTL ? `حجز موعد • ${fee}` : `Book Appointment • ${fee}`}
-          </Text>
+        <TouchableOpacity activeOpacity={0.9} onPress={handleBookAppointment}>
+          <LinearGradient
+            colors={[theme.colors.primaryDark, theme.colors.primary]}
+            start={{ x: 0, y: 0 }}
+            end={{ x: 1, y: 0 }}
+            style={styles.bookButton}
+          >
+            <View style={[styles.bookButtonContent, isRTL && styles.rowReverse]}>
+              <View style={isRTL ? styles.alignEnd : undefined}>
+                <Text style={[styles.bookButtonLabel, isRTL && styles.textRight]}>
+                  {isRTL ? 'احجز موعداً' : 'Book Appointment'}
+                </Text>
+                <Text style={[styles.bookButtonSub, isRTL && styles.textRight]}>
+                  {isRTL ? 'يشمل رسوم الاستشارة' : 'Includes consultation fee'}
+                </Text>
+              </View>
+              <Text style={styles.bookButtonPrice}>{fee}</Text>
+            </View>
+          </LinearGradient>
         </TouchableOpacity>
       </View>
     </View>
@@ -361,47 +572,209 @@ export default function DoctorProfileScreen() {
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#F3F4F6' },
-  header: { backgroundColor: '#2563EB', paddingTop: 50, paddingBottom: 30, borderBottomLeftRadius: 25, borderBottomRightRadius: 25 },
-  backButton: { paddingHorizontal: 20, paddingVertical: 10 },
-  backButtonText: { color: 'white', fontSize: 16, fontWeight: '600' },
-  doctorHeader: { alignItems: 'center', paddingHorizontal: 20 },
-  doctorIcon: { fontSize: 60, marginBottom: 10 },
-  doctorAvatar: { width: 90, height: 90, borderRadius: 45, marginBottom: 10 },
-  doctorName: { fontSize: 24, fontWeight: 'bold', color: 'white', textAlign: 'center' },
-  doctorSpecialty: { fontSize: 16, color: '#BFDBFE', marginTop: 5 },
-  ratingContainer: { flexDirection: 'row', alignItems: 'center', marginTop: 10 },
-  rating: { fontSize: 16, color: '#FCD34D', fontWeight: '600' },
-  reviews: { fontSize: 14, color: '#BFDBFE', marginLeft: 8 },
-  bioInHeader: { fontSize: 14, color: '#E0E7FF', marginTop: 12, paddingHorizontal: 20, textAlign: 'center', lineHeight: 20 },
-  content: { flex: 1, padding: 20 },
-  card: { backgroundColor: 'white', borderRadius: 16, padding: 20, marginBottom: 15, shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.05, shadowRadius: 3, elevation: 2 },
-  cardTitle: { fontSize: 18, fontWeight: 'bold', color: '#1F2937', marginBottom: 15 },
-  bioText: { fontSize: 15, color: '#4B5563', lineHeight: 24 },
-  textRight: { textAlign: 'right' },
+  container: { flex: 1, backgroundColor: theme.colors.background },
+  scrollView: { flex: 1 },
+  scrollContent: { paddingBottom: 190 },
+  heroSection: { paddingTop: 52, paddingHorizontal: theme.spacing.lg, marginBottom: theme.spacing.lg },
+  heroShadow: {
+    borderRadius: theme.radii.lg + 8,
+    shadowColor: theme.colors.shadow,
+    shadowOffset: { width: 0, height: 16 },
+    shadowOpacity: 0.3,
+    shadowRadius: 28,
+    elevation: 10,
+  },
+  heroCard: { borderRadius: theme.radii.lg + 8, padding: theme.spacing.lg },
+  heroTopRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: theme.spacing.md },
   rowReverse: { flexDirection: 'row-reverse' },
-  alignRight: { alignItems: 'flex-end' },
-  infoRow: { flexDirection: 'row', alignItems: 'flex-start', marginBottom: 15 },
-  infoIcon: { fontSize: 20, marginRight: 15, marginTop: 2 },
-  infoText: { flex: 1 },
-  infoLabel: { fontSize: 13, color: '#6B7280', marginBottom: 2 },
-  infoValue: { fontSize: 15, color: '#1F2937', fontWeight: '500' },
-  clickableAddress: { color: '#2563EB', textDecorationLine: 'underline' },
-  feeText: { color: '#2563EB', fontWeight: 'bold', fontSize: 18 },
-  contactButtons: { flexDirection: 'row', gap: 10 },
-  contactButton: { flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', backgroundColor: '#EFF6FF', padding: 15, borderRadius: 12 },
-  whatsappButton: { backgroundColor: '#D1FAE5' },
-  contactButtonIcon: { marginRight: 8 },
-  contactButtonText: { fontSize: 14, fontWeight: '600', color: '#1F2937' },
-  socialButtons: { flexDirection: 'row', flexWrap: 'wrap', gap: 10 },
-  socialButton: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#F3F4F6', padding: 12, borderRadius: 12 },
-  socialIcon: { marginRight: 8 },
-  socialText: { fontSize: 14, fontWeight: '600', color: '#1F2937' },
-  scheduleRow: { flexDirection: 'row', justifyContent: 'space-between', paddingVertical: 10, borderBottomWidth: 1, borderBottomColor: '#F3F4F6' },
-  scheduleDay: { fontSize: 14, color: '#6B7280' },
-  scheduleTime: { fontSize: 14, color: '#1F2937', fontWeight: '500' },
-  closedText: { color: '#EF4444' },
-  bottomButton: { position: 'absolute', bottom: 0, left: 0, right: 0, backgroundColor: 'white', padding: 20, paddingBottom: 35, shadowColor: '#000', shadowOffset: { width: 0, height: -2 }, shadowOpacity: 0.1, shadowRadius: 3, elevation: 5 },
-  bookButton: { backgroundColor: '#2563EB', padding: 18, borderRadius: 12, alignItems: 'center' },
-  bookButtonText: { color: 'white', fontSize: 18, fontWeight: 'bold' },
+  rowReverseWrap: { flexDirection: 'row-reverse', flexWrap: 'wrap' },
+  heroNavButton: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    backgroundColor: 'rgba(255,255,255,0.18)',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  heroMetaChip: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    borderRadius: theme.radii.pill,
+    backgroundColor: 'rgba(255,255,255,0.2)',
+    maxWidth: '70%',
+  },
+  heroMetaText: { color: theme.colors.surface, fontSize: 13, fontWeight: '600' },
+  heroBody: { gap: 12 },
+  alignEnd: { alignItems: 'flex-end' },
+  textRight: { textAlign: 'right' },
+  avatarWrapper: {
+    width: 96,
+    height: 96,
+    borderRadius: 48,
+    backgroundColor: 'rgba(255,255,255,0.18)',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  heroAvatar: { width: 96, height: 96, borderRadius: 48 },
+  avatarFallback: { fontSize: 48, color: theme.colors.surface },
+  heroName: { fontSize: 26, fontWeight: '700', color: theme.colors.surface },
+  heroSpecialtyChip: {
+    backgroundColor: 'rgba(255,255,255,0.18)',
+    borderRadius: theme.radii.pill,
+    paddingHorizontal: 14,
+    paddingVertical: 6,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  heroSpecialty: { color: theme.colors.surface, fontWeight: '600' },
+  heroRatingRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },
+  heroRatingText: { color: theme.colors.surface, fontSize: 18, fontWeight: '700' },
+  heroRatingReviews: { color: 'rgba(255,255,255,0.85)', fontSize: 13 },
+  heroBio: { color: 'rgba(255,255,255,0.9)', lineHeight: 20 },
+  heroClinicChip: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    backgroundColor: 'rgba(255,255,255,0.12)',
+    borderRadius: theme.radii.md,
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+  },
+  heroClinicText: { color: theme.colors.surface, fontWeight: '600', flex: 1 },
+  heroHighlights: { flexDirection: 'row', flexWrap: 'wrap', marginTop: theme.spacing.sm, marginHorizontal: -4 },
+  heroHighlight: {
+    backgroundColor: 'rgba(255,255,255,0.14)',
+    borderRadius: theme.radii.md,
+    padding: 12,
+    margin: 4,
+    minWidth: '45%',
+    flexGrow: 1,
+  },
+  heroHighlightIcon: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.35)',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 6,
+  },
+  heroHighlightLabel: { color: 'rgba(255,255,255,0.8)', fontSize: 12 },
+  heroHighlightValue: { color: theme.colors.surface, fontSize: 15, fontWeight: '600' },
+  card: {
+    backgroundColor: theme.colors.surface,
+    borderRadius: theme.radii.lg,
+    padding: theme.spacing.lg,
+    marginHorizontal: theme.spacing.lg,
+    marginBottom: theme.spacing.md,
+    shadowColor: theme.colors.shadow,
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.08,
+    shadowRadius: 18,
+    elevation: 4,
+  },
+  cardTitle: { fontSize: theme.typography.title, fontWeight: '700', color: theme.colors.textPrimary, marginBottom: theme.spacing.md },
+  infoRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 14,
+    paddingVertical: 14,
+    borderBottomWidth: 1,
+    borderBottomColor: theme.colors.cardBorder,
+  },
+  infoRowLast: { borderBottomWidth: 0, paddingBottom: 0 },
+  infoIconWrap: {
+    width: 44,
+    height: 44,
+    borderRadius: theme.radii.md,
+    backgroundColor: theme.colors.primarySoft,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  infoTextWrap: { flex: 1 },
+  infoLabel: { fontSize: 13, color: theme.colors.textMuted, marginBottom: 4 },
+  infoValue: { fontSize: 16, color: theme.colors.textPrimary, fontWeight: '600' },
+  infoValueInteractive: { color: theme.colors.primary, textDecorationLine: 'underline' },
+  infoHint: { fontSize: 12, color: theme.colors.textMuted, marginTop: 4 },
+  contactRow: { flexDirection: 'row', gap: 12 },
+  contactButton: {
+    flex: 1,
+    backgroundColor: theme.colors.primarySoft,
+    borderRadius: theme.radii.lg,
+    paddingVertical: theme.spacing.md,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 10,
+  },
+  contactIconWrap: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: 'rgba(41,98,255,0.18)',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  contactIconWhatsapp: { backgroundColor: 'rgba(37,211,102,0.18)' },
+  contactText: { fontSize: 15, fontWeight: '600', color: theme.colors.textPrimary },
+  socialButtons: { flexDirection: 'row', flexWrap: 'wrap', gap: 12 },
+  socialButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    backgroundColor: theme.colors.elevated,
+    paddingVertical: 12,
+    paddingHorizontal: 16,
+    borderRadius: theme.radii.md,
+    flexGrow: 1,
+    minWidth: '45%',
+  },
+  socialIconWrap: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  socialText: { fontSize: 14, fontWeight: '600', color: theme.colors.textPrimary },
+  scheduleLoader: { marginVertical: theme.spacing.md },
+  scheduleRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    paddingVertical: 12,
+    borderBottomWidth: 1,
+    borderBottomColor: theme.colors.cardBorder,
+  },
+  scheduleDay: { fontSize: 14, color: theme.colors.textSecondary },
+  scheduleTime: { fontSize: 14, color: theme.colors.textPrimary, fontWeight: '600' },
+  closedText: { color: theme.colors.danger },
+  scheduleEmpty: { textAlign: 'center', paddingVertical: theme.spacing.lg, color: theme.colors.textSecondary },
+  footerSpacer: { height: 140 },
+  bottomButton: {
+    position: 'absolute',
+    left: 0,
+    right: 0,
+    bottom: Platform.OS === 'ios' ? 28 : 18,
+    backgroundColor: theme.colors.surface,
+    paddingHorizontal: theme.spacing.lg,
+    paddingTop: theme.spacing.md,
+    paddingBottom: theme.spacing.xl + (Platform.OS === 'ios' ? 10 : 4),
+    borderRadius: theme.radii.lg,
+    shadowColor: theme.colors.shadow,
+    shadowOffset: { width: 0, height: -6 },
+    shadowOpacity: 0.18,
+    shadowRadius: 16,
+    elevation: 12,
+    marginHorizontal: theme.spacing.lg,
+  },
+  bookButton: { borderRadius: theme.radii.lg, padding: theme.spacing.lg },
+  bookButtonContent: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', gap: 16 },
+  bookButtonLabel: { color: theme.colors.surface, fontSize: 18, fontWeight: '700' },
+  bookButtonSub: { color: 'rgba(255,255,255,0.85)', fontSize: 13, marginTop: 4 },
+  bookButtonPrice: { color: theme.colors.surface, fontSize: 22, fontWeight: '800' },
 });

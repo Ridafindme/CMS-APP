@@ -1,23 +1,28 @@
+import { patientTheme } from '@/constants/patientTheme';
 import {
-    CountryData,
-    formatAsTyping,
-    fromE164,
-    getPhoneErrorMessage,
-    PhoneType,
-    toE164,
-    validatePhone,
+  CountryData,
+  formatAsTyping,
+  fromE164,
+  getPhoneErrorMessage,
+  PhoneType,
+  toE164,
+  validatePhone,
 } from '@/lib/phone-utils';
 import { supabase } from '@/lib/supabase';
+import { Ionicons } from '@expo/vector-icons';
 import React, { useEffect, useState } from 'react';
 import {
-    ActivityIndicator,
-    Image,
-    ImageSourcePropType,
-    StyleSheet,
-    Text,
-    TextInput,
-    View
+  ActivityIndicator,
+  Image,
+  ImageSourcePropType,
+  StyleSheet,
+  Text,
+  TextInput,
+  View
 } from 'react-native';
+
+type IconName = keyof typeof Ionicons.glyphMap;
+const theme = patientTheme;
 
 type PhoneInputProps = {
   value: string; // E.164 format or local format
@@ -25,7 +30,7 @@ type PhoneInputProps = {
   type?: PhoneType; // 'mobile' | 'landline' | undefined (any)
   placeholder?: string;
   label?: string;
-  icon?: string | ImageSourcePropType; // String emoji or image source
+  icon?: IconName | ImageSourcePropType; // Ionicon name or image source
   isRTL?: boolean;
   error?: string;
   disabled?: boolean;
@@ -37,7 +42,7 @@ export default function PhoneInput({
   type,
   placeholder = '70 123 456',
   label,
-  icon = '📱',
+  icon = 'call-outline' as IconName,
   isRTL = false,
   error: externalError,
   disabled = false,
@@ -113,7 +118,7 @@ export default function PhoneInput({
       <View style={styles.inputGroup}>
         {label && <Text style={[styles.label, isRTL && styles.textRight]}>{label}</Text>}
         <View style={styles.inputWrapper}>
-          <ActivityIndicator size="small" color="#2563EB" />
+          <ActivityIndicator size="small" color={theme.colors.primary} />
         </View>
       </View>
     );
@@ -132,6 +137,7 @@ export default function PhoneInput({
 
   const displayError = externalError || internalError;
   const showCountryCode = type !== 'landline'; // Show for mobile/any, hide for landline
+  const iconColor = disabled ? theme.colors.textSecondary : theme.colors.primary;
 
   return (
     <View style={styles.inputGroup}>
@@ -145,11 +151,19 @@ export default function PhoneInput({
         displayError && styles.inputWrapperError,
         disabled && styles.inputWrapperDisabled,
       ]}>
-        {typeof icon === 'string' ? (
-          <Text style={styles.inputIcon}>{icon}</Text>
-        ) : (
-          <Image source={icon} style={styles.inputIconImage} />
-        )}
+        <View
+          style={[
+            styles.leadingIcon,
+            isRTL && styles.leadingIconRTL,
+            disabled && styles.leadingIconDisabled,
+          ]}
+        >
+          {typeof icon === 'string' ? (
+            <Ionicons name={icon as IconName} size={18} color={iconColor} />
+          ) : (
+            <Image source={icon} style={styles.leadingIconImage} />
+          )}
+        </View>
         
         {showCountryCode && (
           <View style={[styles.countryCode, isRTL && styles.countryCodeRTL]}>
@@ -161,7 +175,7 @@ export default function PhoneInput({
         <TextInput
           style={[styles.input, isRTL && styles.textRight]}
           placeholder={placeholder}
-          placeholderTextColor="#9CA3AF"
+          placeholderTextColor={theme.colors.textMuted}
           value={localValue}
           onChangeText={handleChangeText}
           keyboardType="phone-pad"
@@ -195,7 +209,7 @@ const styles = StyleSheet.create({
   label: {
     fontSize: 14,
     fontWeight: '600',
-    color: '#374151',
+    color: theme.colors.textPrimary,
     marginBottom: 8,
     marginTop: 10,
   },
@@ -205,34 +219,45 @@ const styles = StyleSheet.create({
   inputWrapper: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#F9FAFB',
-    borderRadius: 10,
+    backgroundColor: theme.colors.elevated,
+    borderRadius: theme.radii.md,
     borderWidth: 1,
-    borderColor: '#E5E7EB',
+    borderColor: theme.colors.border,
     paddingHorizontal: 12,
-    paddingVertical: 3,
-    minHeight: 50,
+    paddingVertical: 6,
+    minHeight: 56,
     width: '100%',
   },
   inputWrapperError: {
-    borderColor: '#EF4444',
-    backgroundColor: '#FEF2F2',
+    borderColor: theme.colors.danger,
+    backgroundColor: 'rgba(239,68,68,0.08)',
   },
   inputWrapperDisabled: {
-    backgroundColor: '#F3F4F6',
-    opacity: 0.6,
+    opacity: 0.7,
   },
   rowReverse: {
     flexDirection: 'row-reverse',
   },
-  inputIcon: {
-    fontSize: 18,
-    marginRight: 8,
+  leadingIcon: {
+    width: 44,
+    height: 44,
+    borderRadius: theme.radii.md,
+    backgroundColor: theme.colors.primarySoft,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginRight: 12,
   },
-  inputIconImage: {
-    width: 18,
-    height: 18,
-    marginRight: 8,
+  leadingIconRTL: {
+    marginRight: 0,
+    marginLeft: 12,
+  },
+  leadingIconDisabled: {
+    backgroundColor: theme.colors.elevated,
+  },
+  leadingIconImage: {
+    width: 20,
+    height: 20,
+    resizeMode: 'contain',
   },
   countryCode: {
     flexDirection: 'row',
@@ -240,7 +265,7 @@ const styles = StyleSheet.create({
     paddingRight: 8,
     marginRight: 8,
     borderRightWidth: 1,
-    borderRightColor: '#E5E7EB',
+    borderRightColor: theme.colors.border,
   },
   countryCodeRTL: {
     paddingRight: 0,
@@ -249,7 +274,7 @@ const styles = StyleSheet.create({
     marginLeft: 8,
     borderRightWidth: 0,
     borderLeftWidth: 1,
-    borderLeftColor: '#E5E7EB',
+    borderLeftColor: theme.colors.border,
   },
   countryFlag: {
     fontSize: 16,
@@ -258,23 +283,23 @@ const styles = StyleSheet.create({
   countryCodeText: {
     fontSize: 14,
     fontWeight: '600',
-    color: '#6B7280',
+    color: theme.colors.textSecondary,
   },
   input: {
     flex: 1,
     paddingVertical: 12,
     fontSize: 15,
-    color: '#111827',
+    color: theme.colors.textPrimary,
   },
   errorText: {
     fontSize: 12,
-    color: '#EF4444',
+    color: theme.colors.danger,
     marginTop: 4,
     marginLeft: 5,
   },
   hintText: {
     fontSize: 12,
-    color: '#10B981',
+    color: theme.colors.success,
     marginTop: 4,
     marginLeft: 5,
   },

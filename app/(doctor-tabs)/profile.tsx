@@ -1,4 +1,5 @@
 import PhoneInput from '@/components/ui/phone-input';
+import { patientTheme } from '@/constants/patientTheme';
 import { useAuth } from '@/lib/AuthContext';
 import { useDoctorContext } from '@/lib/DoctorContext';
 import { useI18n } from '@/lib/i18n';
@@ -7,24 +8,28 @@ import { supabase } from '@/lib/supabase';
 import { Ionicons } from '@expo/vector-icons';
 import * as FileSystem from 'expo-file-system/legacy';
 import * as ImagePicker from 'expo-image-picker';
+import { LinearGradient } from 'expo-linear-gradient';
 import { useRouter } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import React, { useEffect, useState } from 'react';
 import {
-    ActivityIndicator,
-    Alert,
-    Image,
-    KeyboardAvoidingView,
-    Modal,
-    Platform,
-    RefreshControl,
-    ScrollView,
-    StyleSheet,
-    Text,
-    TextInput,
-    TouchableOpacity,
-    View
+  ActivityIndicator,
+  Alert,
+  Image,
+  KeyboardAvoidingView,
+  Modal,
+  Platform,
+  RefreshControl,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TextInput,
+  TouchableOpacity,
+  View,
 } from 'react-native';
+
+const theme = patientTheme;
+type IconName = keyof typeof Ionicons.glyphMap;
 
 export default function DoctorProfileScreen() {
   const router = useRouter();
@@ -56,6 +61,105 @@ export default function DoctorProfileScreen() {
   const [editExperienceYears, setEditExperienceYears] = useState('');
   const [editGraduateYear, setEditGraduateYear] = useState('');
   const [editBio, setEditBio] = useState('');
+
+  const doctorDisplayName = isRTL
+    ? profile?.full_name_ar || profile?.full_name || t.profile.notProvided
+    : profile?.full_name || t.profile.notProvided;
+  const doctorSpecialty = isRTL ? doctorData?.specialty_name_ar : doctorData?.specialty_name;
+  const specialtyLabel = doctorSpecialty || t.profile.notProvided;
+  const ratingValue = doctorData?.rating ? doctorData.rating.toFixed(1) : '—';
+  const experienceChip = doctorData?.experience_years
+    ? `${doctorData.experience_years}+ ${isRTL ? 'سنة' : 'yrs'}`
+    : t.profile.notProvided;
+  const reviewChip = `${doctorData?.total_reviews || 0} ${isRTL ? 'مراجعة' : 'reviews'}`;
+  const doctorInitial = doctorDisplayName?.charAt(0)?.toUpperCase() || 'D';
+  const specialtyIcon = doctorData?.specialty_icon || '🩺';
+
+  const quickStats: Array<{ key: string; icon: IconName; label: string; value: string }> = [
+    {
+      key: 'experience',
+      icon: 'briefcase-outline',
+      label: isRTL ? 'الخبرة' : 'Experience',
+      value: doctorData?.experience_years
+        ? `${doctorData.experience_years} ${isRTL ? 'سنة' : 'yrs'}`
+        : t.profile.notProvided,
+    },
+    {
+      key: 'graduate',
+      icon: 'school-outline',
+      label: isRTL ? 'سنة التخرج' : 'Graduate year',
+      value: doctorData?.graduate_year
+        ? String(doctorData.graduate_year)
+        : t.profile.notProvided,
+    },
+    {
+      key: 'reviews',
+      icon: 'chatbubbles-outline',
+      label: isRTL ? 'المراجعات' : 'Reviews',
+      value: `${doctorData?.total_reviews || 0} ${isRTL ? 'تقييم' : 'reviews'}`,
+    },
+  ];
+
+  const infoRows: Array<{ key: string; icon: IconName; label: string; value: string }> = [
+    {
+      key: 'name',
+      icon: 'person-outline',
+      label: t.profile.fullNameLabel,
+      value: doctorDisplayName,
+    },
+    {
+      key: 'email',
+      icon: 'mail-outline',
+      label: t.profile.emailLabel,
+      value: user?.email || t.profile.notProvided,
+    },
+    {
+      key: 'phone',
+      icon: 'call-outline',
+      label: t.profile.phoneLabel,
+      value: profile?.phone || t.profile.notProvided,
+    },
+    {
+      key: 'specialty',
+      icon: 'medkit-outline',
+      label: isRTL ? 'التخصص' : 'Specialty',
+      value: specialtyLabel,
+    },
+    {
+      key: 'experienceYears',
+      icon: 'trophy-outline',
+      label: isRTL ? 'سنوات الخبرة' : 'Experience years',
+      value: doctorData?.experience_years
+        ? `${doctorData.experience_years} ${isRTL ? 'سنة' : 'years'}`
+        : t.profile.notProvided,
+    },
+    {
+      key: 'graduateYear',
+      icon: 'school-outline',
+      label: isRTL ? 'سنة التخرج' : 'Graduate year',
+      value: doctorData?.graduate_year
+        ? String(doctorData.graduate_year)
+        : t.profile.notProvided,
+    },
+    {
+      key: 'bio',
+      icon: 'document-text-outline',
+      label: isRTL ? 'نبذة تعريفية' : 'Bio',
+      value: doctorData?.bio || t.profile.notProvided,
+    },
+    {
+      key: 'instagram',
+      icon: 'logo-instagram',
+      label: 'Instagram',
+      value: doctorData?.instagram || t.profile.notProvided,
+    },
+    {
+      key: 'facebook',
+      icon: 'logo-facebook',
+      label: 'Facebook',
+      value: doctorData?.facebook || t.profile.notProvided,
+    },
+  ];
 
   useEffect(() => {
     if (user) {
@@ -231,178 +335,147 @@ export default function DoctorProfileScreen() {
   return (
     <View style={styles.container}>
       <StatusBar style="light" />
-      
-      {/* Header */}
-      <View style={styles.header}>
-        <View style={styles.headerTopRow}>
-          <View style={styles.languageToggleRow}>
-            <TouchableOpacity
-              style={styles.languageButton}
-              onPress={() => setLanguage(language === 'en' ? 'ar' : 'en')}
-              accessibilityLabel={isRTL ? 'تغيير اللغة' : 'Toggle Language'}
-            >
-              <Ionicons name="globe-outline" size={16} color="#fff" />
-              <Text style={styles.languageButtonText}>{language === 'en' ? 'AR' : 'EN'}</Text>
-            </TouchableOpacity>
-          </View>
-          <TouchableOpacity
-            style={styles.signOutIconButton}
-            onPress={handleSignOut}
-            accessibilityLabel={t.profile.signOut}
-          >
-            <Ionicons name="log-out-outline" size={18} color="#fff" />
-            <Text style={styles.signOutIconButtonText}>{t.profile.signOut}</Text>
-          </TouchableOpacity>
-        </View>
-        
-        <TouchableOpacity 
-          style={styles.switchButton}
-          onPress={() => router.replace('/(patient-tabs)/home')}
-        >
-          <View style={styles.switchButtonContent}>
-            <Ionicons name="person-outline" size={14} color="#fff" />
-            <Text style={styles.switchButtonText}>{t.doctorDashboard?.patientMode || 'Patient Mode'}</Text>
-          </View>
-        </TouchableOpacity>
-
-        <Text style={styles.greeting}>{t.profile.title}</Text>
-      </View>
-
-      <ScrollView 
+      <ScrollView
         style={styles.content}
+        contentContainerStyle={styles.scrollContent}
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={handleRefresh} />}
+        showsVerticalScrollIndicator={false}
       >
-        <View style={styles.profileCard}>
-          <TouchableOpacity style={styles.profileAvatarContainer} onPress={pickImage} disabled={uploadingImage}>
-            {uploadingImage ? (
-              <View style={styles.profileAvatar}>
-                <ActivityIndicator color="#2563EB" />
-              </View>
-            ) : profile?.avatar_url ? (
-              <Image source={{ uri: profile.avatar_url }} style={styles.profileImage} />
-            ) : (
-              <View style={styles.profileAvatar}>
-                <Text style={styles.avatarText}>
-                  {(profile?.full_name || 'D').charAt(0).toUpperCase()}
+        <View style={styles.heroSection}>
+          <LinearGradient
+            colors={[theme.colors.primaryDark, theme.colors.primary]}
+            start={{ x: 0, y: 0 }}
+            end={{ x: 1, y: 1 }}
+            style={[styles.heroCard, isRTL && styles.alignEnd]}
+          >
+            <View style={[styles.heroTopRow, isRTL && styles.rowReverse]}>
+              <TouchableOpacity
+                style={styles.languageButton}
+                onPress={() => setLanguage(language === 'en' ? 'ar' : 'en')}
+                accessibilityLabel={isRTL ? 'تغيير اللغة' : 'Toggle Language'}
+              >
+                <Ionicons name="globe-outline" size={16} color={theme.colors.surface} />
+                <Text style={styles.languageButtonText}>{language === 'en' ? 'AR' : 'EN'}</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={styles.signOutIconButton}
+                onPress={handleSignOut}
+                accessibilityLabel={t.profile.signOut}
+              >
+                <Ionicons name="log-out-outline" size={18} color={theme.colors.surface} />
+                <Text style={styles.signOutIconButtonText}>{t.profile.signOut}</Text>
+              </TouchableOpacity>
+            </View>
+
+            <TouchableOpacity
+              style={[styles.switchButton, isRTL && styles.rowReverse]}
+              onPress={() => router.replace('/(patient-tabs)/home')}
+            >
+              <View style={[styles.switchButtonContent, isRTL && styles.rowReverse]}>
+                <Ionicons name="person-outline" size={16} color={theme.colors.surface} />
+                <Text style={styles.switchButtonText}>
+                  {t.doctorDashboard?.patientMode || 'Patient Mode'}
                 </Text>
               </View>
-            )}
-            <View style={styles.editAvatarBadge}>
-              <Text style={styles.editAvatarIcon}>📷</Text>
+              <Ionicons
+                name={isRTL ? 'arrow-back' : 'arrow-forward'}
+                size={16}
+                color={theme.colors.surface}
+              />
+            </TouchableOpacity>
+
+            <View style={[styles.heroProfileRow, isRTL && styles.rowReverse]}>
+              <TouchableOpacity
+                style={styles.heroAvatarContainer}
+                onPress={pickImage}
+                disabled={uploadingImage}
+              >
+                {uploadingImage ? (
+                  <View style={styles.heroAvatar}>
+                    <ActivityIndicator color={theme.colors.surface} />
+                  </View>
+                ) : profile?.avatar_url ? (
+                  <Image source={{ uri: profile.avatar_url }} style={styles.heroAvatarImage} />
+                ) : (
+                  <View style={styles.heroAvatar}>
+                    <Text style={styles.heroAvatarText}>{doctorInitial}</Text>
+                  </View>
+                )}
+                <View style={styles.editAvatarBadge}>
+                  <Text style={styles.editAvatarIcon}>📷</Text>
+                </View>
+              </TouchableOpacity>
+
+              <View style={isRTL ? styles.alignEnd : undefined}>
+                <Text style={[styles.heroEyebrow, isRTL && styles.textRight]}>
+                  {isRTL ? 'ملف الطبيب' : 'Doctor profile'}
+                </Text>
+                <Text style={[styles.heroName, isRTL && styles.textRight]}>
+                  {isRTL ? `د. ${doctorDisplayName}` : `Dr. ${doctorDisplayName}`}
+                </Text>
+                <Text style={[styles.heroSpecialty, isRTL && styles.textRight]}>
+                  {specialtyIcon} {specialtyLabel}
+                </Text>
+              </View>
             </View>
-          </TouchableOpacity>
-          
-          <Text style={styles.profileName}>
-            {isRTL ? `د. ${profile?.full_name_ar || profile?.full_name}` : `Dr. ${profile?.full_name}`}
-          </Text>
-          <Text style={styles.profileSpecialty}>
-            {doctorData?.specialty_icon} {isRTL ? doctorData?.specialty_name_ar : doctorData?.specialty_name}
-          </Text>
-          
-          <View style={styles.ratingContainer}>
-            <Text style={styles.ratingText}>⭐ {doctorData?.rating?.toFixed(1) || '0.0'}</Text>
-            <Text style={styles.reviewCount}>({doctorData?.total_reviews || 0} reviews)</Text>
+
+            <View style={[styles.heroMetaRow, isRTL && styles.rowReverse]}>
+              <View style={[styles.heroMetaBadge, isRTL && styles.rowReverse]}>
+                <Ionicons name="star" size={14} color={theme.colors.surface} />
+                <Text style={styles.heroMetaText}>{ratingValue}</Text>
+              </View>
+              <View style={[styles.heroMetaBadge, isRTL && styles.rowReverse]}>
+                <Ionicons name="briefcase-outline" size={14} color={theme.colors.surface} />
+                <Text style={styles.heroMetaText}>{experienceChip}</Text>
+              </View>
+              <View style={[styles.heroMetaBadge, isRTL && styles.rowReverse]}>
+                <Ionicons name="chatbubble-ellipses-outline" size={14} color={theme.colors.surface} />
+                <Text style={styles.heroMetaText}>{reviewChip}</Text>
+              </View>
+            </View>
+          </LinearGradient>
+        </View>
+
+        <View style={[styles.statsGrid, isRTL && styles.rowReverse]}>
+          {quickStats.map(stat => (
+            <View key={stat.key} style={styles.statCard}>
+              <View style={styles.statIconWrapper}>
+                <Ionicons name={stat.icon} size={18} color={theme.colors.primary} />
+              </View>
+              <Text style={[styles.statLabel, isRTL && styles.textRight]}>{stat.label}</Text>
+              <Text style={[styles.statValue, isRTL && styles.textRight]}>{stat.value}</Text>
+            </View>
+          ))}
+        </View>
+
+        <View style={styles.sectionCard}>
+          <View style={[styles.sectionHeaderRow, isRTL && styles.rowReverse]}>
+            <Text style={[styles.sectionTitle, isRTL && styles.textRight]}>{t.profile.personalInfo}</Text>
+            <TouchableOpacity onPress={handleOpenEditProfileModal} style={styles.editButton}>
+              <Ionicons name="create-outline" size={18} color={theme.colors.primary} />
+              <Text style={styles.editButtonText}>{t.common.edit}</Text>
+            </TouchableOpacity>
+          </View>
+
+          <View style={styles.infoList}>
+            {infoRows.map((row, index) => (
+              <React.Fragment key={row.key}>
+                <View style={[styles.infoRow, isRTL && styles.rowReverse]}>
+                  <View style={styles.infoIconCircle}>
+                    <Ionicons name={row.icon} size={18} color={theme.colors.primaryDark} />
+                  </View>
+                  <View style={[styles.infoTextGroup, isRTL && styles.alignEnd]}>
+                    <Text style={[styles.infoLabel, isRTL && styles.textRight]}>{row.label}</Text>
+                    <Text style={[styles.infoValue, isRTL && styles.textRight]}>{row.value}</Text>
+                  </View>
+                </View>
+                {index < infoRows.length - 1 && <View style={styles.infoDivider} />}
+              </React.Fragment>
+            ))}
           </View>
         </View>
 
-        <View style={[styles.sectionHeader, isRTL && styles.rowReverse]}>
-          <Text style={[styles.sectionTitle, isRTL && styles.textRight]}>{t.profile.personalInfo}</Text>
-          <TouchableOpacity onPress={handleOpenEditProfileModal} style={styles.editButton}>
-            <Ionicons name="create-outline" size={18} color="#2563EB" />
-            <Text style={styles.editButtonText}>{t.common.edit}</Text>
-          </TouchableOpacity>
-        </View>
-        
-        <View style={[styles.infoCard, isRTL && styles.alignRight]}>
-          <View style={styles.infoRow}>
-            <Text style={[styles.infoLabel, isRTL && styles.textRight]}>{t.profile.fullNameLabel}</Text>
-            <Text style={[styles.infoValue, isRTL && styles.textRight]}>
-              {isRTL ? (profile?.full_name_ar || profile?.full_name || t.profile.notProvided) : (profile?.full_name || t.profile.notProvided)}
-            </Text>
-          </View>
-
-          <View style={styles.infoDivider} />
-
-          <View style={styles.infoRow}>
-            <Text style={[styles.infoLabel, isRTL && styles.textRight]}>{t.profile.emailLabel}</Text>
-            <Text style={[styles.infoValue, isRTL && styles.textRight]}>
-              {user?.email || t.profile.notProvided}
-            </Text>
-          </View>
-
-          <View style={styles.infoDivider} />
-
-          <View style={styles.infoRow}>
-            <Text style={[styles.infoLabel, isRTL && styles.textRight]}>{t.profile.phoneLabel}</Text>
-            <Text style={[styles.infoValue, isRTL && styles.textRight]}>
-              {profile?.phone || t.profile.notProvided}
-            </Text>
-          </View>
-
-          <View style={styles.infoDivider} />
-
-          <View style={styles.infoRow}>
-            <Text style={[styles.infoLabel, isRTL && styles.textRight]}>
-              {isRTL ? 'التخصص' : 'Specialty'}
-            </Text>
-            <Text style={[styles.infoValue, isRTL && styles.textRight]}>
-              {isRTL ? doctorData?.specialty_name_ar : doctorData?.specialty_name}
-            </Text>
-          </View>
-
-          <View style={styles.infoDivider} />
-
-          <View style={styles.infoRow}>
-            <Text style={[styles.infoLabel, isRTL && styles.textRight]}>
-              {isRTL ? 'سنوات الخبرة' : 'Experience Years'}
-            </Text>
-            <Text style={[styles.infoValue, isRTL && styles.textRight]}>
-              {doctorData?.experience_years ? `${doctorData.experience_years} ${isRTL ? 'سنة' : 'years'}` : t.profile.notProvided}
-            </Text>
-          </View>
-
-          <View style={styles.infoDivider} />
-
-          <View style={styles.infoRow}>
-            <Text style={[styles.infoLabel, isRTL && styles.textRight]}>
-              {isRTL ? 'سنة التخرج' : 'Graduate Year'}
-            </Text>
-            <Text style={[styles.infoValue, isRTL && styles.textRight]}>
-              {doctorData?.graduate_year || t.profile.notProvided}
-            </Text>
-          </View>
-
-          <View style={styles.infoDivider} />
-
-          <View style={styles.infoRow}>
-            <Text style={[styles.infoLabel, isRTL && styles.textRight]}>
-              {isRTL ? 'نبذة تعريفية' : 'Bio'}
-            </Text>
-            <Text style={[styles.infoValue, isRTL && styles.textRight]}>
-              {doctorData?.bio || t.profile.notProvided}
-            </Text>
-          </View>
-
-          <View style={styles.infoDivider} />
-
-          <View style={styles.infoRow}>
-            <Text style={[styles.infoLabel, isRTL && styles.textRight]}>Instagram</Text>
-            <Text style={[styles.infoValue, isRTL && styles.textRight]}>
-              {doctorData?.instagram || t.profile.notProvided}
-            </Text>
-          </View>
-
-          <View style={styles.infoDivider} />
-
-          <View style={styles.infoRow}>
-            <Text style={[styles.infoLabel, isRTL && styles.textRight]}>Facebook</Text>
-            <Text style={[styles.infoValue, isRTL && styles.textRight]}>
-              {doctorData?.facebook || t.profile.notProvided}
-            </Text>
-          </View>
-        </View>
-
-        <View style={{ height: 100 }} />
+        <View style={styles.bottomSpacer} />
       </ScrollView>
 
       {/* Avatar Confirm Modal */}
@@ -487,7 +560,7 @@ export default function DoctorProfileScreen() {
                 type="mobile"
                 label={isRTL ? 'رقم الموبايل' : 'Mobile'}
                 placeholder="70 123 456"
-                icon="📱"
+                icon="call-outline"
                 isRTL={isRTL}
               />
 
@@ -586,337 +659,249 @@ export default function DoctorProfileScreen() {
 }
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: '#F3F4F6',
+  container: { flex: 1, backgroundColor: theme.colors.background },
+  centered: { justifyContent: 'center', alignItems: 'center', backgroundColor: theme.colors.background },
+  loadingText: { marginTop: 12, fontSize: 16, color: theme.colors.textSecondary },
+  content: { flex: 1 },
+  scrollContent: { paddingBottom: 160 },
+  heroSection: { paddingHorizontal: theme.spacing.lg, paddingTop: 52 },
+  heroCard: {
+    borderRadius: theme.radii.lg + 8,
+    padding: theme.spacing.lg,
+    shadowColor: theme.colors.shadow,
+    shadowOffset: { width: 0, height: 16 },
+    shadowOpacity: 0.25,
+    shadowRadius: 28,
+    elevation: 10,
+    gap: theme.spacing.md,
   },
-  centered: {
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  loadingText: {
-    marginTop: 12,
-    fontSize: 16,
-    color: '#6B7280',
-  },
-  header: {
-    backgroundColor: '#2563EB',
-    paddingTop: 50,
-    paddingBottom: 20,
-    paddingHorizontal: 20,
-  },
-  headerTopRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: 12,
-  },
-  languageToggleRow: {
-    flex: 1,
-  },
+  heroTopRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
   languageButton: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: 'rgba(255,255,255,0.2)',
-    paddingHorizontal: 10,
-    paddingVertical: 6,
-    borderRadius: 20,
-    alignSelf: 'flex-start',
+    gap: 6,
+    paddingHorizontal: 14,
+    paddingVertical: 8,
+    borderRadius: theme.radii.pill,
+    backgroundColor: 'rgba(255,255,255,0.18)',
   },
-  languageButtonText: {
-    color: '#fff',
-    fontSize: 12,
-    fontWeight: '600',
-    marginLeft: 4,
-  },
+  languageButtonText: { color: theme.colors.surface, fontWeight: '600', fontSize: 12 },
   signOutIconButton: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: 'rgba(255,255,255,0.2)',
-    paddingHorizontal: 10,
-    paddingVertical: 6,
-    borderRadius: 20,
-  },
-  signOutIconButtonText: {
-    color: '#fff',
-    fontSize: 12,
-    fontWeight: '600',
-    marginLeft: 4,
-  },
-  switchButton: {
-    backgroundColor: 'rgba(255,255,255,0.2)',
+    gap: 6,
+    paddingHorizontal: 14,
     paddingVertical: 8,
-    paddingHorizontal: 12,
-    borderRadius: 20,
-    alignSelf: 'flex-start',
-    marginBottom: 12,
+    borderRadius: theme.radii.pill,
+    backgroundColor: 'rgba(255,255,255,0.18)',
   },
-  switchButtonContent: {
+  signOutIconButtonText: { color: theme.colors.surface, fontWeight: '600', fontSize: 12 },
+  switchButton: {
     flexDirection: 'row',
     alignItems: 'center',
+    justifyContent: 'space-between',
+    borderRadius: theme.radii.lg,
+    paddingVertical: 10,
+    paddingHorizontal: 16,
+    backgroundColor: 'rgba(15,23,42,0.18)',
+    marginTop: theme.spacing.sm,
   },
-  switchButtonText: {
-    color: '#fff',
-    fontSize: 12,
-    fontWeight: '600',
-    marginLeft: 6,
-  },
-  greeting: {
-    fontSize: 24,
-    fontWeight: 'bold',
-    color: '#fff',
-    marginBottom: 4,
-  },
-  content: {
-    flex: 1,
-    padding: 20,
-  },
-  profileCard: {
-    backgroundColor: 'white',
-    borderRadius: 16,
-    padding: 24,
-    alignItems: 'center',
-    marginBottom: 20,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
-    elevation: 3,
-  },
-  profileAvatarContainer: {
-    position: 'relative',
-    marginBottom: 16,
-  },
-  profileAvatar: {
-    width: 100,
-    height: 100,
-    borderRadius: 50,
-    backgroundColor: '#2563EB',
+  switchButtonContent: { flexDirection: 'row', alignItems: 'center', gap: 8 },
+  switchButtonText: { color: theme.colors.surface, fontWeight: '600' },
+  heroProfileRow: { flexDirection: 'row', alignItems: 'center', gap: theme.spacing.md },
+  heroAvatarContainer: { position: 'relative' },
+  heroAvatar: {
+    width: 92,
+    height: 92,
+    borderRadius: 46,
+    backgroundColor: 'rgba(255,255,255,0.25)',
     justifyContent: 'center',
     alignItems: 'center',
   },
-  profileImage: {
-    width: 100,
-    height: 100,
-    borderRadius: 50,
+  heroAvatarImage: {
+    width: 92,
+    height: 92,
+    borderRadius: 46,
+    borderWidth: 2,
+    borderColor: 'rgba(255,255,255,0.75)',
   },
-  avatarText: {
-    fontSize: 40,
-    fontWeight: 'bold',
-    color: '#fff',
-  },
+  heroAvatarText: { fontSize: 38, fontWeight: '700', color: theme.colors.surface },
   editAvatarBadge: {
     position: 'absolute',
-    bottom: 0,
-    right: 0,
-    backgroundColor: '#fff',
+    bottom: -2,
+    right: -2,
+    backgroundColor: theme.colors.surface,
     width: 32,
     height: 32,
     borderRadius: 16,
     justifyContent: 'center',
     alignItems: 'center',
     shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
+    shadowOffset: { width: 0, height: 4 },
     shadowOpacity: 0.2,
-    shadowRadius: 3,
+    shadowRadius: 6,
+    elevation: 6,
+  },
+  editAvatarIcon: { fontSize: 16 },
+  heroEyebrow: {
+    color: 'rgba(255,255,255,0.8)',
+    letterSpacing: 0.6,
+    textTransform: 'uppercase',
+    fontSize: 12,
+    marginBottom: 4,
+  },
+  heroName: { color: theme.colors.surface, fontSize: 28, fontWeight: '700' },
+  heroSpecialty: { color: 'rgba(255,255,255,0.85)', fontSize: 16 },
+  heroMetaRow: { flexDirection: 'row', gap: 10, flexWrap: 'wrap' },
+  heroMetaBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: theme.radii.pill,
+    backgroundColor: 'rgba(255,255,255,0.18)',
+  },
+  heroMetaText: { color: theme.colors.surface, fontWeight: '600' },
+  rowReverse: { flexDirection: 'row-reverse' },
+  textRight: { textAlign: 'right' },
+  alignEnd: { alignItems: 'flex-end' },
+  statsGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 12,
+    paddingHorizontal: theme.spacing.lg,
+    marginTop: theme.spacing.lg,
+  },
+  statCard: {
+    flex: 1,
+    minWidth: 150,
+    backgroundColor: theme.colors.surface,
+    borderRadius: theme.radii.md,
+    padding: theme.spacing.md,
+    borderWidth: 1,
+    borderColor: theme.colors.cardBorder,
+    shadowColor: theme.colors.shadow,
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.08,
+    shadowRadius: 18,
     elevation: 4,
   },
-  editAvatarIcon: {
-    fontSize: 16,
-  },
-  profileName: {
-    fontSize: 24,
-    fontWeight: 'bold',
-    color: '#1F2937',
-    marginBottom: 4,
-  },
-  profileSpecialty: {
-    fontSize: 16,
-    color: '#6B7280',
-    marginBottom: 12,
-  },
-  ratingContainer: {
-    flexDirection: 'row',
+  statIconWrapper: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    backgroundColor: theme.colors.primarySoft,
+    justifyContent: 'center',
     alignItems: 'center',
-    gap: 8,
+    marginBottom: 10,
   },
-  ratingText: {
-    fontSize: 18,
-    fontWeight: '600',
-    color: '#1F2937',
+  statLabel: {
+    color: theme.colors.textMuted,
+    fontSize: 12,
+    textTransform: 'uppercase',
+    letterSpacing: 0.6,
   },
-  reviewCount: {
-    fontSize: 14,
-    color: '#9CA3AF',
+  statValue: { color: theme.colors.textPrimary, fontSize: 18, fontWeight: '700', marginTop: 4 },
+  sectionCard: {
+    marginTop: theme.spacing.lg,
+    marginHorizontal: theme.spacing.lg,
+    backgroundColor: theme.colors.surface,
+    borderRadius: theme.radii.lg,
+    padding: theme.spacing.lg,
+    borderWidth: 1,
+    borderColor: theme.colors.cardBorder,
+    shadowColor: theme.colors.shadow,
+    shadowOffset: { width: 0, height: 12 },
+    shadowOpacity: 0.08,
+    shadowRadius: 22,
+    elevation: 5,
   },
-  sectionHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: 12,
-  },
-  sectionTitle: {
-    fontSize: 18,
-    fontWeight: 'bold',
-    color: '#1F2937',
-  },
-  editButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 4,
-  },
-  editButtonText: {
-    fontSize: 14,
-    color: '#2563EB',
-    fontWeight: '600',
-  },
-  infoCard: {
-    backgroundColor: 'white',
-    borderRadius: 12,
-    padding: 16,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.05,
-    shadowRadius: 2,
-    elevation: 2,
-  },
-  infoRow: {
-    paddingVertical: 12,
-  },
-  infoLabel: {
-    fontSize: 13,
-    color: '#6B7280',
-    marginBottom: 4,
-  },
-  infoValue: {
-    fontSize: 15,
-    color: '#1F2937',
-    fontWeight: '500',
-  },
-  infoDivider: {
-    height: 1,
-    backgroundColor: '#E5E7EB',
-  },
-  rowReverse: {
-    flexDirection: 'row-reverse',
-  },
-  textRight: {
-    textAlign: 'right',
-  },
-  alignRight: {
-    alignItems: 'flex-end',
-  },
-  modalOverlay: {
-    flex: 1,
-    backgroundColor: 'rgba(0,0,0,0.5)',
+  sectionHeaderRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: theme.spacing.md },
+  sectionTitle: { fontSize: 20, fontWeight: '700', color: theme.colors.textPrimary },
+  editButton: { flexDirection: 'row', alignItems: 'center', gap: 6 },
+  editButtonText: { color: theme.colors.primary, fontWeight: '600' },
+  infoList: {},
+  infoRow: { flexDirection: 'row', alignItems: 'flex-start', gap: 12, paddingVertical: 14 },
+  infoIconCircle: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: theme.colors.primarySoft,
     justifyContent: 'center',
     alignItems: 'center',
   },
-  modalContent: {
-    backgroundColor: 'white',
-    borderRadius: 16,
-    padding: 24,
-    width: '90%',
-    maxWidth: 400,
+  infoTextGroup: { flex: 1 },
+  infoLabel: {
+    fontSize: 12,
+    color: theme.colors.textMuted,
+    textTransform: 'uppercase',
+    letterSpacing: 0.6,
+  },
+  infoValue: { marginTop: 4, fontSize: 15, color: theme.colors.textPrimary, fontWeight: '600', lineHeight: 20 },
+  infoDivider: { height: 1, backgroundColor: theme.colors.border },
+  bottomSpacer: { height: 120 },
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(5,8,20,0.65)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: theme.spacing.lg,
   },
   avatarConfirmContent: {
-    backgroundColor: 'white',
-    borderRadius: 16,
-    padding: 24,
-    width: '85%',
-    maxWidth: 350,
+    width: '90%',
+    maxWidth: 360,
+    borderRadius: theme.radii.lg,
+    backgroundColor: theme.colors.surface,
+    padding: theme.spacing.lg,
     alignItems: 'center',
   },
-  modalTitle: {
-    fontSize: 20,
-    fontWeight: 'bold',
-    color: '#1F2937',
-    marginBottom: 16,
-  },
-  previewImage: {
-    width: 200,
-    height: 200,
-    borderRadius: 100,
-    marginBottom: 20,
-  },
-  emptyText: {
-    fontSize: 14,
-    color: '#9CA3AF',
-    textAlign: 'center',
-    marginVertical: 20,
-  },
-  modalButtons: {
-    flexDirection: 'row',
-    gap: 12,
-    marginTop: 20,
-  },
+  modalTitle: { fontSize: 20, fontWeight: '700', color: theme.colors.textPrimary, marginBottom: theme.spacing.md },
+  previewImage: { width: 220, height: 220, borderRadius: 110, marginBottom: theme.spacing.md },
+  emptyText: { fontSize: 14, color: theme.colors.textMuted, textAlign: 'center', marginVertical: theme.spacing.md },
+  modalButtons: { flexDirection: 'row', gap: 12, marginTop: theme.spacing.lg, width: '100%' },
   modalButtonSecondary: {
     flex: 1,
-    paddingVertical: 12,
-    paddingHorizontal: 20,
-    borderRadius: 8,
-    backgroundColor: '#F3F4F6',
+    paddingVertical: 14,
+    borderRadius: theme.radii.md,
+    borderWidth: 1,
+    borderColor: theme.colors.cardBorder,
+    backgroundColor: theme.colors.elevated,
     alignItems: 'center',
   },
-  modalButtonSecondaryText: {
-    fontSize: 16,
-    fontWeight: '600',
-    color: '#374151',
-  },
+  modalButtonSecondaryText: { fontSize: 16, fontWeight: '600', color: theme.colors.textPrimary },
   modalButtonPrimary: {
     flex: 1,
-    paddingVertical: 12,
-    paddingHorizontal: 20,
-    borderRadius: 8,
-    backgroundColor: '#2563EB',
+    paddingVertical: 14,
+    borderRadius: theme.radii.md,
+    backgroundColor: theme.colors.primary,
     alignItems: 'center',
   },
-  modalButtonPrimaryText: {
-    fontSize: 16,
-    fontWeight: '600',
-    color: '#fff',
-  },
-  buttonDisabled: {
-    opacity: 0.5,
-  },
-  editProfileModalOverlay: {
-    justifyContent: 'flex-end',
-  },
-  editProfileModalScroll: {
-    maxHeight: '90%',
+  modalButtonPrimaryText: { fontSize: 16, fontWeight: '700', color: theme.colors.surface },
+  buttonDisabled: { opacity: 0.5 },
+  modalContent: {
+    backgroundColor: theme.colors.surface,
+    borderRadius: theme.radii.lg,
+    padding: theme.spacing.lg,
     width: '100%',
+    maxWidth: 420,
   },
-  modalScrollContent: {
-    paddingBottom: 40,
-  },
-  editProfileModalScrollContent: {
-    alignItems: 'center',
-  },
-  editProfileModalContent: {
-    width: '100%',
-    maxHeight: undefined,
-  },
-  inputGroup: {
-    marginBottom: 16,
-  },
-  label: {
-    fontSize: 14,
-    fontWeight: '600',
-    color: '#374151',
-    marginBottom: 6,
-  },
+  editProfileModalOverlay: { justifyContent: 'flex-end' },
+  editProfileModalScroll: { maxHeight: '92%', width: '100%' },
+  modalScrollContent: { paddingBottom: theme.spacing.xl },
+  editProfileModalScrollContent: { alignItems: 'center' },
+  editProfileModalContent: { width: '100%' },
+  inputGroup: { marginBottom: theme.spacing.md },
+  label: { fontSize: 14, fontWeight: '600', color: theme.colors.textSecondary, marginBottom: 6 },
   input: {
-    backgroundColor: '#F9FAFB',
+    backgroundColor: theme.colors.elevated,
     borderWidth: 1,
-    borderColor: '#E5E7EB',
-    borderRadius: 8,
-    paddingHorizontal: 12,
-    paddingVertical: 10,
+    borderColor: theme.colors.border,
+    borderRadius: theme.radii.md,
+    paddingHorizontal: 14,
+    paddingVertical: 12,
     fontSize: 15,
-    color: '#1F2937',
+    color: theme.colors.textPrimary,
   },
-  textArea: {
-    minHeight: 100,
-    paddingTop: 10,
-  },
+  textArea: { minHeight: 110, paddingTop: 12 },
 });

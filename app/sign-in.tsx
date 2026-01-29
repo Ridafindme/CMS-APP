@@ -1,24 +1,30 @@
+import { patientTheme } from '@/constants/patientTheme';
 import { useAuth } from '@/lib/AuthContext';
 import { useI18n } from '@/lib/i18n';
 import { supabase } from '@/lib/supabase';
+import { Ionicons } from '@expo/vector-icons';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { LinearGradient } from 'expo-linear-gradient';
 import { useRouter } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import React, { useEffect, useState } from 'react';
 import {
-    ActivityIndicator,
-    Alert,
-    KeyboardAvoidingView,
-    Platform,
-    ScrollView,
-    StyleSheet,
-    Text,
-    TextInput,
-    TouchableOpacity,
-    View,
+  ActivityIndicator,
+  Alert,
+  KeyboardAvoidingView,
+  Platform,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TextInput,
+  TouchableOpacity,
+  View,
 } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 const SAVED_CREDENTIALS_KEY = '@saved_credentials';
+
+const theme = patientTheme;
 
 type SavedCredential = {
   email: string;
@@ -29,6 +35,7 @@ export default function SignInScreen() {
   const router = useRouter();
   const { signIn } = useAuth();
   const { t, isRTL } = useI18n();
+  const insets = useSafeAreaInsets();
   
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -138,63 +145,79 @@ export default function SignInScreen() {
   };
 
   return (
-    <KeyboardAvoidingView 
-      style={styles.container}
-      behavior={Platform.OS === 'ios' ? 'padding' : 'padding'}
-      keyboardVerticalOffset={0}
-    >
+    <View style={styles.container}>
       <StatusBar style="light" />
-      <ScrollView 
-        contentContainerStyle={styles.scrollContent}
-        keyboardShouldPersistTaps="handled"
-        showsVerticalScrollIndicator={false}
-        bounces={false}
-      >
-        {/* Header */}
-        <View style={styles.header}>
-          <TouchableOpacity 
-            onPress={() => router.back()}
-            style={[styles.backButton, isRTL && styles.alignRight]}
-          >
-            <Text style={styles.backButtonText}>{isRTL ? '→' : '←'} {t.common.back}</Text>
-          </TouchableOpacity>
-          
-          <Text style={styles.icon}>🏥</Text>
-          <Text style={styles.title}>{t.auth.welcomeBack}</Text>
-          <Text style={styles.subtitle}>{t.auth.signInToContinue}</Text>
-        </View>
+      <LinearGradient colors={[theme.colors.primary, theme.colors.primaryDark]} style={styles.gradient} />
 
-        {/* Form */}
-        <View style={styles.formContainer}>
-          {/* Saved Accounts */}
+      <KeyboardAvoidingView
+        style={styles.flex}
+        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+        keyboardVerticalOffset={Platform.OS === 'ios' ? 68 : 0}
+      >
+        <ScrollView
+          contentContainerStyle={[
+            styles.scrollContent,
+            {
+              paddingTop: insets.top + theme.spacing.lg,
+              paddingBottom: insets.bottom + theme.spacing.xl * 2,
+            },
+          ]}
+          keyboardShouldPersistTaps="handled"
+          showsVerticalScrollIndicator={false}
+        >
+          <View style={[styles.headerRow, isRTL && styles.rowReverse]}>
+            <TouchableOpacity onPress={() => router.back()} style={styles.backButton}>
+              <Ionicons name={isRTL ? 'arrow-forward' : 'arrow-back'} size={18} color={theme.colors.textPrimary} />
+            </TouchableOpacity>
+            <View style={[styles.headerTextGroup, isRTL && styles.alignEnd]}>
+              <Text style={styles.headerEyebrow}>{t.auth.signIn}</Text>
+              <Text style={styles.headerTitle}>{t.auth.welcomeBack}</Text>
+              <Text style={[styles.headerSubtitle, isRTL && styles.textRight]}>{t.auth.signInToContinue}</Text>
+            </View>
+          </View>
+
+          <View style={styles.infoBanner}>
+            <View style={styles.infoIconWrap}>
+              <Ionicons name="sparkles-outline" size={20} color={theme.colors.primary} />
+            </View>
+            <View style={styles.infoContent}>
+              <Text style={styles.infoTitle}>{t.auth.signInToContinue}</Text>
+              <Text style={styles.infoSubtitle}>
+                Book visits, chat securely, and keep your treatment plans on track in one place.
+              </Text>
+            </View>
+          </View>
+
           {savedCredentials.length > 0 && (
-            <View style={styles.savedAccountsSection}>
-              <TouchableOpacity 
+            <View style={styles.savedAccountsCard}>
+              <TouchableOpacity
                 style={[styles.savedAccountsHeader, isRTL && styles.rowReverse]}
                 onPress={() => setShowSavedAccounts(!showSavedAccounts)}
               >
-                <Text style={styles.savedAccountsTitle}>📋 {t.auth.recentAccounts}</Text>
-                <Text style={styles.savedAccountsArrow}>
-                  {showSavedAccounts ? '▲' : '▼'}
-                </Text>
+                <View style={[styles.savedAccountsLabel, isRTL && styles.rowReverse]}>
+                  <Ionicons name="albums-outline" size={16} color={theme.colors.primary} />
+                  <Text style={styles.savedAccountsTitle}>{t.auth.recentAccounts}</Text>
+                </View>
+                <Ionicons
+                  name={showSavedAccounts ? 'chevron-up' : 'chevron-down'}
+                  size={18}
+                  color={theme.colors.textSecondary}
+                />
               </TouchableOpacity>
-              
+
               {showSavedAccounts && (
                 <View style={styles.savedAccountsList}>
                   {savedCredentials.map((cred, index) => (
                     <View key={index} style={[styles.savedAccountItem, isRTL && styles.rowReverse]}>
-                      <TouchableOpacity 
+                      <TouchableOpacity
                         style={[styles.savedAccountButton, isRTL && styles.rowReverse]}
                         onPress={() => selectSavedAccount(cred.email)}
                       >
-                        <Text style={styles.savedAccountIcon}>👤</Text>
+                        <Ionicons name="person-circle-outline" size={20} color={theme.colors.primary} />
                         <Text style={styles.savedAccountEmail}>{cred.email}</Text>
                       </TouchableOpacity>
-                      <TouchableOpacity 
-                        onPress={() => removeSavedCredential(cred.email)}
-                        style={styles.removeButton}
-                      >
-                        <Text style={styles.removeButtonText}>✕</Text>
+                      <TouchableOpacity style={styles.removeButton} onPress={() => removeSavedCredential(cred.email)}>
+                        <Ionicons name="close-circle" size={18} color={theme.colors.textMuted} />
                       </TouchableOpacity>
                     </View>
                   ))}
@@ -203,136 +226,383 @@ export default function SignInScreen() {
             </View>
           )}
 
-          <View style={styles.inputGroup}>
-            <Text style={[styles.label, isRTL && styles.textRight]}>{t.auth.email}</Text>
-            <View style={[styles.inputWrapper, isRTL && styles.rowReverse]}>
-              <Text style={styles.inputIcon}>📧</Text>
-              <TextInput
-                style={[styles.input, isRTL && styles.textRight]}
-                placeholder={t.patientSignUp.emailPlaceholder}
-                placeholderTextColor="#9CA3AF"
-                value={email}
-                onChangeText={setEmail}
-                keyboardType="email-address"
-                autoCapitalize="none"
-                autoComplete="email"
-              />
+          <View style={styles.formCard}>
+            <View style={styles.inputGroup}>
+              <Text style={[styles.label, isRTL && styles.textRight]}>{t.auth.email}</Text>
+              <View style={[styles.inputWrapper, isRTL && styles.rowReverse]}>
+                <Ionicons
+                  name="mail-outline"
+                  size={18}
+                  color={theme.colors.primary}
+                  style={[styles.inputIcon, isRTL && styles.iconRTL]}
+                />
+                <TextInput
+                  style={[styles.input, isRTL && styles.textRight]}
+                  placeholder={t.patientSignUp.emailPlaceholder}
+                  placeholderTextColor={theme.colors.textMuted}
+                  value={email}
+                  onChangeText={setEmail}
+                  keyboardType="email-address"
+                  autoCapitalize="none"
+                  autoComplete="email"
+                />
+              </View>
             </View>
-          </View>
 
-          <View style={styles.inputGroup}>
-            <Text style={[styles.label, isRTL && styles.textRight]}>{t.auth.password}</Text>
-            <View style={[styles.inputWrapper, isRTL && styles.rowReverse]}>
-              <Text style={styles.inputIcon}>🔒</Text>
-              <TextInput
-                style={[styles.input, isRTL && styles.textRight]}
-                placeholder={t.patientSignUp.passwordPlaceholder}
-                placeholderTextColor="#9CA3AF"
-                value={password}
-                onChangeText={setPassword}
-                secureTextEntry={!showPassword}
-                autoCapitalize="none"
-              />
-              <TouchableOpacity 
-                onPress={() => setShowPassword(!showPassword)}
-                style={styles.eyeButton}
+            <View style={styles.inputGroup}>
+              <Text style={[styles.label, isRTL && styles.textRight]}>{t.auth.password}</Text>
+              <View style={[styles.inputWrapper, styles.passwordWrapper, isRTL && styles.rowReverse]}>
+                <Ionicons
+                  name="lock-closed-outline"
+                  size={18}
+                  color={theme.colors.primary}
+                  style={[styles.inputIcon, isRTL && styles.iconRTL]}
+                />
+                <TextInput
+                  style={[styles.input, styles.passwordInput, isRTL && styles.textRight]}
+                  placeholder={t.patientSignUp.passwordPlaceholder}
+                  placeholderTextColor={theme.colors.textMuted}
+                  value={password}
+                  onChangeText={setPassword}
+                  secureTextEntry={!showPassword}
+                  autoCapitalize="none"
+                  multiline={false}
+                  numberOfLines={1}
+                  textAlignVertical="center"
+                />
+                <TouchableOpacity style={styles.eyeButton} onPress={() => setShowPassword(!showPassword)}>
+                  <Ionicons
+                    name={showPassword ? 'eye-off-outline' : 'eye-outline'}
+                    size={18}
+                    color={theme.colors.textSecondary}
+                  />
+                </TouchableOpacity>
+              </View>
+            </View>
+
+            <View style={[styles.optionsRow, isRTL && styles.rowReverse]}>
+              <TouchableOpacity
+                style={[styles.rememberMeContainer, isRTL && styles.rowReverse]}
+                onPress={() => setRememberMe(!rememberMe)}
               >
-                <Text style={styles.eyeIcon}>{showPassword ? '👁️' : '👁️‍🗨️'}</Text>
+                <View style={[styles.checkbox, rememberMe && styles.checkboxChecked]}>
+                  {rememberMe && <Ionicons name="checkmark" size={14} color={theme.colors.surface} />}
+                </View>
+                <Text style={styles.rememberMeText}>{t.auth.rememberMe}</Text>
+              </TouchableOpacity>
+
+              <TouchableOpacity>
+                <Text style={styles.forgotPasswordText}>{t.auth.forgotPassword}</Text>
               </TouchableOpacity>
             </View>
-          </View>
 
-          {/* Remember Me & Forgot Password Row */}
-          <View style={[styles.optionsRow, isRTL && styles.rowReverse]}>
-            <TouchableOpacity 
-              style={[styles.rememberMeContainer, isRTL && styles.rowReverse]}
-              onPress={() => setRememberMe(!rememberMe)}
+            <TouchableOpacity
+              style={[styles.signInButton, loading && styles.buttonDisabled]}
+              onPress={handleSignIn}
+              disabled={loading}
             >
-              <View style={[styles.checkbox, rememberMe && styles.checkboxChecked]}>
-                {rememberMe && <Text style={styles.checkmark}>✓</Text>}
-              </View>
-              <Text style={styles.rememberMeText}>{t.auth.rememberMe}</Text>
+              {loading ? (
+                <ActivityIndicator color={theme.colors.surface} />
+              ) : (
+                <View style={styles.buttonContent}>
+                  <Text style={styles.signInButtonText}>{t.auth.signIn}</Text>
+                  <Ionicons name="arrow-forward" size={18} color={theme.colors.surface} />
+                </View>
+              )}
             </TouchableOpacity>
-            
-            <TouchableOpacity>
-              <Text style={styles.forgotPasswordText}>{t.auth.forgotPassword}</Text>
+
+            <View style={styles.dividerRow}>
+              <View style={styles.dividerLine} />
+              <Text style={styles.dividerText}>{t.auth.noAccount}</Text>
+              <View style={styles.dividerLine} />
+            </View>
+
+            <TouchableOpacity style={styles.secondaryButton} onPress={() => router.push('/sign-up-patient')}>
+              <Text style={styles.secondaryButtonText}>{t.auth.createAccount}</Text>
             </TouchableOpacity>
           </View>
-
-          <TouchableOpacity 
-            style={[styles.signInButton, loading && styles.buttonDisabled]}
-            onPress={handleSignIn}
-            disabled={loading}
-          >
-            {loading ? (
-              <ActivityIndicator color="white" />
-            ) : (
-              <Text style={styles.signInButtonText}>{t.auth.signIn}</Text>
-            )}
-          </TouchableOpacity>
-
-          <View style={styles.divider}>
-            <View style={styles.dividerLine} />
-            <Text style={styles.dividerText}>{t.auth.noAccount}</Text>
-            <View style={styles.dividerLine} />
-          </View>
-
-          <TouchableOpacity 
-            style={styles.signUpButton}
-            onPress={() => router.push('/sign-up-patient')}
-          >
-            <Text style={styles.signUpButtonText}>{t.auth.createAccount}</Text>
-          </TouchableOpacity>
-        </View>
-      </ScrollView>
-    </KeyboardAvoidingView>
+        </ScrollView>
+      </KeyboardAvoidingView>
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#2563EB' },
-  scrollContent: { flexGrow: 1, paddingBottom: 40 },
-  header: { paddingTop: 50, paddingHorizontal: 20, paddingBottom: 30, alignItems: 'center' },
-  backButton: { alignSelf: 'flex-start', marginBottom: 20 },
-  alignRight: { alignSelf: 'flex-end' },
-  backButtonText: { color: 'white', fontSize: 16, fontWeight: '600' },
-  icon: { fontSize: 60, marginBottom: 15 },
-  title: { fontSize: 28, fontWeight: 'bold', color: 'white', marginBottom: 8 },
-  subtitle: { fontSize: 16, color: '#BFDBFE' },
-  formContainer: { flex: 1, backgroundColor: 'white', borderTopLeftRadius: 30, borderTopRightRadius: 30, padding: 25, paddingTop: 25, paddingBottom: 50 },
-  rowReverse: { flexDirection: 'row-reverse' },
-  textRight: { textAlign: 'right' },
-  savedAccountsSection: { marginBottom: 20, backgroundColor: '#F9FAFB', borderRadius: 12, overflow: 'hidden' },
-  savedAccountsHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', padding: 15 },
-  savedAccountsTitle: { fontSize: 14, fontWeight: '600', color: '#374151' },
-  savedAccountsArrow: { fontSize: 12, color: '#6B7280' },
-  savedAccountsList: { borderTopWidth: 1, borderTopColor: '#E5E7EB' },
-  savedAccountItem: { flexDirection: 'row', alignItems: 'center', borderBottomWidth: 1, borderBottomColor: '#E5E7EB' },
-  savedAccountButton: { flex: 1, flexDirection: 'row', alignItems: 'center', padding: 12, paddingLeft: 15 },
-  savedAccountIcon: { fontSize: 18, marginRight: 10 },
-  savedAccountEmail: { fontSize: 14, color: '#2563EB' },
-  removeButton: { padding: 12, paddingRight: 15 },
-  removeButtonText: { fontSize: 14, color: '#9CA3AF' },
-  inputGroup: { marginBottom: 18 },
-  label: { fontSize: 14, fontWeight: '600', color: '#374151', marginBottom: 8 },
-  inputWrapper: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#F9FAFB', borderRadius: 12, borderWidth: 1, borderColor: '#E5E7EB', paddingHorizontal: 15 },
-  inputIcon: { fontSize: 20, marginRight: 10 },
-  input: { flex: 1, paddingVertical: 15, fontSize: 16, color: '#1F2937' },
-  eyeButton: { padding: 5 },
-  eyeIcon: { fontSize: 20 },
-  optionsRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 25 },
-  rememberMeContainer: { flexDirection: 'row', alignItems: 'center' },
-  checkbox: { width: 22, height: 22, borderRadius: 6, borderWidth: 2, borderColor: '#D1D5DB', marginRight: 10, justifyContent: 'center', alignItems: 'center' },
-  checkboxChecked: { backgroundColor: '#2563EB', borderColor: '#2563EB' },
-  checkmark: { color: 'white', fontSize: 12, fontWeight: 'bold' },
-  rememberMeText: { fontSize: 14, color: '#374151' },
-  forgotPasswordText: { color: '#2563EB', fontSize: 14, fontWeight: '600' },
-  signInButton: { backgroundColor: '#2563EB', padding: 18, borderRadius: 12, alignItems: 'center', marginBottom: 25 },
-  buttonDisabled: { opacity: 0.7 },
-  signInButtonText: { color: 'white', fontSize: 18, fontWeight: '600' },
-  divider: { flexDirection: 'row', alignItems: 'center', marginBottom: 25 },
-  dividerLine: { flex: 1, height: 1, backgroundColor: '#E5E7EB' },
-  dividerText: { color: '#9CA3AF', paddingHorizontal: 15, fontSize: 14 },
-  signUpButton: { backgroundColor: '#F3F4F6', padding: 18, borderRadius: 12, alignItems: 'center' },
-  signUpButtonText: { color: '#374151', fontSize: 16, fontWeight: '600' },
+  container: {
+    flex: 1,
+    backgroundColor: theme.colors.background,
+  },
+  flex: {
+    flex: 1,
+  },
+  gradient: {
+    ...StyleSheet.absoluteFillObject,
+  },
+  scrollContent: {
+    flexGrow: 1,
+    paddingHorizontal: theme.spacing.lg,
+    gap: theme.spacing.lg,
+  },
+  headerRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: theme.spacing.md,
+  },
+  rowReverse: {
+    flexDirection: 'row-reverse',
+  },
+  textRight: {
+    textAlign: 'right',
+  },
+  alignEnd: {
+    alignItems: 'flex-end',
+  },
+  backButton: {
+    width: 44,
+    height: 44,
+    borderRadius: theme.radii.md,
+    backgroundColor: theme.colors.surface,
+    justifyContent: 'center',
+    alignItems: 'center',
+    borderWidth: 1,
+    borderColor: theme.colors.cardBorder,
+  },
+  headerTextGroup: {
+    flex: 1,
+    gap: 4,
+  },
+  headerEyebrow: {
+    fontSize: 12,
+    letterSpacing: 1,
+    textTransform: 'uppercase',
+    color: theme.colors.textMuted,
+  },
+  headerTitle: {
+    fontSize: 26,
+    fontWeight: '700',
+    color: theme.colors.surface,
+  },
+  headerSubtitle: {
+    fontSize: 14,
+    color: theme.colors.surface,
+    opacity: 0.85,
+  },
+  infoBanner: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    backgroundColor: theme.colors.surface,
+    borderRadius: theme.radii.lg,
+    padding: theme.spacing.md,
+    gap: theme.spacing.md,
+    borderWidth: 1,
+    borderColor: theme.colors.cardBorder,
+  },
+  infoIconWrap: {
+    width: 44,
+    height: 44,
+    borderRadius: theme.radii.md,
+    backgroundColor: theme.colors.primarySoft,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  infoContent: {
+    flex: 1,
+    gap: 4,
+  },
+  infoTitle: {
+    fontSize: 16,
+    fontWeight: '700',
+    color: theme.colors.textPrimary,
+  },
+  infoSubtitle: {
+    fontSize: 13,
+    color: theme.colors.textSecondary,
+  },
+  savedAccountsCard: {
+    backgroundColor: theme.colors.surface,
+    borderRadius: theme.radii.lg,
+    padding: theme.spacing.md,
+    gap: theme.spacing.sm,
+    borderWidth: 1,
+    borderColor: theme.colors.cardBorder,
+  },
+  savedAccountsHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  savedAccountsLabel: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: theme.spacing.sm,
+  },
+  savedAccountsTitle: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: theme.colors.textPrimary,
+  },
+  savedAccountsList: {
+    gap: theme.spacing.xs,
+  },
+  savedAccountItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingVertical: theme.spacing.xs,
+    borderBottomWidth: 1,
+    borderColor: theme.colors.border,
+  },
+  savedAccountButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: theme.spacing.sm,
+    flex: 1,
+  },
+  savedAccountEmail: {
+    fontSize: 14,
+    color: theme.colors.primary,
+    fontWeight: '600',
+  },
+  removeButton: {
+    padding: theme.spacing.xs,
+  },
+  formCard: {
+    backgroundColor: theme.colors.surface,
+    borderRadius: theme.radii.lg,
+    padding: theme.spacing.lg,
+    gap: theme.spacing.md,
+    borderWidth: 1,
+    borderColor: theme.colors.cardBorder,
+    shadowColor: theme.colors.shadow,
+    shadowOpacity: 0.08,
+    shadowOffset: { width: 0, height: 10 },
+    shadowRadius: 24,
+    elevation: 5,
+  },
+  inputGroup: {
+    gap: 6,
+  },
+  label: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: theme.colors.textSecondary,
+  },
+  inputWrapper: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: theme.colors.elevated,
+    borderRadius: theme.radii.md,
+    borderWidth: 1,
+    borderColor: theme.colors.border,
+    paddingHorizontal: theme.spacing.md,
+    minHeight: 52,
+  },
+  passwordWrapper: {
+    minHeight: 52,
+    maxHeight: 52,
+  },
+  inputIcon: {
+    marginRight: theme.spacing.sm,
+  },
+  iconRTL: {
+    marginRight: 0,
+    marginLeft: theme.spacing.sm,
+  },
+  input: {
+    flex: 1,
+    fontSize: 15,
+    color: theme.colors.textPrimary,
+    paddingVertical: 10,
+  },
+  passwordInput: {
+    paddingVertical: 0,
+    height: 52,
+    includeFontPadding: false,
+    textAlignVertical: 'center',
+  },
+  eyeButton: {
+    paddingHorizontal: 4,
+    height: '100%',
+    justifyContent: 'center',
+  },
+  optionsRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  rememberMeContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: theme.spacing.sm,
+  },
+  checkbox: {
+    width: 22,
+    height: 22,
+    borderRadius: theme.radii.sm,
+    borderWidth: 1.5,
+    borderColor: theme.colors.border,
+    justifyContent: 'center',
+    alignItems: 'center',
+    backgroundColor: theme.colors.surface,
+  },
+  checkboxChecked: {
+    backgroundColor: theme.colors.primary,
+    borderColor: theme.colors.primary,
+  },
+  rememberMeText: {
+    fontSize: 13,
+    color: theme.colors.textSecondary,
+  },
+  forgotPasswordText: {
+    color: theme.colors.primary,
+    fontWeight: '600',
+    fontSize: 13,
+  },
+  signInButton: {
+    backgroundColor: theme.colors.primary,
+    borderRadius: theme.radii.lg,
+    paddingVertical: theme.spacing.md,
+    alignItems: 'center',
+  },
+  buttonDisabled: {
+    opacity: 0.6,
+  },
+  buttonContent: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: theme.spacing.sm,
+  },
+  signInButtonText: {
+    color: theme.colors.surface,
+    fontSize: 16,
+    fontWeight: '600',
+  },
+  dividerRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: theme.spacing.sm,
+  },
+  dividerLine: {
+    flex: 1,
+    height: 1,
+    backgroundColor: theme.colors.border,
+  },
+  dividerText: {
+    color: theme.colors.textMuted,
+    fontSize: 12,
+    fontWeight: '600',
+  },
+  secondaryButton: {
+    borderRadius: theme.radii.lg,
+    borderWidth: 1,
+    borderColor: theme.colors.border,
+    paddingVertical: theme.spacing.md,
+    alignItems: 'center',
+    backgroundColor: theme.colors.elevated,
+  },
+  secondaryButtonText: {
+    color: theme.colors.textPrimary,
+    fontSize: 15,
+    fontWeight: '600',
+  },
 });

@@ -1,6 +1,8 @@
+import { patientTheme } from '@/constants/patientTheme';
 import { useAuth } from '@/lib/AuthContext';
 import { useI18n } from '@/lib/i18n';
 import { supabase } from '@/lib/supabase';
+import { Ionicons } from '@expo/vector-icons';
 import * as Location from 'expo-location';
 import { useRouter } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
@@ -61,6 +63,8 @@ type UserLocation = {
   latitude: number;
   longitude: number;
 };
+
+const theme = patientTheme;
 
 export default function PatientHomeTab() {
   const router = useRouter();
@@ -315,14 +319,15 @@ export default function PatientHomeTab() {
     return t.home.goodEvening;
   };
 
-  const getUserName = () => {
-    if (isRTL && profile?.full_name_ar) {
-      return profile.full_name_ar.split(' ')[0];
+  const getDisplayName = () => {
+    const englishName = profile?.full_name?.trim();
+    const arabicName = profile?.full_name_ar?.trim();
+
+    if (language === 'ar' || isRTL) {
+      return arabicName || englishName || '';
     }
-    if (profile?.full_name) {
-      return profile.full_name.split(' ')[0];
-    }
-    return '';
+
+    return englishName || arabicName || '';
   };
 
   const openMaps = (latitude: number | null, longitude: number | null, address: string) => {
@@ -349,11 +354,15 @@ export default function PatientHomeTab() {
     }
   };
 
+  const goToPatientProfile = () => {
+    router.push('/(patient-tabs)/profile');
+  };
+
   if (loading) {
     return (
       <View style={[styles.container, styles.centerContent]}>
         <StatusBar style="light" />
-        <ActivityIndicator size="large" color="#2563EB" />
+        <ActivityIndicator size="large" color={theme.colors.primary} />
         <Text style={styles.loadingText}>{t.common.loading}</Text>
       </View>
     );
@@ -365,23 +374,46 @@ export default function PatientHomeTab() {
       
       <View style={styles.header}>
         <View style={[styles.headerContent, isRTL && styles.rowReverse]}>
-          <View>
-            <Text style={[styles.greeting, isRTL && styles.textRight]}>
-              {getUserName()} 👋
-            </Text>
+          <View style={[styles.headerGreeting, isRTL && styles.alignRight]}>
+            <View style={[styles.greetingRow, isRTL && styles.rowReverse]}>
+              <TouchableOpacity
+                style={styles.greetingIconBadge}
+                onPress={goToPatientProfile}
+                activeOpacity={0.8}
+              >
+                <View style={styles.greetingIconBadgeInner}>
+                  <View style={styles.patientGlyphWrapper}>
+                    <Ionicons
+                      name="person-outline"
+                      size={28}
+                      color={theme.colors.primaryDark}
+                      style={styles.patientGlyphIcon}
+                    />
+                  </View>
+                </View>
+              </TouchableOpacity>
+              <Text style={[styles.greeting, isRTL && styles.textRight]}>
+                {getDisplayName() || (isRTL ? 'المريض' : 'Patient')}
+              </Text>
+            </View>
             <Text style={[styles.subtitle, isRTL && styles.textRight]}>{t.home.findNearbyClinics}</Text>
           </View>
           <View style={styles.headerButtons}>
             <TouchableOpacity 
-              style={styles.languageButton}
+              style={styles.iconButton}
               onPress={toggleLanguage}
             >
-              <Text style={styles.languageButtonText}>
-                {language === 'ar' ? 'En' : 'Ar'}
+              <Ionicons name="globe-outline" size={18} color={theme.colors.surface} />
+              <Text style={styles.iconButtonText}>
+                {language === 'ar' ? 'EN' : 'AR'}
               </Text>
             </TouchableOpacity>
-            <TouchableOpacity style={styles.notificationButton}>
-              <Text style={styles.notificationIcon}>🔔</Text>
+            <TouchableOpacity style={[styles.iconButton, styles.notificationButton]}>
+              <Ionicons
+                name={theme.icons.headerNotification as keyof typeof Ionicons.glyphMap}
+                size={20}
+                color={theme.colors.surface}
+              />
             </TouchableOpacity>
           </View>
         </View>
@@ -389,18 +421,27 @@ export default function PatientHomeTab() {
 
       <ScrollView style={styles.content} showsVerticalScrollIndicator={false}>
         <View style={[styles.searchBar, isRTL && styles.rowReverse]}>
-          <Text style={styles.searchIcon}>🔍</Text>
+          <Ionicons
+            name={theme.icons.search as keyof typeof Ionicons.glyphMap}
+            size={20}
+            color={theme.colors.textMuted}
+            style={styles.searchIcon}
+          />
           <TextInput
             style={[styles.searchInput, isRTL && styles.textRight]}
             placeholder={t.home.searchPlaceholder}
-            placeholderTextColor="#9CA3AF"
+            placeholderTextColor={theme.colors.textMuted}
             value={searchQuery}
             onChangeText={setSearchQuery}
             autoCapitalize="none"
           />
           {searchQuery.length > 0 && (
             <TouchableOpacity onPress={() => setSearchQuery('')}>
-              <Text style={styles.clearSearchIcon}>✕</Text>
+              <Ionicons
+                name={theme.icons.clear as keyof typeof Ionicons.glyphMap}
+                size={20}
+                color={theme.colors.textMuted}
+              />
             </TouchableOpacity>
           )}
         </View>
@@ -443,7 +484,7 @@ export default function PatientHomeTab() {
         
         {error ? (
           <View style={styles.errorContainer}>
-            <Text style={styles.errorIcon}>⚠️</Text>
+            <Ionicons name="alert-circle-outline" size={36} color={theme.colors.warning} />
             <Text style={styles.errorText}>{error}</Text>
             <TouchableOpacity style={styles.retryButton} onPress={fetchData}>
               <Text style={styles.retryButtonText}>{t.common.retry}</Text>
@@ -451,7 +492,7 @@ export default function PatientHomeTab() {
           </View>
         ) : filteredClinics.length === 0 ? (
           <View style={styles.emptyState}>
-            <Text style={styles.emptyIcon}>🏥</Text>
+            <Ionicons name="medkit-outline" size={42} color={theme.colors.primary} />
             <Text style={styles.emptyTitle}>{t.home.noClinicsFound}</Text>
             <Text style={styles.emptyText}>
               {selectedSpecialty ? t.home.noClinicsForSpecialty : t.home.noApprovedClinics}
@@ -492,39 +533,69 @@ export default function PatientHomeTab() {
             >
               <View style={[styles.clinicHeader, isRTL && styles.rowReverse]}>
                 <View style={styles.clinicIconContainer}>
-                  <Text style={styles.clinicIcon}>🏥</Text>
+                  <Ionicons
+                    name={theme.icons.clinic as keyof typeof Ionicons.glyphMap}
+                    size={20}
+                    color={theme.colors.primary}
+                  />
                 </View>
                 <View style={[styles.clinicHeaderInfo, isRTL && styles.alignRight]}>
                   <Text style={[styles.clinicName, isRTL && styles.textRight]}>{clinic.clinic_name}</Text>
-                  <Text style={[styles.clinicAddress, isRTL && styles.textRight]} numberOfLines={1}>
-                    📍 {clinic.address}
-                  </Text>
+                  <View style={[styles.addressRow, isRTL && styles.rowReverse]}>
+                    <Ionicons
+                      name={theme.icons.location as keyof typeof Ionicons.glyphMap}
+                      size={14}
+                      color={theme.colors.textMuted}
+                      style={styles.addressIcon}
+                    />
+                    <Text style={[styles.clinicAddress, isRTL && styles.textRight]} numberOfLines={1}>
+                      {clinic.address}
+                    </Text>
+                  </View>
                 </View>
                 <View style={styles.distanceBadge}>
+                  <Ionicons
+                    name={theme.icons.distance as keyof typeof Ionicons.glyphMap}
+                    size={14}
+                    color={theme.colors.primaryDark}
+                  />
                   <Text style={styles.distanceText}>{clinic.distance_text}</Text>
                 </View>
               </View>
 
               <View style={[styles.doctorSection, isRTL && styles.rowReverse]}>
                 <View style={styles.doctorIconSmall}>
-                  <Text>{clinic.specialty_icon}</Text>
+                  <Ionicons
+                    name={theme.icons.doctor as keyof typeof Ionicons.glyphMap}
+                    size={18}
+                    color={theme.colors.primaryDark}
+                  />
                 </View>
                 <View style={[styles.doctorInfoSmall, isRTL && styles.alignRight]}>
                   <Text style={[styles.doctorNameSmall, isRTL && styles.textRight]}>
                     {isRTL ? clinic.doctor_name_ar : clinic.doctor_name}
                   </Text>
                   <Text style={[styles.doctorSpecialtySmall, isRTL && styles.textRight]}>
-                    {isRTL ? clinic.specialty_ar : clinic.specialty}
+                    {(isRTL ? clinic.specialty_ar : clinic.specialty) + (clinic.specialty_icon ? ` ${clinic.specialty_icon}` : '')}
                   </Text>
                 </View>
                 <View style={[styles.doctorStats, isRTL && styles.alignLeft]}>
-                  <Text style={styles.doctorRating}>⭐ {clinic.rating}</Text>
-                  <Text style={styles.doctorExp}>{clinic.experience_years} {t.home.yearsExp}</Text>
+                  <View style={styles.statRow}>
+                    <Ionicons name="star-outline" size={14} color={theme.colors.warning} />
+                    <Text style={styles.doctorRating}>{clinic.rating}</Text>
+                  </View>
+                  <View style={styles.statRow}>
+                    <Ionicons name="briefcase-outline" size={14} color={theme.colors.textMuted} />
+                    <Text style={styles.doctorExp}>{clinic.experience_years} {t.home.yearsExp}</Text>
+                  </View>
                 </View>
               </View>
 
               <View style={[styles.clinicFooter, isRTL && styles.rowReverse]}>
-                <Text style={styles.feeLabel}>{t.home.consultationFee}</Text>
+                <View style={[styles.feeLabelRow, isRTL && styles.rowReverse]}>
+                  <Ionicons name="card-outline" size={16} color={theme.colors.textMuted} />
+                  <Text style={styles.feeLabel}>{t.home.consultationFee}</Text>
+                </View>
                 <Text style={styles.feeAmount}>{clinic.consultation_fee}</Text>
               </View>
             </TouchableOpacity>
@@ -538,66 +609,186 @@ export default function PatientHomeTab() {
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#F3F4F6' },
+  container: { flex: 1, backgroundColor: theme.colors.background },
   centerContent: { justifyContent: 'center', alignItems: 'center' },
-  loadingText: { marginTop: 10, fontSize: 16, color: '#6B7280' },
-  header: { backgroundColor: '#2563EB', paddingTop: 50, paddingBottom: 20, paddingHorizontal: 20, borderBottomLeftRadius: 25, borderBottomRightRadius: 25 },
-  headerContent: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
+  loadingText: { marginTop: 10, fontSize: 16, color: theme.colors.textSecondary },
+  header: {
+    backgroundColor: theme.colors.primary,
+    paddingTop: 52,
+    paddingBottom: 24,
+    paddingHorizontal: theme.spacing.lg,
+    borderBottomLeftRadius: 28,
+    borderBottomRightRadius: 28,
+  },
+  headerContent: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', gap: theme.spacing.md },
+  headerGreeting: { flex: 1 },
+  greetingRow: { flexDirection: 'row', alignItems: 'center', gap: theme.spacing.xs },
+  greetingIconBadge: {
+    backgroundColor: 'rgba(255,255,255,0.22)',
+    padding: 4,
+    borderRadius: theme.radii.pill,
+    shadowColor: theme.colors.shadow,
+    shadowOpacity: 0.25,
+    shadowRadius: 6,
+    shadowOffset: { width: 0, height: 3 },
+    elevation: 5,
+  },
+  greetingIconBadgeInner: {
+    backgroundColor: theme.colors.primarySoft,
+    borderRadius: theme.radii.pill,
+    padding: 6,
+    borderWidth: 1,
+    borderColor: 'rgba(41,98,255,0.25)',
+    transform: [{ translateY: -1 }],
+  },
+  patientGlyphWrapper: {
+    width: 34,
+    height: 34,
+    alignItems: 'center',
+    justifyContent: 'center',
+    position: 'relative',
+  },
+  patientGlyphIcon: {
+    marginTop: 2,
+  },
   rowReverse: { flexDirection: 'row-reverse' },
   textRight: { textAlign: 'right' },
   alignRight: { alignItems: 'flex-end' },
   alignLeft: { alignItems: 'flex-start' },
-  greeting: { fontSize: 22, fontWeight: 'bold', color: 'white', marginBottom: 4 },
-  subtitle: { fontSize: 14, color: '#BFDBFE' },
-  headerButtons: { flexDirection: 'row', alignItems: 'center', gap: 10 },
-  languageButton: { backgroundColor: 'rgba(255,255,255,0.2)', paddingHorizontal: 12, paddingVertical: 8, borderRadius: 12 },
-  languageButtonText: { fontSize: 14, fontWeight: '600', color: 'white' },
-  notificationButton: { backgroundColor: 'rgba(255,255,255,0.2)', padding: 10, borderRadius: 12 },
-  notificationIcon: { fontSize: 20 },
-  content: { flex: 1, padding: 20 },
-  searchBar: { backgroundColor: 'white', flexDirection: 'row', alignItems: 'center', padding: 15, borderRadius: 12, marginBottom: 20, marginTop: -10, shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.1, shadowRadius: 3, elevation: 3 },
-  searchIcon: { fontSize: 20, marginRight: 10 },
-  searchInput: { flex: 1, fontSize: 16, color: '#1F2937' },
-  clearSearchIcon: { fontSize: 18, color: '#9CA3AF', paddingHorizontal: 8 },
-  searchPlaceholder: { color: '#9CA3AF', fontSize: 16 },
-  sectionHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 15, marginTop: 10 },
-  sectionTitle: { fontSize: 18, fontWeight: '600', color: '#1F2937' },
-  clearFilter: { fontSize: 14, color: '#EF4444', fontWeight: '500' },
-  clinicCount: { fontSize: 14, color: '#6B7280' },
+  greeting: { fontSize: 22, fontWeight: '700', color: theme.colors.surface },
+  subtitle: { fontSize: 14, color: 'rgba(255,255,255,0.78)', marginTop: 4 },
+  headerButtons: { flexDirection: 'row', alignItems: 'center', gap: theme.spacing.sm },
+  iconButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    backgroundColor: 'rgba(255,255,255,0.18)',
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: theme.radii.pill,
+  },
+  iconButtonText: { color: theme.colors.surface, fontWeight: '700', fontSize: 12, letterSpacing: 0.5 },
+  notificationButton: { paddingHorizontal: 10 },
+  content: { flex: 1, padding: theme.spacing.lg },
+  searchBar: {
+    backgroundColor: theme.colors.surface,
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: theme.spacing.md,
+    paddingVertical: theme.spacing.sm,
+    borderRadius: theme.radii.lg,
+    marginBottom: theme.spacing.lg,
+    marginTop: -20,
+    borderWidth: 1,
+    borderColor: theme.colors.cardBorder,
+    ...theme.shadow.card,
+  },
+  searchIcon: { marginRight: 8 },
+  searchInput: { flex: 1, fontSize: 16, color: theme.colors.textPrimary },
+  sectionHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 14, marginTop: 12 },
+  sectionTitle: { fontSize: 18, fontWeight: '600', color: theme.colors.textPrimary },
+  clearFilter: { fontSize: 14, color: theme.colors.danger, fontWeight: '500' },
+  clinicCount: { fontSize: 14, color: theme.colors.textMuted },
   specialtiesScroll: { marginBottom: 20 },
-  specialtyCard: { backgroundColor: 'white', padding: 12, borderRadius: 12, marginRight: 10, alignItems: 'center', minWidth: 80, borderWidth: 2, borderColor: 'transparent' },
-  specialtyCardSelected: { backgroundColor: '#EFF6FF', borderColor: '#2563EB' },
-  specialtyIcon: { fontSize: 26, marginBottom: 6 },
-  specialtyText: { fontSize: 11, fontWeight: '500', color: '#374151', textAlign: 'center' },
-  specialtyTextSelected: { color: '#2563EB', fontWeight: '600' },
-  clinicCard: { backgroundColor: 'white', borderRadius: 16, padding: 15, marginBottom: 12, shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.1, shadowRadius: 4, elevation: 3 },
-  clinicHeader: { flexDirection: 'row', alignItems: 'center', marginBottom: 12 },
-  clinicIconContainer: { backgroundColor: '#DBEAFE', width: 45, height: 45, borderRadius: 12, justifyContent: 'center', alignItems: 'center', marginRight: 12 },
-  clinicIcon: { fontSize: 22 },
-  clinicHeaderInfo: { flex: 1 },
-  clinicName: { fontSize: 16, fontWeight: '700', color: '#1F2937', marginBottom: 2 },
-  clinicAddress: { fontSize: 12, color: '#6B7280' },
-  clickableAddress: { textDecorationLine: 'underline', color: '#2563EB' },
-  distanceBadge: { backgroundColor: '#ECFDF5', paddingHorizontal: 10, paddingVertical: 5, borderRadius: 8 },
-  distanceText: { fontSize: 12, fontWeight: '600', color: '#059669' },
-  doctorSection: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#F9FAFB', padding: 10, borderRadius: 10, marginBottom: 10 },
-  doctorIconSmall: { backgroundColor: '#EFF6FF', width: 36, height: 36, borderRadius: 18, justifyContent: 'center', alignItems: 'center', marginRight: 10 },
-  doctorInfoSmall: { flex: 1 },
-  doctorNameSmall: { fontSize: 14, fontWeight: '600', color: '#1F2937' },
-  doctorSpecialtySmall: { fontSize: 12, color: '#6B7280' },
-  doctorStats: { alignItems: 'flex-end' },
-  doctorRating: { fontSize: 12, fontWeight: '600', color: '#F59E0B' },
-  doctorExp: { fontSize: 11, color: '#9CA3AF' },
-  clinicFooter: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingTop: 10, borderTopWidth: 1, borderTopColor: '#F3F4F6' },
-  feeLabel: { fontSize: 13, color: '#6B7280' },
-  feeAmount: { fontSize: 16, fontWeight: 'bold', color: '#2563EB' },
-  errorContainer: { alignItems: 'center', padding: 30 },
-  errorIcon: { fontSize: 40, marginBottom: 10 },
-  errorText: { fontSize: 14, color: '#6B7280', textAlign: 'center', marginBottom: 15 },
-  retryButton: { backgroundColor: '#2563EB', paddingHorizontal: 25, paddingVertical: 10, borderRadius: 8 },
-  retryButtonText: { color: 'white', fontSize: 14, fontWeight: '600' },
-  emptyState: { alignItems: 'center', padding: 40, backgroundColor: 'white', borderRadius: 12 },
-  emptyIcon: { fontSize: 50, marginBottom: 15 },
-  emptyTitle: { fontSize: 18, fontWeight: '600', color: '#1F2937', marginBottom: 8 },
-  emptyText: { fontSize: 14, color: '#6B7280', textAlign: 'center', lineHeight: 20 },
+  specialtyCard: {
+    backgroundColor: theme.colors.surface,
+    padding: 12,
+    borderRadius: theme.radii.md,
+    marginRight: 12,
+    alignItems: 'center',
+    minWidth: 84,
+    borderWidth: 1,
+    borderColor: theme.colors.cardBorder,
+  },
+  specialtyCardSelected: { backgroundColor: theme.colors.primarySoft, borderColor: theme.colors.primary },
+  specialtyIcon: { fontSize: 24, marginBottom: 6 },
+  specialtyText: { fontSize: 12, fontWeight: '500', color: theme.colors.textPrimary, textAlign: 'center' },
+  specialtyTextSelected: { color: theme.colors.primary, fontWeight: '600' },
+  clinicCard: {
+    backgroundColor: theme.colors.surface,
+    borderRadius: theme.radii.lg,
+    padding: theme.spacing.md,
+    marginBottom: theme.spacing.md,
+    borderWidth: 1,
+    borderColor: theme.colors.cardBorder,
+    shadowColor: theme.colors.shadow,
+    shadowOpacity: 0.08,
+    shadowRadius: 12,
+    shadowOffset: { width: 0, height: 8 },
+    elevation: 4,
+  },
+  clinicHeader: { flexDirection: 'row', alignItems: 'center', marginBottom: 12, gap: 12 },
+  clinicIconContainer: {
+    backgroundColor: theme.colors.primarySoft,
+    width: 46,
+    height: 46,
+    borderRadius: 14,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  clinicHeaderInfo: { flex: 1, gap: 4 },
+  clinicName: { fontSize: 16, fontWeight: '600', color: theme.colors.textPrimary },
+  addressRow: { flexDirection: 'row', alignItems: 'center', gap: 6 },
+  addressIcon: { marginTop: 1 },
+  clinicAddress: { fontSize: 13, color: theme.colors.textSecondary, flexShrink: 1 },
+  distanceBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    backgroundColor: theme.colors.primarySoft,
+    borderRadius: theme.radii.pill,
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+  },
+  distanceText: { fontSize: 12, fontWeight: '600', color: theme.colors.primaryDark },
+  doctorSection: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12 },
+  doctorIconSmall: {
+    width: 44,
+    height: 44,
+    borderRadius: theme.radii.md,
+    backgroundColor: theme.colors.elevated,
+    borderWidth: 1,
+    borderColor: theme.colors.cardBorder,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  doctorInfoSmall: { flex: 1, paddingHorizontal: 12 },
+  doctorNameSmall: { fontSize: 15, fontWeight: '600', color: theme.colors.textPrimary },
+  doctorSpecialtySmall: { fontSize: 13, color: theme.colors.textSecondary, marginTop: 2 },
+  doctorStats: { gap: 6, alignItems: 'flex-end' },
+  statRow: { flexDirection: 'row', alignItems: 'center', gap: 4 },
+  doctorRating: { fontWeight: '600', color: theme.colors.warning },
+  doctorExp: { fontSize: 12, color: theme.colors.textSecondary },
+  clinicFooter: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingTop: 12, borderTopWidth: 1, borderColor: theme.colors.border },
+  feeLabelRow: { flexDirection: 'row', alignItems: 'center', gap: 6 },
+  feeLabel: { fontSize: 13, color: theme.colors.textSecondary },
+  feeAmount: { fontSize: 16, fontWeight: '700', color: theme.colors.primaryDark },
+  errorContainer: {
+    alignItems: 'center',
+    padding: theme.spacing.lg,
+    backgroundColor: theme.colors.surface,
+    borderRadius: theme.radii.lg,
+    borderWidth: 1,
+    borderColor: theme.colors.cardBorder,
+    gap: theme.spacing.sm,
+  },
+  errorText: { textAlign: 'center', color: theme.colors.textSecondary, fontSize: 14 },
+  retryButton: {
+    backgroundColor: theme.colors.primary,
+    paddingHorizontal: 28,
+    paddingVertical: 12,
+    borderRadius: theme.radii.pill,
+  },
+  retryButtonText: { color: theme.colors.surface, fontWeight: '600' },
+  emptyState: {
+    alignItems: 'center',
+    padding: theme.spacing.lg,
+    backgroundColor: theme.colors.surface,
+    borderRadius: theme.radii.lg,
+    borderWidth: 1,
+    borderColor: theme.colors.cardBorder,
+    gap: theme.spacing.sm,
+  },
+  emptyTitle: { fontSize: 18, fontWeight: '600', color: theme.colors.textPrimary },
+  emptyText: { fontSize: 14, color: theme.colors.textSecondary, textAlign: 'center' },
 });

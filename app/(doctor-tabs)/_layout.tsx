@@ -10,6 +10,7 @@ export default function DoctorTabsLayout() {
   
   return (
     <Tabs
+      initialRouteName="daily"
       screenOptions={{
         headerShown: false,
         tabBarActiveTintColor: '#2563EB',
