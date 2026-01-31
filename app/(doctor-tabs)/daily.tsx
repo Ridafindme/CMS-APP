@@ -77,8 +77,8 @@ export default function DailyScheduleScreen() {
   // Refresh appointments when screen comes into focus
   useFocusEffect(
     React.useCallback(() => {
-      console.log('📱 Daily screen focused - refreshing data...');
-      fetchAppointments();
+      console.log('📱 Daily screen focused - refreshing data with forceRefresh=true...');
+      fetchAppointments(7, true); // Force refresh when returning to screen
       fetchBlockedSlots();
     }, [])
   );
@@ -97,11 +97,18 @@ export default function DailyScheduleScreen() {
           table: 'appointments'
         },
         (payload) => {
-          console.log('🔔 Real-time appointment change:', payload);
-          fetchAppointments();
+          console.log('🔔 Real-time appointment change detected:', {
+            event: payload.eventType,
+            new: payload.new,
+            old: payload.old
+          });
+          console.log('🔄 Triggering appointment fetch with forceRefresh=true...');
+          fetchAppointments(7, true); // Force refresh to bypass cache
         }
       )
-      .subscribe();
+      .subscribe((status) => {
+        console.log('📡 Appointment subscription status:', status);
+      });
 
     const blockedSlotsSubscription = supabase
       .channel('daily-blocked-slots')
@@ -113,11 +120,18 @@ export default function DailyScheduleScreen() {
           table: 'blocked_slots'
         },
         (payload) => {
-          console.log('🔔 Real-time blocked slot change:', payload);
+          console.log('🔔 Real-time blocked slot change detected:', {
+            event: payload.eventType,
+            new: payload.new,
+            old: payload.old
+          });
+          console.log('🔄 Triggering blocked slots fetch...');
           fetchBlockedSlots();
         }
       )
-      .subscribe();
+      .subscribe((status) => {
+        console.log('📡 Blocked slots subscription status:', status);
+      });
 
     return () => {
       console.log('🔌 Cleaning up real-time subscriptions...');
@@ -531,7 +545,7 @@ export default function DailyScheduleScreen() {
 
       Alert.alert(t.common.success, isRTL ? 'تم تأكيد الموعد' : 'Appointment confirmed');
       console.log('🔄 Fetching appointments...');
-      await fetchAppointments();
+      await fetchAppointments(7, true);
       console.log('🔄 Regenerating time slots...');
       generateTimeSlots();
     } catch (error) {
@@ -584,7 +598,7 @@ export default function DailyScheduleScreen() {
 
               Alert.alert(t.common.success, isRTL ? 'تم رفض الموعد' : 'Appointment rejected');
               console.log('🔄 Fetching appointments...');
-              await fetchAppointments();
+              await fetchAppointments(7, true);
               console.log('🔄 Regenerating time slots...');
               generateTimeSlots();
             } catch (error) {
@@ -619,7 +633,7 @@ export default function DailyScheduleScreen() {
               console.log('✅ Appointment deleted');
               Alert.alert(t.common.success, isRTL ? 'تم إلغاء الموعد وتحرير الوقت' : 'Appointment cancelled and slot freed');
               console.log('🔄 Fetching appointments...');
-              await fetchAppointments();
+              await fetchAppointments(7, true);
               console.log('🔄 Regenerating time slots...');
               generateTimeSlots();
             } catch (error) {

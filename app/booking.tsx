@@ -1,6 +1,7 @@
 import { patientTheme } from '@/constants/patientTheme';
 import { useAuth } from '@/lib/AuthContext';
 import { useI18n } from '@/lib/i18n';
+import { sendNewAppointmentNotificationToDoctor } from '@/lib/notifications';
 import { supabase } from '@/lib/supabase';
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -463,6 +464,41 @@ export default function BookingScreen() {
       }
 
       console.log('Appointment created:', data);
+
+      // Send notification to doctor about new appointment
+      try {
+        console.log('📨 Sending notification to doctor:', doctorId);
+        
+        // Get patient name
+        const { data: patientProfile } = await supabase
+          .from('profiles')
+          .select('full_name')
+          .eq('id', user.id)
+          .single();
+
+        // Get clinic name
+        const { data: clinicData } = await supabase
+          .from('clinics')
+          .select('name')
+          .eq('id', clinicId)
+          .single();
+
+        const patientName = patientProfile?.full_name || 'A patient';
+        const clinicName = clinicData?.name || 'Clinic';
+
+        // Send notification to doctor
+        await sendNewAppointmentNotificationToDoctor(
+          doctorId,
+          patientName,
+          selectedDate,
+          selectedTime,
+          clinicName
+        );
+        console.log('✅ Notification sent to doctor');
+      } catch (notificationError) {
+        console.error('⚠️ Failed to send notification to doctor:', notificationError);
+        // Don't fail the booking if notification fails
+      }
 
       if (selectedDate && selectedTime) {
         setSuccessSummary({ date: selectedDate, time: formatTime(selectedTime) });

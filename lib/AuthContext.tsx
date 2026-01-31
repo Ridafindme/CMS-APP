@@ -72,10 +72,21 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
   // Register for push notifications when user logs in
   useEffect(() => {
     if (user) {
+      console.log('👤 User logged in, attempting to register push token for:', user.id);
       registerForPushNotificationsAsync().then(token => {
+        console.log('🔔 Push token registration result:', token ? 'SUCCESS' : 'FAILED');
         if (token) {
-          savePushToken(user.id, token);
+          console.log('💾 Saving push token to database...');
+          savePushToken(user.id, token).then(() => {
+            console.log('✅ Push token save complete');
+          }).catch(err => {
+            console.error('❌ Push token save error:', err);
+          });
+        } else {
+          console.warn('⚠️ No push token obtained - notifications will not work');
         }
+      }).catch(err => {
+        console.error('❌ Push token registration error:', err);
       });
     }
   }, [user]);

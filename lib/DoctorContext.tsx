@@ -154,7 +154,7 @@ type DoctorContextType = {
   chatConversations: ChatConversation[];
   unreadChatCount: number;
   fetchDoctorData: () => Promise<void>;
-  fetchAppointments: (lookbackDays?: number) => Promise<void>;
+  fetchAppointments: (lookbackDays?: number, forceRefresh?: boolean) => Promise<void>;
   fetchClinics: () => Promise<void>;
   fetchBlockedSlots: () => Promise<void>;
   fetchHolidays: () => Promise<void>;
@@ -340,13 +340,13 @@ export const DoctorProvider = ({ children }: { children: ReactNode }) => {
     }
   }, [clinics, doctorData, user]);
 
-  const fetchAppointments = async (lookbackDays: number = 7) => {
+  const fetchAppointments = async (lookbackDays: number = 7, forceRefresh: boolean = false) => {
     if (!doctorData) {
       console.log('❌ fetchAppointments: No doctorData');
       return;
     }
 
-    if (isCacheValid('appointments')) {
+    if (!forceRefresh && isCacheValid('appointments')) {
       console.log('✅ Using cached appointments');
       return;
     }
@@ -358,7 +358,7 @@ export const DoctorProvider = ({ children }: { children: ReactNode }) => {
 
     try {
       fetchingRef.current.appointments = true;
-      console.log('🔍 Fetching appointments for doctor:', doctorData.id, 'lookbackDays:', lookbackDays);
+      console.log('🔍 Fetching appointments for doctor:', doctorData.id, 'lookbackDays:', lookbackDays, 'forceRefresh:', forceRefresh);
       
       // Auto-expire pending appointments older than 15 minutes
       const fifteenMinutesAgo = new Date(Date.now() - 15 * 60 * 1000).toISOString();

@@ -68,7 +68,7 @@ export default function AppointmentsTab() {
       const pastStart = new Date();
       pastStart.setDate(pastStart.getDate() - pastLookbackDays);
       const pastStartStr = pastStart.toISOString().split('T')[0];
-      const selectColumns = 'id, appointment_date, appointment_time, status, doctor_id, clinic_id';
+      const selectColumns = 'id, appointment_date, time_slot, status, doctor_id, clinic_id';
 
       const [upcomingRes, pastRes] = await Promise.all([
         supabase
@@ -172,7 +172,7 @@ export default function AppointmentsTab() {
         return {
           id: apt.id,
           appointment_date: apt.appointment_date,
-          appointment_time: apt.appointment_time ?? '09:00',
+          appointment_time: apt.time_slot ?? '09:00',
           status: apt.status ?? 'pending',
           doctor_id: apt.doctor_id,
           doctor_name: doctor.full_name ? `Dr. ${doctor.full_name}` : 'Doctor',

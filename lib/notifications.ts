@@ -150,7 +150,10 @@ export async function registerForPushNotificationsAsync() {
  */
 export async function savePushToken(userId: string, pushToken: string) {
   try {
-    const { error } = await supabase
+    console.log('💾 Attempting to save push token for user:', userId);
+    console.log('📱 Token:', pushToken);
+    
+    const { data, error } = await supabase
       .from('user_push_tokens')
       .upsert({
         user_id: userId,
@@ -158,15 +161,18 @@ export async function savePushToken(userId: string, pushToken: string) {
         updated_at: new Date().toISOString(),
       }, {
         onConflict: 'user_id'
-      });
+      })
+      .select();
 
     if (error) {
-      console.error('Error saving push token:', error);
+      console.error('❌ Error saving push token:', error);
+      throw error;
     } else {
-      console.log('✅ Push token saved');
+      console.log('✅ Push token saved successfully:', data);
     }
   } catch (error) {
-    console.error('Error:', error);
+    console.error('❌ Save push token exception:', error);
+    throw error;
   }
 }
 
@@ -334,6 +340,8 @@ export async function sendAppointmentConfirmationNotification(
   }
 
   try {
+    console.log('📨 Attempting to send confirmation notification to:', patientUserId);
+    
     // Get patient's push token
     const { data: tokenData } = await supabase
       .from('user_push_tokens')
@@ -342,7 +350,7 @@ export async function sendAppointmentConfirmationNotification(
       .single();
 
     if (!tokenData?.push_token) {
-      console.log('No push token for patient');
+      console.log('⚠️ No push token for patient');
       return;
     }
 
@@ -380,9 +388,79 @@ export async function sendAppointmentConfirmationNotification(
     });
 
     const result = await response.json();
-    console.log('📨 Confirmation notification sent:', result);
+    console.log('✅ Confirmation notification sent:', result);
   } catch (error) {
-    console.error('Error sending confirmation notification:', error);
+    console.error('❌ Error sending confirmation notification:', error);
+  }
+}
+
+/**
+ * Send new appointment booking notification to a doctor
+ */
+export async function sendNewAppointmentNotificationToDoctor(
+  doctorUserId: string,
+  patientName: string,
+  appointmentDate: string,
+  timeSlot: string,
+  clinicName: string
+) {
+  try {
+    console.log('📨 Attempting to send new appointment notification to doctor:', doctorUserId);
+    
+    // Get doctor's push token
+    const { data: tokenData } = await supabase
+      .from('user_push_tokens')
+      .select('push_token')
+      .eq('user_id', doctorUserId)
+      .single();
+
+    if (!tokenData?.push_token) {
+      console.log('⚠️ No push token for doctor');
+      return;
+    }
+
+    // Format date nicely
+    const date = new Date(appointmentDate);
+    const formattedDate = date.toLocaleDateString('en-US', { 
+      weekday: 'short', 
+      month: 'short', 
+      day: 'numeric' 
+    });
+
+    // Send notification via Expo Push API
+    const message = {
+      to: tokenData.push_token,
+      sound: 'default',
+      title: '🔔 New Appointment Booked',
+      body: `${patientName} has booked an appointment on ${formattedDate} at ${timeSlot} - ${clinicName}`,
+      data: { 
+        type: 'new_appointment', 
+        date: appointmentDate,
+        time: timeSlot,
+        clinic: clinicName 
+      },
+      categoryIdentifier: 'appointment',
+      priority: 'high',
+    };
+
+    const response = await fetch('https://exp.host/--/api/v2/push/send', {
+      method: 'POST',
+      headers: {
+        Accept: 'application/json',
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify(message),
+    });
+
+    const result = await response.json();
+    
+    if (result.data?.status === 'ok') {
+      console.log('✅ New appointment notification sent to doctor successfully');
+    } else {
+      console.log('⚠️ Doctor notification response:', result);
+    }
+  } catch (error) {
+    console.error('❌ Error sending new appointment notification to doctor:', error);
   }
 }
 
