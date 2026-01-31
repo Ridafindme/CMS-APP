@@ -111,6 +111,21 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
   };
 
   const signOut = async () => {
+    // Remove push token from database before signing out
+    if (user?.id) {
+      try {
+        console.log('🗑️ Removing push token for user:', user.id);
+        await supabase
+          .from('user_push_tokens')
+          .delete()
+          .eq('user_id', user.id);
+        console.log('✅ Push token removed');
+      } catch (error) {
+        console.error('⚠️ Failed to remove push token:', error);
+        // Continue with sign out even if token removal fails
+      }
+    }
+    
     await supabase.auth.signOut();
   };
 
