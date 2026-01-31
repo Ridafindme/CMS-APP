@@ -624,6 +624,10 @@ export default function DailyScheduleScreen() {
           onPress: async () => {
             try {
               console.log('🗑️ Deleting appointment...');
+              
+              // Get appointment details before deleting for notification
+              const appointment = appointments.find(apt => apt.id === appointmentId);
+              
               const { error } = await supabase
                 .from('appointments')
                 .delete()
@@ -631,6 +635,23 @@ export default function DailyScheduleScreen() {
 
               if (error) throw error;
               console.log('✅ Appointment deleted');
+              
+              // Send cancellation notification to patient (skip for walk-ins)
+              if (appointment && appointment.booking_type !== 'walk-in' && appointment.patient_id) {
+                console.log('📨 Sending cancellation notification to patient:', appointment.patient_id);
+                const doctorName = profile?.full_name || 'the doctor';
+                const clinicName = appointment.clinic_name || 'the clinic';
+                await sendAppointmentCancellationNotification(
+                  appointment.patient_id,
+                  doctorName,
+                  appointment.appointment_date,
+                  appointment.appointment_time,
+                  clinicName,
+                  'Cancelled by doctor'
+                );
+                console.log('✅ Cancellation notification sent');
+              }
+              
               Alert.alert(t.common.success, isRTL ? 'تم إلغاء الموعد وتحرير الوقت' : 'Appointment cancelled and slot freed');
               console.log('🔄 Fetching appointments...');
               await fetchAppointments(7, true);

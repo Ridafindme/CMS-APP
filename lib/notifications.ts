@@ -130,7 +130,7 @@ export async function registerForPushNotificationsAsync() {
       }
       
       token = (await Notifications.getExpoPushTokenAsync({
-        projectId: '071beeff-64f2-4989-8fdf-f7e478d74765',
+        projectId: '6f3bb877-4b6d-4669-a005-acf4f7fd4d49',
       })).data;
       console.log('📱 Push token:', token);
     } else {

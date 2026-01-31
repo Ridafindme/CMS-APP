@@ -104,6 +104,51 @@ export default function BookingScreen() {
   useEffect(() => {
     if (doctorId && clinicId) {
       fetchBookedSlots();
+      
+      // Subscribe to real-time appointment changes
+      const appointmentSubscription = supabase
+        .channel('booking-appointments')
+        .on(
+          'postgres_changes',
+          {
+            event: '*',
+            schema: 'public',
+            table: 'appointments',
+            filter: `doctor_id=eq.${doctorId},clinic_id=eq.${clinicId}`,
+          },
+          (payload) => {
+            console.log('🔔 Real-time appointment change detected:', payload);
+            fetchBookedSlots();
+          }
+        )
+        .subscribe((status) => {
+          console.log('📡 Booking appointment subscription status:', status);
+        });
+
+      // Subscribe to blocked slots changes
+      const blockedSlotsSubscription = supabase
+        .channel('booking-blocked-slots')
+        .on(
+          'postgres_changes',
+          {
+            event: '*',
+            schema: 'public',
+            table: 'doctor_blocked_slots',
+            filter: `clinic_id=eq.${clinicId}`,
+          },
+          (payload) => {
+            console.log('🔔 Real-time blocked slot change detected:', payload);
+            fetchBookedSlots();
+          }
+        )
+        .subscribe((status) => {
+          console.log('📡 Booking blocked slots subscription status:', status);
+        });
+
+      return () => {
+        appointmentSubscription.unsubscribe();
+        blockedSlotsSubscription.unsubscribe();
+      };
     }
   }, [doctorId, clinicId]);
 
@@ -441,6 +486,33 @@ export default function BookingScreen() {
     setLoading(true);
 
     try {
+      // Final check: verify slot is still available at database level
+      const { data: conflictingAppointments, error: conflictError } = await supabase
+        .from('appointments')
+        .select('id')
+        .eq('doctor_id', doctorId)
+        .eq('clinic_id', clinicId)
+        .eq('appointment_date', selectedDate)
+        .eq('time_slot', selectedTime)
+        .in('status', ['pending', 'confirmed']);
+
+      if (conflictError) {
+        console.error('Error checking for conflicts:', conflictError);
+        throw conflictError;
+      }
+
+      if (conflictingAppointments && conflictingAppointments.length > 0) {
+        console.log('⚠️ Slot was just booked by someone else');
+        Alert.alert(
+          isRTL ? 'الموعد محجوز' : 'Slot Just Booked',
+          isRTL ? 'تم حجز هذا الموعد للتو من قبل مريض آخر. يرجى اختيار وقت آخر.' : 'This slot was just booked by another patient. Please select a different time.',
+        );
+        await fetchBookedSlots();
+        setSelectedTime(null);
+        setLoading(false);
+        return;
+      }
+
       const { data, error } = await supabase
         .from('appointments')
         .insert({
