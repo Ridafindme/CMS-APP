@@ -4,6 +4,7 @@ import { useI18n } from '@/lib/i18n';
 import { supabase } from '@/lib/supabase';
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
+import { useFocusEffect } from '@react-navigation/native';
 import { useRouter } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import React, { useCallback, useEffect, useState } from 'react';
@@ -208,10 +209,44 @@ export default function AppointmentsTab() {
   useEffect(() => {
     if (user) {
       fetchAppointments();
+      
+      // Subscribe to real-time appointment changes for this patient
+      const appointmentSubscription = supabase
+        .channel('patient-appointments')
+        .on(
+          'postgres_changes',
+          {
+            event: '*',
+            schema: 'public',
+            table: 'appointments',
+            filter: `patient_id=eq.${user.id}`,
+          },
+          (payload) => {
+            console.log('🔔 Real-time appointment change detected:', payload);
+            fetchAppointments();
+          }
+        )
+        .subscribe((status) => {
+          console.log('📡 Patient appointment subscription status:', status);
+        });
+
+      return () => {
+        appointmentSubscription.unsubscribe();
+      };
     } else {
       setLoading(false);
     }
   }, [user, fetchAppointments]);
+
+  // Refresh appointments when screen comes into focus (e.g., after booking)
+  useFocusEffect(
+    useCallback(() => {
+      if (user) {
+        console.log('📱 Appointments tab focused - refreshing data');
+        fetchAppointments();
+      }
+    }, [user, fetchAppointments])
+  );
 
   // Handle Android back button for modals
   useEffect(() => {
