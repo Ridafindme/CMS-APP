@@ -15,6 +15,7 @@ import React, { useEffect, useState } from 'react';
 import {
   ActivityIndicator,
   Alert,
+  BackHandler,
   Image,
   KeyboardAvoidingView,
   Modal,
@@ -159,6 +160,24 @@ export default function DoctorProfileScreen() {
       fetchDoctorData();
     }
   }, [user]);
+
+  // Handle Android back button for modals
+  useEffect(() => {
+    const backAction = () => {
+      if (showEditProfileModal) {
+        setShowEditProfileModal(false);
+        return true;
+      }
+      if (showAvatarConfirmModal) {
+        setShowAvatarConfirmModal(false);
+        return true;
+      }
+      return false;
+    };
+
+    const backHandler = BackHandler.addEventListener('hardwareBackPress', backAction);
+    return () => backHandler.remove();
+  }, [showEditProfileModal, showAvatarConfirmModal]);
 
   const handleRefresh = async () => {
     setRefreshing(true);
@@ -565,6 +584,25 @@ export default function DoctorProfileScreen() {
             style={styles.editProfileContainer}
           >
             <View style={styles.editProfileCard}>
+              {/* Fixed Header with Back Button */}
+              <View style={styles.modalFixedHeader}>
+                <TouchableOpacity 
+                  style={styles.modalBackButtonInline}
+                  onPress={() => setShowEditProfileModal(false)}
+                  activeOpacity={0.8}
+                  disabled={savingProfile}
+                >
+                  <LinearGradient
+                    colors={[theme.colors.primary, theme.colors.primaryDark]}
+                    start={{ x: 0, y: 0 }}
+                    end={{ x: 1, y: 1 }}
+                    style={styles.modalBackButtonGradient}
+                  >
+                    <Ionicons name="arrow-back" size={22} color="#FFFFFF" />
+                  </LinearGradient>
+                </TouchableOpacity>
+              </View>
+
               {/* Modal Header */}
               <View style={[styles.modalHeader, isRTL && styles.rowReverse]}>
                 <View style={styles.modalHeaderLeft}>
@@ -575,13 +613,6 @@ export default function DoctorProfileScreen() {
                     {isRTL ? 'تعديل الملف الشخصي' : 'Edit Profile'}
                   </Text>
                 </View>
-                <TouchableOpacity
-                  style={styles.closeButton}
-                  onPress={() => setShowEditProfileModal(false)}
-                  disabled={savingProfile}
-                >
-                  <Ionicons name="close" size={24} color={theme.colors.textSecondary} />
-                </TouchableOpacity>
               </View>
 
               {/* Scrollable Content */}
@@ -1030,6 +1061,7 @@ const styles = StyleSheet.create({
     elevation: 15,
     overflow: 'hidden',
     height: '100%',
+    paddingTop: theme.spacing.md,
   },
   modalHeader: {
     flexDirection: 'row',
@@ -1129,4 +1161,29 @@ const styles = StyleSheet.create({
     fontWeight: '500',
   },
   textArea: { minHeight: 120, paddingTop: 14 },
+  modalFixedHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: theme.spacing.lg,
+    paddingBottom: 8,
+    marginBottom: 8,
+  },
+  modalBackButtonInline: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    overflow: 'hidden',
+    shadowColor: theme.colors.primary,
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 8,
+    elevation: 6,
+  },
+  modalBackButtonGradient: {
+    width: '100%',
+    height: '100%',
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderRadius: 22,
+  },
 });

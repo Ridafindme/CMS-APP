@@ -3,7 +3,7 @@
     "name": "CMS",
     "slug": "cms",
     "scheme": "com.cms.app",
-    "version": "0.2.0",
+    "version": "0.3.0",
     "icon": "./assets/icon.png",
     "orientation": "portrait",
     "userInterfaceStyle": "light",
@@ -18,6 +18,10 @@
       },
       "package": "com.cms.app",
       "softwareKeyboardLayoutMode": "pan",
+      "notification": {
+        "icon": "./assets/icon.png",
+        "color": "#2563EB"
+      },
       "intentFilters": [
         {
           "action": "VIEW",
@@ -62,7 +66,9 @@
         "expo-notifications",
         {
           "sounds": [],
-          "enableAutoStart": false
+          "enableAutoStart": false,
+          "icon": "./assets/icon.png",
+          "color": "#2563EB"
         }
       ],
       "expo-router",

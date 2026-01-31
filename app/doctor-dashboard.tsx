@@ -280,7 +280,22 @@ export default function DoctorDashboardScreen() {
     const backHandler = BackHandler.addEventListener('hardwareBackPress', backAction);
 
     return () => backHandler.remove();
-  }, [activeTab, selectedChatConversation, router]);
+  }, [
+    activeTab, 
+    selectedChatConversation, 
+    router,
+    showLocationPickerModal,
+    showLanguageModal,
+    showAvatarConfirmModal,
+    showRescheduleModal,
+    showEditProfileModal,
+    showBlockTimeModal,
+    showHolidayModal,
+    showDoctorSocialModal,
+    showEditClinicModal,
+    showScheduleModal,
+    showAddClinicModal
+  ]);
 
   const dedupeBlockedSlots = (slots: BlockedSlot[]) => {
     const seen = new Set<string>();
@@ -294,6 +309,52 @@ export default function DoctorDashboardScreen() {
 
   // Unified back navigation handler
   const handleBackNavigation = () => {
+    // Close modals first (in priority order)
+    if (showLocationPickerModal) {
+      setShowLocationPickerModal(false);
+      return;
+    }
+    if (showLanguageModal) {
+      setShowLanguageModal(false);
+      return;
+    }
+    if (showAvatarConfirmModal) {
+      setShowAvatarConfirmModal(false);
+      return;
+    }
+    if (showRescheduleModal) {
+      setShowRescheduleModal(false);
+      return;
+    }
+    if (showEditProfileModal) {
+      setShowEditProfileModal(false);
+      return;
+    }
+    if (showBlockTimeModal) {
+      setShowBlockTimeModal(false);
+      return;
+    }
+    if (showHolidayModal) {
+      setShowHolidayModal(false);
+      return;
+    }
+    if (showDoctorSocialModal) {
+      setShowDoctorSocialModal(false);
+      return;
+    }
+    if (showEditClinicModal) {
+      setShowEditClinicModal(false);
+      return;
+    }
+    if (showScheduleModal) {
+      setShowScheduleModal(false);
+      return;
+    }
+    if (showAddClinicModal) {
+      setShowAddClinicModal(false);
+      return;
+    }
+
     // If in chat view with a conversation open, go back to conversations list
     if (activeTab === 'chat' && selectedChatConversation) {
       setSelectedChatConversation(null);

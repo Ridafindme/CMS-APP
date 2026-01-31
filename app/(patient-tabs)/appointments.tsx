@@ -10,6 +10,7 @@ import React, { useCallback, useEffect, useState } from 'react';
 import {
   ActivityIndicator,
   Alert,
+  BackHandler,
   Modal,
   RefreshControl,
   ScrollView,
@@ -211,6 +212,24 @@ export default function AppointmentsTab() {
       setLoading(false);
     }
   }, [user, fetchAppointments]);
+
+  // Handle Android back button for modals
+  useEffect(() => {
+    const backAction = () => {
+      if (showHistoryModal) {
+        setShowHistoryModal(false);
+        return true;
+      }
+      if (showReviewModal) {
+        setShowReviewModal(false);
+        return true;
+      }
+      return false;
+    };
+
+    const backHandler = BackHandler.addEventListener('hardwareBackPress', backAction);
+    return () => backHandler.remove();
+  }, [showHistoryModal, showReviewModal]);
 
   const handleRefresh = () => {
     setRefreshing(true);

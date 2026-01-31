@@ -44,6 +44,9 @@ export async function scheduleTestNotification() {
         body: 'This is a test notification from your CMS app!',
         data: { type: 'test' },
         sound: true,
+        ...(Platform.OS === 'android' && {
+          color: '#2563EB',
+        }),
       },
       trigger: { 
         type: Notifications.SchedulableTriggerInputTypes.TIME_INTERVAL,

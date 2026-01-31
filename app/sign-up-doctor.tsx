@@ -13,6 +13,7 @@ import React, { useEffect, useState } from 'react';
 import {
   ActivityIndicator,
   Alert,
+  BackHandler,
   KeyboardAvoidingView,
   Modal,
   Platform,
@@ -85,6 +86,20 @@ export default function DoctorSignUpScreen() {
     fetchSpecialties();
     checkExistingApplication();
   }, [user]);
+
+  // Handle Android back button for modal
+  useEffect(() => {
+    const backAction = () => {
+      if (showLocationPicker) {
+        setShowLocationPicker(false);
+        return true;
+      }
+      return false;
+    };
+
+    const backHandler = BackHandler.addEventListener('hardwareBackPress', backAction);
+    return () => backHandler.remove();
+  }, [showLocationPicker]);
 
   const fetchSpecialties = async () => {
     const { data, error } = await supabase

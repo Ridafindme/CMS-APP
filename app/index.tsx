@@ -199,26 +199,26 @@ export default function WelcomeScreen() {
           </TouchableOpacity>
         </View>
         <View style={styles.heroCard}>
+          <Text style={[styles.heroEyebrow, isRTL && styles.textRight]}>{t.welcome.heroEyebrow}</Text>
           <View style={styles.heroLogoShell}>
             <Image source={require('@/assets/images/icon.png')} style={styles.heroLogo} />
           </View>
-          <Text style={[styles.heroEyebrow, isRTL && styles.textRight]}>{t.welcome.heroEyebrow}</Text>
           <Text style={[styles.heroTitle, isRTL && styles.textRight]}>{t.welcome.heroTitle}</Text>
           <Text style={[styles.heroSubtitle, isRTL && styles.textRight]}>
             {t.welcome.heroSubtitle}
           </Text>
-          <View style={styles.highlightList}>
+          <View style={styles.highlightGrid}>
             {heroHighlights.map((item) => (
-              <View key={item.icon} style={[styles.highlightItem, isRTL && styles.rowReverse]}>
-                <Text style={[styles.highlightLabel, isRTL && styles.textRight]}>{item.label}</Text>
-                <View
-                  style={[
-                    styles.highlightIconWrap,
-                    isRTL ? styles.highlightIconWrapRTL : styles.highlightIconWrapLTR,
-                  ]}
+              <View key={item.icon} style={styles.highlightCard}>
+                <LinearGradient
+                  colors={[theme.colors.primary, theme.colors.primaryDark]}
+                  start={{ x: 0, y: 0 }}
+                  end={{ x: 1, y: 1 }}
+                  style={styles.highlightIconGradient}
                 >
-                  <Ionicons name={item.icon} size={18} color={theme.colors.primary} />
-                </View>
+                  <Ionicons name={item.icon} size={24} color={theme.colors.surface} />
+                </LinearGradient>
+                <Text style={[styles.highlightCardLabel, isRTL && styles.textRight]}>{item.label}</Text>
               </View>
             ))}
           </View>
@@ -323,80 +323,83 @@ const styles = StyleSheet.create({
     backgroundColor: theme.colors.surface,
     borderRadius: 32,
     padding: theme.spacing.lg,
-    gap: theme.spacing.md,
+    gap: theme.spacing.sm,
     alignItems: 'center',
     ...theme.shadow.card,
+    borderWidth: 1,
+    borderColor: theme.colors.cardBorder,
   },
   heroLogoShell: {
-    width: 84,
-    height: 84,
-    borderRadius: 42,
-    backgroundColor: theme.colors.primarySoft,
+    width: 80,
+    height: 80,
+    borderRadius: 40,
+    backgroundColor: 'rgba(41, 98, 255, 0.1)',
     justifyContent: 'center',
     alignItems: 'center',
+    marginVertical: theme.spacing.xs,
+    borderWidth: 3,
+    borderColor: theme.colors.primarySoft,
   },
   heroLogo: {
-    width: 60,
-    height: 60,
-    borderRadius: 30,
+    width: 56,
+    height: 56,
+    borderRadius: 28,
     resizeMode: 'contain',
   },
   heroEyebrow: {
-    fontSize: 13,
-    letterSpacing: 1,
+    fontSize: 11,
+    letterSpacing: 2,
     textTransform: 'uppercase',
-    color: theme.colors.textMuted,
+    color: theme.colors.primary,
     textAlign: 'center',
-    marginTop: theme.spacing.sm,
+    fontWeight: '700',
   },
   heroTitle: {
-    fontSize: 28,
+    fontSize: 26,
     fontWeight: '800',
     color: theme.colors.textPrimary,
     textAlign: 'center',
+    lineHeight: 32,
   },
   heroSubtitle: {
-    fontSize: 15,
-    color: theme.colors.textSecondary,
-    lineHeight: 22,
-    textAlign: 'center',
-  },
-  highlightList: {
-    marginTop: theme.spacing.sm,
-    gap: theme.spacing.sm,
-    width: '100%',
-  },
-  highlightItem: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    width: '100%',
-    gap: theme.spacing.sm,
-    paddingVertical: theme.spacing.sm,
-    paddingHorizontal: theme.spacing.md,
-    borderRadius: theme.radii.lg,
-    backgroundColor: theme.colors.primarySoft,
-  },
-  highlightIconWrap: {
-    width: 34,
-    height: 34,
-    borderRadius: theme.radii.md,
-    backgroundColor: theme.colors.primarySoft,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  highlightIconWrapLTR: {
-    marginLeft: theme.spacing.md,
-  },
-  highlightIconWrapRTL: {
-    marginRight: theme.spacing.md,
-  },
-  highlightLabel: {
-    flex: 1,
-    color: theme.colors.textPrimary,
     fontSize: 14,
-    fontWeight: '600',
+    color: theme.colors.textSecondary,
+    lineHeight: 20,
     textAlign: 'center',
+    paddingHorizontal: theme.spacing.sm,
+  },
+  highlightGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    justifyContent: 'center',
+    gap: theme.spacing.md,
+    marginTop: theme.spacing.md,
+    width: '100%',
+  },
+  highlightCard: {
+    width: '28%',
+    minWidth: 90,
+    alignItems: 'center',
+    gap: theme.spacing.sm,
+    padding: theme.spacing.md,
+    borderRadius: theme.radii.lg,
+    backgroundColor: theme.colors.elevated,
+    borderWidth: 1,
+    borderColor: theme.colors.border,
+  },
+  highlightIconGradient: {
+    width: 52,
+    height: 52,
+    borderRadius: 26,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  highlightCardLabel: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: theme.colors.textPrimary,
+    textAlign: 'center',
+    lineHeight: 16,
   },
   actionCard: {
     backgroundColor: theme.colors.surface,

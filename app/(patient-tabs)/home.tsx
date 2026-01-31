@@ -9,6 +9,7 @@ import { StatusBar } from 'expo-status-bar';
 import React, { useEffect, useState } from 'react';
 import {
   ActivityIndicator,
+  BackHandler,
   Linking,
   Platform,
   ScrollView,
@@ -90,6 +91,15 @@ export default function PatientHomeTab() {
     };
     initializeData();
   }, [user]);
+
+  useEffect(() => {
+    const backHandler = BackHandler.addEventListener('hardwareBackPress', () => {
+      // Prevent back navigation from home tab - stay on the tab
+      return true;
+    });
+
+    return () => backHandler.remove();
+  }, []);
 
   // Recalculate distances when location is obtained or clinics change
   useEffect(() => {

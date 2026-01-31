@@ -598,10 +598,24 @@ export const DoctorProvider = ({ children }: { children: ReactNode }) => {
     if (!doctorData) return false;
 
     try {
+      // Create a default schedule for the new clinic
+      // This ensures patients can immediately book appointments
+      const defaultSchedule: ClinicSchedule = {
+        default: {
+          start: '09:00',
+          end: '17:00',
+          break_start: null,
+          break_end: null,
+        },
+        weekly_off: [], // No days off by default, doctor can customize later
+      };
+
       const { error } = await supabase
         .from('clinics')
         .insert({
           doctor_id: doctorData.id,
+          schedule: defaultSchedule,
+          slot_minutes: 30, // Default 30-minute slots
           ...clinic,
         });
 

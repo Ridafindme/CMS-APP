@@ -12,6 +12,7 @@ import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   ActivityIndicator,
   Alert,
+  BackHandler,
   KeyboardAvoidingView,
   Modal,
   Platform,
@@ -147,8 +148,10 @@ export default function DoctorClinicsScreen() {
   const [showBlockTimeModal, setShowBlockTimeModal] = useState(false);
   const [showHolidayModal, setShowHolidayModal] = useState(false);
   const [showLocationPickerModal, setShowLocationPickerModal] = useState(false);
+  const [showMapPicker, setShowMapPicker] = useState(false);
 
   const [addingClinic, setAddingClinic] = useState(false);
+  const [gettingLocation, setGettingLocation] = useState(false);
   const [savingClinicEdit, setSavingClinicEdit] = useState(false);
   const [savingSchedule, setSavingSchedule] = useState(false);
   const [blockingSlots, setBlockingSlots] = useState(false);
@@ -197,6 +200,7 @@ export default function DoctorClinicsScreen() {
   const [blockStepIndex, setBlockStepIndex] = useState(0);
 
   const [mapSelection, setMapSelection] = useState<MapSelection | null>(null);
+  const [tempLocation, setTempLocation] = useState<{ latitude: number; longitude: number; address: string } | null>(null);
   const [mapMarker, setMapMarker] = useState<{ latitude: number; longitude: number } | null>(null);
   const [mapRegion, setMapRegion] = useState<Region | null>(null);
   const [locationSearchAddress, setLocationSearchAddress] = useState('');
@@ -246,6 +250,46 @@ export default function DoctorClinicsScreen() {
     fetchBlockedSlots();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  // Handle Android back button for modals
+  useEffect(() => {
+    const backAction = () => {
+      // Close modals in priority order
+      if (showMapPicker) {
+        setShowMapPicker(false);
+        return true;
+      }
+      if (showHolidayModal) {
+        setShowHolidayModal(false);
+        return true;
+      }
+      if (showLocationPickerModal) {
+        setShowLocationPickerModal(false);
+        return true;
+      }
+      if (showBlockTimeModal) {
+        setShowBlockTimeModal(false);
+        return true;
+      }
+      if (showScheduleModal) {
+        setShowScheduleModal(false);
+        return true;
+      }
+      if (showEditClinicModal) {
+        setShowEditClinicModal(false);
+        return true;
+      }
+      if (showAddClinicModal) {
+        setShowAddClinicModal(false);
+        return true;
+      }
+      // Let default back behavior happen
+      return false;
+    };
+
+    const backHandler = BackHandler.addEventListener('hardwareBackPress', backAction);
+    return () => backHandler.remove();
+  }, [showMapPicker, showHolidayModal, showLocationPickerModal, showBlockTimeModal, showScheduleModal, showEditClinicModal, showAddClinicModal]);
 
   const fetchDefaultCountryMeta = useCallback(async (): Promise<CountryMeta | null> => {
     try {
@@ -574,16 +618,19 @@ export default function DoctorClinicsScreen() {
   };
 
   const getCurrentLocationAndSet = async (keepOpen = false) => {
+    setGettingLocation(true);
     try {
       const servicesEnabled = await Location.hasServicesEnabledAsync();
       if (!servicesEnabled) {
         Alert.alert(t.common.error, t.doctorApp?.locationServicesDisabled || 'Location services disabled');
+        setGettingLocation(false);
         return;
       }
 
       const { status } = await Location.requestForegroundPermissionsAsync();
       if (status !== 'granted') {
         Alert.alert(t.common.error, t.doctorApp?.locationPermissionMsg || 'Location permission denied');
+        setGettingLocation(false);
         return;
       }
 
@@ -600,6 +647,95 @@ export default function DoctorClinicsScreen() {
     } catch (error) {
       Alert.alert(t.common.error, t.doctorApp?.locationError || 'Error getting location');
     }
+    setGettingLocation(false);
+  };
+
+  const openMapPicker = async () => {
+    try {
+      const { status } = await Location.requestForegroundPermissionsAsync();
+      if (status !== 'granted') {
+        Alert.alert(
+          t.common.error,
+          isRTL ? 'مطلوب إذن الموقع لاستخدام الخريطة' : 'Location permission is required to use the map'
+        );
+        return;
+      }
+
+      // Get current location for initial map position
+      const location = await Location.getCurrentPositionAsync({});
+      setTempLocation({
+        latitude: location.coords.latitude,
+        longitude: location.coords.longitude,
+        address: '',
+      });
+      setShowMapPicker(true);
+    } catch (error) {
+      // If can't get location, use default (Beirut, Lebanon)
+      setTempLocation({
+        latitude: 33.8886,
+        longitude: 35.4955,
+        address: '',
+      });
+      setShowMapPicker(true);
+    }
+  };
+
+  const handleMapPickerPress = async (event: any) => {
+    const { latitude, longitude } = event.nativeEvent.coordinate;
+    
+    try {
+      const [address] = await Location.reverseGeocodeAsync({ latitude, longitude });
+      const addressString = [
+        address.street,
+        address.district,
+        address.city,
+        address.region,
+        address.country
+      ].filter(Boolean).join(', ');
+
+      setTempLocation({ latitude, longitude, address: addressString });
+    } catch (error) {
+      setTempLocation({ 
+        latitude, 
+        longitude, 
+        address: isRTL ? 'الموقع المحدد' : 'Selected location'
+      });
+    }
+  };
+
+  const confirmMapLocation = () => {
+    if (!tempLocation) {
+      Alert.alert(
+        t.common.error,
+        isRTL ? 'يرجى اختيار موقع على الخريطة' : 'Please choose a location on the map'
+      );
+      return;
+    }
+
+    if (locationPickerTarget === 'edit') {
+      setEditClinicDraft(prev => ({
+        ...prev,
+        latitude: tempLocation.latitude,
+        longitude: tempLocation.longitude,
+        address: tempLocation.address,
+      }));
+    } else {
+      setNewClinic(prev => ({
+        ...prev,
+        latitude: tempLocation.latitude,
+        longitude: tempLocation.longitude,
+        address: tempLocation.address,
+      }));
+    }
+
+    setShowMapPicker(false);
+    setShowLocationPickerModal(false);
+    setTempLocation(null);
+    
+    Alert.alert(
+      t.common.success,
+      isRTL ? 'تم اختيار الموقع بنجاح' : 'Location selected successfully'
+    );
   };
 
   // Add Clinic Functions
@@ -2394,7 +2530,25 @@ export default function DoctorClinicsScreen() {
           style={{ flex: 1 }}
         >
           <View style={styles.modalOverlay}>
-            <View style={[styles.modalContent, { maxHeight: '90%' }]}>
+            <View style={[styles.modalContent, styles.editClinicModalContent, { maxHeight: '90%' }]}>
+              {/* Fixed Header with Back Button */}
+              <View style={styles.modalFixedHeader}>
+                <TouchableOpacity 
+                  style={styles.modalBackButtonInline}
+                  onPress={() => setShowEditClinicModal(false)}
+                  activeOpacity={0.8}
+                >
+                  <LinearGradient
+                    colors={[theme.colors.primary, theme.colors.primaryDark]}
+                    start={{ x: 0, y: 0 }}
+                    end={{ x: 1, y: 1 }}
+                    style={styles.modalBackButtonGradient}
+                  >
+                    <Ionicons name="arrow-back" size={22} color="#FFFFFF" />
+                  </LinearGradient>
+                </TouchableOpacity>
+              </View>
+
               <ScrollView 
                 keyboardShouldPersistTaps="handled"
                 contentContainerStyle={{ paddingBottom: 20 }}
@@ -2408,6 +2562,19 @@ export default function DoctorClinicsScreen() {
                       : 'Refresh clinic details, fees, and contact info.'
                   }
                 />
+
+                {/* Basic Info Section */}
+                <View style={styles.modalSection}>
+                  <View style={[styles.modalSectionHeader, isRTL && styles.rowReverse]}>
+                    <View style={styles.modalSectionIconContainer}>
+                      <Ionicons name="business" size={18} color={theme.colors.primary} />
+                    </View>
+                    <View style={styles.modalSectionHeaderText}>
+                      <Text style={[styles.modalSectionTitle, isRTL && styles.textRight]}>
+                        {isRTL ? 'معلومات العيادة' : 'Clinic Information'}
+                      </Text>
+                    </View>
+                  </View>
 
                 <View style={styles.inputGroup}>
                   <Text style={styles.label}>{t.doctorApp?.clinicName || 'Clinic Name'}</Text>
@@ -2498,8 +2665,9 @@ export default function DoctorClinicsScreen() {
                   icon={require('@/assets/images/whatsappicon.png')}
                   isRTL={isRTL}
                 />
+              </View>
 
-                <View style={styles.modalButtons}>
+              <View style={styles.modalButtons}>
                   <TouchableOpacity style={styles.modalButtonSecondary} onPress={() => setShowEditClinicModal(false)}>
                     <Text style={styles.modalButtonSecondaryText}>{t.common.cancel}</Text>
                   </TouchableOpacity>
@@ -2523,6 +2691,29 @@ export default function DoctorClinicsScreen() {
       <Modal visible={showScheduleModal} transparent animationType="slide">
         <View style={styles.modalOverlay}>
           <View style={[styles.modalContent, { maxHeight: '90%', width: '95%', maxWidth: 520 }]}>
+            {/* Fixed Header with Back Button */}
+            <View style={styles.modalFixedHeader}>
+              <TouchableOpacity 
+                style={styles.modalBackButtonInline}
+                onPress={() => setShowScheduleModal(false)}
+                activeOpacity={0.8}
+              >
+                <LinearGradient
+                  colors={[theme.colors.primary, theme.colors.primaryDark]}
+                  start={{ x: 0, y: 0 }}
+                  end={{ x: 1, y: 1 }}
+                  style={styles.modalBackButtonGradient}
+                >
+                  <Ionicons name="arrow-back" size={22} color="#FFFFFF" />
+                </LinearGradient>
+              </TouchableOpacity>
+              <View style={{ flex: 1 }}>
+                <Text style={styles.modalFixedHeaderTitle}>
+                  {t.doctorDashboard?.clinicScheduleTitle || 'Clinic Schedule'}
+                </Text>
+              </View>
+            </View>
+
             <ScrollView 
               keyboardShouldPersistTaps="handled" 
               showsVerticalScrollIndicator={true}
@@ -2533,9 +2724,6 @@ export default function DoctorClinicsScreen() {
                 <View style={[styles.modalHeroIcon, styles.modalHeroPrimary]}>
                   <Ionicons name="calendar" size={28} color={theme.colors.primary} />
                 </View>
-                <Text style={[styles.modalTitle, isRTL && styles.textRight]}>
-                  {t.doctorDashboard?.clinicScheduleTitle || 'Clinic Schedule'}
-                </Text>
                 <Text style={[styles.modalMessage, isRTL && styles.textRight]}>
                   {isRTL
                     ? 'حدد مدة الجلسات وأوقات العمل لتعكس التوفر الحقيقي.'
@@ -3002,82 +3190,204 @@ export default function DoctorClinicsScreen() {
       </Modal>
 
       {/* Location Picker Modal */}
-      <Modal visible={showLocationPickerModal} transparent animationType="slide">
-        <View style={styles.modalOverlay}>
-          <View style={styles.modalContent}>
-            <ModalHero
-              title={isRTL ? 'اختر موقع العيادة' : 'Select Clinic Location'}
-              subtitle={
-                isRTL
-                  ? 'حدد الموقع على الخريطة أو استخدم البحث للحصول على عنوان دقيق.'
-                  : 'Drop a precise map pin or search for the address.'
-              }
-            />
-            
-            <View style={styles.inputGroup}>
-              <Text style={styles.label}>{isRTL ? 'ابحث عن العنوان' : 'Search Address'}</Text>
-              <TextInput
-                style={styles.input}
-                placeholder={isRTL ? 'أدخل العنوان أو المدينة' : 'Enter address or city'}
-                placeholderTextColor="#9CA3AF"
-                value={locationSearchAddress}
-                onChangeText={setLocationSearchAddress}
-                returnKeyType="search"
-                onSubmitEditing={searchLocation}
-              />
-            </View>
-
-            <View style={styles.mapContainer}>
-              {mapRegion ? (
-                <MapView
-                  style={styles.mapView}
-                  region={mapRegion}
-                  onPress={handleMapPress}
-                >
-                  {mapMarker && <Marker coordinate={mapMarker} />}
-                </MapView>
-              ) : (
-                <View style={styles.mapPlaceholder}>
-                  <ActivityIndicator size="small" color="#2563EB" />
-                  <Text style={styles.helperText}>Loading map...</Text>
+      <Modal
+        visible={showLocationPickerModal}
+        transparent
+        animationType="slide"
+        onRequestClose={() => setShowLocationPickerModal(false)}
+      >
+        <KeyboardAvoidingView 
+          style={{ flex: 1 }}
+          behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+        >
+          <View style={styles.modalOverlay}>
+            <View style={styles.modalContent}>
+              {/* Modal Header */}
+              <View style={styles.modalHeader}>
+                <View style={styles.modalIconCircle}>
+                  <Ionicons name="location" size={24} color={theme.colors.primary} />
                 </View>
-              )}
-            </View>
-            {mapSelection?.address && (
-              <Text style={styles.helperText}>{mapSelection.address}</Text>
-            )}
-
-            <View style={styles.locationActionRow}>
-              <TouchableOpacity
-                style={[styles.locationActionButton, styles.locationActionSecondary]}
-                onPress={() => getCurrentLocationAndSet(true)}
-                accessibilityLabel="Current Location"
+                <Text style={styles.modalTitle}>
+                  {isRTL ? 'تعيين موقع العيادة' : 'Set Clinic Location'}
+                </Text>
+                <Text style={styles.modalSubtitle}>
+                  {isRTL ? 'ساعد المرضى في العثور على عيادتك بسهولة' : 'Help patients find your clinic easily'}
+                </Text>
+              </View>
+              
+              <TouchableOpacity 
+                style={styles.locationOption}
+                onPress={() => getCurrentLocationAndSet(false)}
+                disabled={gettingLocation}
               >
-                <Ionicons name="locate-outline" size={18} color="#2563EB" />
+                {gettingLocation ? (
+                  <View style={styles.locationLoading}>
+                    <ActivityIndicator color={theme.colors.primary} />
+                    <Text style={styles.locationLoadingText}>
+                      {isRTL ? 'جاري الحصول على الموقع...' : 'Getting location...'}
+                    </Text>
+                  </View>
+                ) : (
+                  <>
+                    <View style={styles.locationOptionIconBox}>
+                      <Ionicons name="navigate-circle" size={28} color={theme.colors.primary} />
+                    </View>
+                    <View style={styles.locationOptionInfo}>
+                      <Text style={styles.locationOptionTitle}>
+                        {isRTL ? 'استخدام الموقع الحالي' : 'Use Current Location'}
+                      </Text>
+                      <Text style={styles.locationOptionDesc}>
+                        {isRTL ? 'اكتشف موقع عيادتك تلقائيًا' : 'Automatically detect your clinic location'}
+                      </Text>
+                    </View>
+                    <Ionicons name="chevron-forward" size={20} color={theme.colors.textSecondary} />
+                  </>
+                )}
               </TouchableOpacity>
 
-              <TouchableOpacity
-                style={[
-                  styles.locationActionButton,
-                  styles.locationActionPrimary,
-                  !mapSelection && styles.buttonDisabled,
-                ]}
-                onPress={applySelectedLocation}
-                disabled={!mapSelection}
-                accessibilityLabel="Set Location"
+              <TouchableOpacity 
+                style={styles.locationOption}
+                onPress={openMapPicker}
               >
-                <Ionicons name="checkmark-circle-outline" size={18} color="white" />
+                <View style={styles.locationOptionIconBox}>
+                  <Ionicons name="map" size={28} color={theme.colors.accent} />
+                </View>
+                <View style={styles.locationOptionInfo}>
+                  <Text style={styles.locationOptionTitle}>
+                    {isRTL ? 'اختيار على الخريطة' : 'Pick on Map'}
+                  </Text>
+                  <Text style={styles.locationOptionDesc}>
+                    {isRTL ? 'حدد الموقع بصريًا على الخريطة' : 'Select location visually on a map'}
+                  </Text>
+                </View>
+                <Ionicons name="chevron-forward" size={20} color={theme.colors.textSecondary} />
               </TouchableOpacity>
 
-              <TouchableOpacity
-                style={[styles.locationActionButton, styles.locationActionSecondary]}
-                onPress={() => setShowLocationPickerModal(false)}
-                accessibilityLabel={t.common.cancel}
-              >
-                <Ionicons name="close-circle-outline" size={18} color="#374151" />
-              </TouchableOpacity>
+              <View style={styles.divider}>
+                <View style={styles.dividerLine} />
+                <Text style={styles.dividerText}>
+                  {isRTL ? 'أو أدخل يدويًا' : 'or enter manually'}
+                </Text>
+                <View style={styles.dividerLine} />
+              </View>
+
+              <View style={styles.inputGroup}>
+                <Text style={styles.label}>
+                  <Ionicons name="document-text" size={14} color={theme.colors.textMuted} /> 
+                  {isRTL ? ' العنوان' : ' Address'}
+                </Text>
+                <View style={styles.inputWrapper}>
+                  <TextInput
+                    style={[styles.input, styles.textArea, isRTL && styles.textRight]}
+                    placeholder={isRTL ? 'الشارع، المدينة، الدولة' : 'Street, City, Country'}
+                    placeholderTextColor="#9CA3AF"
+                    value={locationPickerTarget === 'edit' ? editClinicDraft.address : newClinic.address}
+                    onChangeText={(value) => {
+                      if (locationPickerTarget === 'edit') {
+                        setEditClinicDraft(prev => ({ ...prev, address: value }));
+                      } else {
+                        setNewClinic(prev => ({ ...prev, address: value }));
+                      }
+                    }}
+                    multiline
+                    numberOfLines={3}
+                    textAlignVertical="top"
+                  />
+                </View>
+              </View>
+
+              <View style={styles.modalFooter}>
+                <TouchableOpacity 
+                  style={styles.modalButtonSecondary}
+                  onPress={() => setShowLocationPickerModal(false)}
+                >
+                  <Text style={styles.modalButtonSecondaryText}>{t.common.cancel}</Text>
+                </TouchableOpacity>
+                <TouchableOpacity 
+                  style={[
+                    styles.modalButtonPrimary,
+                    (locationPickerTarget === 'edit' ? !editClinicDraft.address : !newClinic.address) && styles.buttonDisabled
+                  ]}
+                  onPress={() => setShowLocationPickerModal(false)}
+                  disabled={locationPickerTarget === 'edit' ? !editClinicDraft.address : !newClinic.address}
+                >
+                  <Ionicons name="checkmark" size={20} color="#FFFFFF" style={{ marginRight: 6 }} />
+                  <Text style={styles.modalButtonPrimaryText}>{t.common.confirm}</Text>
+                </TouchableOpacity>
+              </View>
             </View>
           </View>
+        </KeyboardAvoidingView>
+      </Modal>
+
+      {/* Map Picker Modal */}
+      <Modal
+        visible={showMapPicker}
+        animationType="slide"
+        onRequestClose={() => setShowMapPicker(false)}
+      >
+        <View style={{ flex: 1 }}>
+          <MapView
+            style={{ flex: 1 }}
+            initialRegion={{
+              latitude: tempLocation?.latitude || 33.8886,
+              longitude: tempLocation?.longitude || 35.4955,
+              latitudeDelta: 0.01,
+              longitudeDelta: 0.01,
+            }}
+            onPress={handleMapPickerPress}
+          >
+            {tempLocation && (
+              <Marker
+                coordinate={{
+                  latitude: tempLocation.latitude,
+                  longitude: tempLocation.longitude,
+                }}
+                title={isRTL ? 'موقع العيادة' : 'Clinic Location'}
+                description={tempLocation.address}
+              />
+            )}
+          </MapView>
+          
+          {/* Map Controls Overlay */}
+          <View style={styles.mapOverlay}>
+            <View style={styles.mapHeader}>
+              <TouchableOpacity 
+                onPress={() => setShowMapPicker(false)}
+                style={styles.mapCloseButton}
+              >
+                <Ionicons name="close" size={24} color={theme.colors.textPrimary} />
+              </TouchableOpacity>
+              <View style={styles.mapHeaderInfo}>
+                <Text style={styles.mapHeaderTitle}>
+                  {isRTL ? 'حدد موقع العيادة' : 'Select Clinic Location'}
+                </Text>
+                <Text style={styles.mapHeaderDesc}>
+                  {isRTL ? 'انقر في أي مكان على الخريطة' : 'Tap anywhere on the map'}
+                </Text>
+              </View>
+            </View>
+          </View>
+
+          {tempLocation && (
+            <View style={styles.mapFooter}>
+              <View style={styles.mapLocationInfo}>
+                <Ionicons name="location" size={20} color={theme.colors.primary} />
+                <Text style={styles.mapLocationText} numberOfLines={2}>
+                  {tempLocation.address || (isRTL ? 'تم تحديد الموقع' : 'Location selected')}
+                </Text>
+              </View>
+              <TouchableOpacity 
+                style={styles.mapConfirmButton}
+                onPress={confirmMapLocation}
+              >
+                <Ionicons name="checkmark-circle" size={24} color="#FFFFFF" />
+                <Text style={styles.mapConfirmText}>
+                  {isRTL ? 'تأكيد الموقع' : 'Confirm Location'}
+                </Text>
+              </TouchableOpacity>
+            </View>
+          )}
         </View>
       </Modal>
 
@@ -3436,6 +3746,66 @@ const styles = StyleSheet.create({
 
   modalOverlay: { flex: 1, backgroundColor: 'rgba(5, 7, 22, 0.65)', justifyContent: 'center', alignItems: 'center', padding: theme.spacing.lg },
   modalContent: { backgroundColor: theme.colors.surface, borderRadius: theme.radii.lg, padding: theme.spacing.lg, width: '92%', maxWidth: 420, borderWidth: 1, borderColor: theme.colors.cardBorder },
+  editClinicModalContent: { 
+    maxWidth: 560, 
+    width: '96%', 
+    paddingHorizontal: 24,
+    paddingVertical: 20,
+  },
+  modalBackButton: {
+    position: 'absolute',
+    top: 16,
+    left: 16,
+    zIndex: 10,
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    overflow: 'hidden',
+    shadowColor: theme.colors.primary,
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 8,
+    elevation: 6,
+  },
+  modalBackButtonInline: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    overflow: 'hidden',
+    shadowColor: theme.colors.primary,
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 8,
+    elevation: 6,
+    marginRight: 12,
+  },
+  modalBackButtonGradient: {
+    width: '100%',
+    height: '100%',
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderRadius: 22,
+  },
+  modalFixedHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingBottom: 12,
+    marginBottom: 12,
+  },
+  modalFixedHeaderTitle: {
+    fontSize: 22,
+    fontWeight: '800',
+    color: theme.colors.textPrimary,
+    letterSpacing: 0.3,
+  },
+  modalSection: {
+    backgroundColor: theme.colors.elevated,
+    borderRadius: theme.radii.lg,
+    padding: 18,
+    marginBottom: 16,
+    borderWidth: 1,
+    borderColor: theme.colors.cardBorder,
+  },
   modalHeaderSection: { alignItems: 'center', marginBottom: theme.spacing.md },
   modalHeroIcon: {
     width: 64,
@@ -3736,5 +4106,176 @@ const styles = StyleSheet.create({
   holidayRemoveDayBtn: { marginTop: 8, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, borderRadius: theme.radii.md, paddingVertical: 10, borderWidth: 1, borderColor: 'rgba(220,38,38,0.25)', backgroundColor: 'rgba(220,38,38,0.06)' },
   holidayRemoveDayText: { fontSize: 13, fontWeight: '700', color: theme.colors.danger },
 
-  // Holiday Modal
+  // Location Picker Modal Styles
+  modalHeader: {
+    alignItems: 'center',
+    marginBottom: 20,
+  },
+  modalIconCircle: {
+    width: 60,
+    height: 60,
+    borderRadius: 30,
+    backgroundColor: theme.colors.primarySoft,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 12,
+  },
+  modalSubtitle: {
+    fontSize: 14,
+    color: theme.colors.textSecondary,
+    textAlign: 'center',
+    marginTop: 4,
+  },
+  locationOption: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: theme.colors.primarySoft,
+    borderRadius: theme.radii.lg,
+    padding: 16,
+    marginBottom: 12,
+    borderWidth: 1.5,
+    borderColor: theme.colors.primary + '30',
+  },
+  locationLoading: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    flex: 1,
+    justifyContent: 'center',
+  },
+  locationLoadingText: {
+    fontSize: 15,
+    color: theme.colors.primary,
+    fontWeight: '600',
+  },
+  locationOptionIconBox: {
+    marginRight: 12,
+  },
+  locationOptionInfo: {
+    flex: 1,
+  },
+  locationOptionTitle: {
+    fontSize: 16,
+    fontWeight: '700',
+    color: theme.colors.textPrimary,
+    marginBottom: 2,
+  },
+  locationOptionDesc: {
+    fontSize: 13,
+    color: theme.colors.textSecondary,
+  },
+  divider: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginVertical: 20,
+  },
+  dividerLine: {
+    flex: 1,
+    height: 1,
+    backgroundColor: theme.colors.border,
+  },
+  dividerText: {
+    color: theme.colors.textMuted,
+    paddingHorizontal: 12,
+    fontSize: 13,
+    fontWeight: '600',
+  },
+  modalFooter: {
+    flexDirection: 'row',
+    gap: 12,
+    marginTop: 20,
+  },
+  mapOverlay: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    paddingTop: Platform.OS === 'ios' ? 50 : 30,
+  },
+  mapHeader: {
+    backgroundColor: theme.colors.surface,
+    marginHorizontal: theme.spacing.md,
+    marginTop: theme.spacing.md,
+    borderRadius: theme.radii.lg,
+    padding: theme.spacing.md,
+    flexDirection: 'row',
+    alignItems: 'center',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.15,
+    shadowRadius: 8,
+    elevation: 5,
+  },
+  mapCloseButton: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: theme.colors.elevated,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginRight: 12,
+  },
+  mapHeaderInfo: {
+    flex: 1,
+  },
+  mapHeaderTitle: {
+    fontSize: 16,
+    fontWeight: '800',
+    color: theme.colors.textPrimary,
+    marginBottom: 2,
+  },
+  mapHeaderDesc: {
+    fontSize: 13,
+    color: theme.colors.textSecondary,
+  },
+  mapFooter: {
+    position: 'absolute',
+    bottom: 0,
+    left: 0,
+    right: 0,
+    backgroundColor: theme.colors.surface,
+    padding: theme.spacing.lg,
+    paddingBottom: Platform.OS === 'ios' ? 40 : 20,
+    borderTopLeftRadius: theme.radii.lg + 8,
+    borderTopRightRadius: theme.radii.lg + 8,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: -4 },
+    shadowOpacity: 0.15,
+    shadowRadius: 12,
+    elevation: 10,
+  },
+  mapLocationInfo: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: theme.colors.primarySoft,
+    padding: 12,
+    borderRadius: theme.radii.lg,
+    marginBottom: 12,
+    gap: 10,
+  },
+  mapLocationText: {
+    flex: 1,
+    fontSize: 14,
+    color: theme.colors.textPrimary,
+    fontWeight: '600',
+  },
+  mapConfirmButton: {
+    backgroundColor: theme.colors.primary,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    padding: 16,
+    borderRadius: theme.radii.lg,
+    gap: 8,
+    shadowColor: theme.colors.primary,
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 8,
+    elevation: 6,
+  },
+  mapConfirmText: {
+    color: '#FFFFFF',
+    fontSize: 16,
+    fontWeight: '800',
+  },
 });

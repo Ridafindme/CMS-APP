@@ -5,13 +5,18 @@ import { useI18n } from '@/lib/i18n';
 import { fromE164, validatePhone } from '@/lib/phone-utils';
 import { supabase } from '@/lib/supabase';
 import { Ionicons } from '@expo/vector-icons';
+import { LinearGradient } from 'expo-linear-gradient';
 import { useRouter } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import React, { useEffect, useState } from 'react';
+import DateTimePicker from '@react-native-community/datetimepicker';
 import {
   ActivityIndicator,
   Alert,
+  BackHandler,
+  KeyboardAvoidingView,
   Modal,
+  Platform,
   ScrollView,
   StyleSheet,
   Text,
@@ -26,6 +31,8 @@ type Profile = {
   full_name_ar: string;
   email: string;
   phone: string;
+  date_of_birth?: string | null;
+  gender?: string | null;
 };
 
 type DoctorInfo = {
@@ -54,7 +61,10 @@ export default function ProfileTab() {
   const [editNameAr, setEditNameAr] = useState('');
   const [editPhone, setEditPhone] = useState('');
   const [editPhoneLocal, setEditPhoneLocal] = useState('');
+  const [editDateOfBirth, setEditDateOfBirth] = useState('');
+  const [editGender, setEditGender] = useState('');
   const [saving, setSaving] = useState(false);
+  const [showDatePicker, setShowDatePicker] = useState(false);
 
   useEffect(() => {
     if (user) {
@@ -64,13 +74,35 @@ export default function ProfileTab() {
     }
   }, [user]);
 
+  // Handle Android back button for modals
+  useEffect(() => {
+    const backAction = () => {
+      if (showEditModal) {
+        setShowEditModal(false);
+        return true;
+      }
+      if (showSignOutModal) {
+        setShowSignOutModal(false);
+        return true;
+      }
+      if (showDoctorModal) {
+        setShowDoctorModal(false);
+        return true;
+      }
+      return false;
+    };
+
+    const backHandler = BackHandler.addEventListener('hardwareBackPress', backAction);
+    return () => backHandler.remove();
+  }, [showEditModal, showSignOutModal, showDoctorModal]);
+
   const fetchProfile = async () => {
     if (!user) return;
 
     try {
       const { data: profileData, error: profileError } = await supabase
         .from('profiles')
-        .select('full_name, full_name_ar, phone')
+        .select('full_name, full_name_ar, phone, date_of_birth, gender')
         .eq('id', user.id)
         .single();
 
@@ -136,12 +168,55 @@ export default function ProfileTab() {
     return local || profile.phone;
   };
 
+  const getDateOfBirthValue = () => {
+    if (!profile?.date_of_birth) return t.profile.notProvided;
+    try {
+      const date = new Date(profile.date_of_birth);
+      return date.toLocaleDateString(isRTL ? 'ar-LB' : 'en-US', {
+        year: 'numeric',
+        month: 'long',
+        day: 'numeric'
+      });
+    } catch {
+      return profile.date_of_birth;
+    }
+  };
+
+  const getGenderValue = () => {
+    if (!profile?.gender) return t.profile.notProvided;
+    if (profile.gender === 'male') return isRTL ? 'ذكر' : 'Male';
+    if (profile.gender === 'female') return isRTL ? 'أنثى' : 'Female';
+    return profile.gender;
+  };
+
   const handleOpenEditModal = () => {
     setEditName(profile?.full_name || '');
     setEditNameAr(profile?.full_name_ar || '');
     setEditPhone(profile?.phone || '');
     setEditPhoneLocal('');
+    setEditDateOfBirth(profile?.date_of_birth || '');
+    setEditGender(profile?.gender || '');
     setShowEditModal(true);
+  };
+
+  const handleDateChange = (event: any, selectedDate?: Date) => {
+    setShowDatePicker(false);
+    if (event.type === 'set' && selectedDate) {
+      const formatted = selectedDate.toISOString().split('T')[0];
+      setEditDateOfBirth(formatted);
+    }
+  };
+
+  const getDatePickerValue = () => {
+    if (editDateOfBirth) {
+      try {
+        return new Date(editDateOfBirth);
+      } catch {}
+    }
+    // Default to 20 years ago
+    const defaultDate = new Date();
+    defaultDate.setFullYear(defaultDate.getFullYear() - 20);
+    return defaultDate;
   };
 
   const handleSaveProfile = async () => {
@@ -181,6 +256,8 @@ export default function ProfileTab() {
           full_name: editName.trim(),
           full_name_ar: editNameAr.trim() || null,
           phone: editPhone || null,
+          date_of_birth: editDateOfBirth || null,
+          gender: editGender || null,
         })
         .eq('id', user.id);
 
@@ -191,6 +268,8 @@ export default function ProfileTab() {
         full_name: editName.trim(),
         full_name_ar: editNameAr.trim(),
         phone: editPhone,
+        date_of_birth: editDateOfBirth,
+        gender: editGender,
       });
 
       setShowEditModal(false);
@@ -268,6 +347,18 @@ export default function ProfileTab() {
       label: t.profile.phoneLabel,
       value: getPhoneValue(),
       icon: 'call-outline' as IconName,
+    },
+    {
+      key: 'dob',
+      label: isRTL ? 'تاريخ الميلاد' : 'Date of Birth',
+      value: getDateOfBirthValue(),
+      icon: 'calendar-outline' as IconName,
+    },
+    {
+      key: 'gender',
+      label: isRTL ? 'الجنس' : 'Gender',
+      value: getGenderValue(),
+      icon: 'male-female-outline' as IconName,
     },
   ];
 
@@ -498,75 +589,187 @@ export default function ProfileTab() {
         animationType="fade"
         onRequestClose={() => setShowEditModal(false)}
       >
-        <View style={styles.modalOverlay}>
-          <View style={[styles.modalContent, styles.editModalContent, isRTL && styles.alignRight]}>
-            <View style={[styles.modalHeroIcon, styles.modalHeroPrimary]}>
-              <Ionicons name="create-outline" size={26} color={theme.colors.primary} />
-            </View>
-            <Text style={[styles.modalTitle, isRTL && styles.textRight]}>{t.profile.editProfile}</Text>
-            <Text style={[styles.modalMessage, styles.editModalMessage, isRTL && styles.textRight]}>
-              {t.profile.personalInfo}
-            </Text>
+        <KeyboardAvoidingView 
+          style={styles.modalOverlay}
+          behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+        >
+          <TouchableOpacity 
+            style={styles.modalOverlayTouchable}
+            activeOpacity={1}
+            onPress={() => setShowEditModal(false)}
+          >
+            <TouchableOpacity 
+              activeOpacity={1}
+              onPress={(e) => e.stopPropagation()}
+              style={[styles.modalContent, styles.editModalContent, isRTL && styles.alignRight]}
+            >
+              {/* Fixed Header with Back Button */}
+              <View style={styles.modalFixedHeader}>
+                <TouchableOpacity 
+                  style={styles.modalBackButtonInline}
+                  onPress={() => setShowEditModal(false)}
+                  activeOpacity={0.8}
+                  disabled={saving}
+                >
+                  <LinearGradient
+                    colors={[theme.colors.primary, theme.colors.primaryDark]}
+                    start={{ x: 0, y: 0 }}
+                    end={{ x: 1, y: 1 }}
+                    style={styles.modalBackButtonGradient}
+                  >
+                    <Ionicons name="arrow-back" size={22} color="#FFFFFF" />
+                  </LinearGradient>
+                </TouchableOpacity>
+              </View>
 
-            <View style={styles.formField}>
-              <Text style={[styles.inputLabel, isRTL && styles.textRight]}>Full Name (English)</Text>
-              <TextInput
-                style={[styles.input, isRTL && styles.textRight]}
-                value={editName}
-                onChangeText={setEditName}
-                placeholder="Enter your full name"
-                placeholderTextColor={theme.colors.textMuted}
-              />
-            </View>
+              <View style={[styles.modalHeroIcon, styles.modalHeroPrimary]}>
+                <Ionicons name="create-outline" size={26} color={theme.colors.primary} />
+              </View>
+              <Text style={[styles.modalTitle, isRTL && styles.textRight]}>{t.profile.editProfile}</Text>
+              <Text style={[styles.modalMessage, styles.editModalMessage, isRTL && styles.textRight]}>
+                {t.profile.personalInfo}
+              </Text>
 
-            <View style={styles.formField}>
-              <Text style={[styles.inputLabel, isRTL && styles.textRight]}>Full Name (Arabic)</Text>
-              <TextInput
-                style={[styles.input, isRTL && styles.textRight]}
-                value={editNameAr}
-                onChangeText={setEditNameAr}
-                placeholder="أدخل اسمك الكامل"
-                placeholderTextColor={theme.colors.textMuted}
-              />
-            </View>
+              <View style={styles.formField}>
+                <Text style={[styles.inputLabel, isRTL && styles.textRight]}>Full Name (English)</Text>
+                <TextInput
+                  style={[styles.input, isRTL && styles.textRight]}
+                  value={editName}
+                  onChangeText={setEditName}
+                  placeholder="Enter your full name"
+                  placeholderTextColor={theme.colors.textMuted}
+                />
+              </View>
 
-            <View style={styles.formField}>
-              <PhoneInput
-                value={editPhone}
-                onChangeValue={(e164, local) => {
-                  setEditPhone(e164);
-                  setEditPhoneLocal(local);
-                }}
-                type="mobile"
-                label={t.profile.phoneLabel}
-                placeholder="70 123 456"
-                isRTL={isRTL}
-              />
-            </View>
+              <View style={styles.formField}>
+                <Text style={[styles.inputLabel, isRTL && styles.textRight]}>Full Name (Arabic)</Text>
+                <TextInput
+                  style={[styles.input, isRTL && styles.textRight]}
+                  value={editNameAr}
+                  onChangeText={setEditNameAr}
+                  placeholder="أدخل اسمك الكامل"
+                  placeholderTextColor={theme.colors.textMuted}
+                />
+              </View>
 
-            <View style={styles.modalButtons}>
-              <TouchableOpacity
-                style={[styles.modalButton, styles.cancelButton]}
-                onPress={() => setShowEditModal(false)}
-                disabled={saving}
-              >
-                <Text style={styles.cancelButtonText}>{t.common.cancel}</Text>
-              </TouchableOpacity>
-              <TouchableOpacity
-                style={[styles.modalButton, styles.confirmButton]}
-                onPress={handleSaveProfile}
-                disabled={saving}
-              >
-                {saving ? (
-                  <ActivityIndicator color={theme.colors.surface} />
-                ) : (
-                  <Text style={styles.confirmButtonText}>{t.common.save}</Text>
-                )}
-              </TouchableOpacity>
-            </View>
-          </View>
-        </View>
+              <View style={styles.formField}>
+                <PhoneInput
+                  value={editPhone}
+                  onChangeValue={(e164, local) => {
+                    setEditPhone(e164);
+                    setEditPhoneLocal(local);
+                  }}
+                  type="mobile"
+                  label={t.profile.phoneLabel}
+                  placeholder="70 123 456"
+                  isRTL={isRTL}
+                />
+              </View>
+
+              <View style={[styles.formField, styles.formFieldCompact]}>
+                <Text style={[styles.inputLabel, isRTL && styles.textRight]}>
+                  {isRTL ? 'تاريخ الميلاد (اختياري)' : 'Date of Birth (Optional)'}
+                </Text>
+                <TouchableOpacity
+                  style={[styles.datePickerButton, isRTL && styles.rowReverse]}
+                  onPress={() => setShowDatePicker(true)}
+                >
+                  <View style={styles.datePickerIconBox}>
+                    <Ionicons name="calendar-outline" size={20} color={theme.colors.primary} />
+                  </View>
+                  <Text style={[styles.datePickerText, !editDateOfBirth && styles.datePickerPlaceholder]}>
+                    {editDateOfBirth 
+                      ? new Date(editDateOfBirth).toLocaleDateString(isRTL ? 'ar-LB' : 'en-US', {
+                          year: 'numeric',
+                          month: 'long',
+                          day: 'numeric'
+                        })
+                      : (isRTL ? 'اضغط لاختيار التاريخ' : 'Tap to select date')
+                    }
+                  </Text>
+                  {editDateOfBirth && (
+                    <TouchableOpacity
+                      style={styles.dateClearButton}
+                      onPress={() => setEditDateOfBirth('')}
+                    >
+                      <Ionicons name="close-circle" size={20} color={theme.colors.textMuted} />
+                    </TouchableOpacity>
+                  )}
+                </TouchableOpacity>
+              </View>
+
+              <View style={[styles.formField, styles.formFieldCompact]}>
+                <Text style={[styles.inputLabel, isRTL && styles.textRight]}>
+                  {isRTL ? 'الجنس (اختياري)' : 'Gender (Optional)'}
+                </Text>
+                <View style={styles.genderOptions}>
+                  <TouchableOpacity
+                    style={[styles.genderOption, editGender === 'male' && styles.genderOptionSelected]}
+                    onPress={() => setEditGender('male')}
+                  >
+                    <Ionicons 
+                      name={editGender === 'male' ? 'radio-button-on' : 'radio-button-off'} 
+                      size={20} 
+                      color={editGender === 'male' ? theme.colors.primary : theme.colors.textMuted} 
+                    />
+                    <Text style={[styles.genderOptionText, editGender === 'male' && styles.genderOptionTextSelected]}>
+                      {isRTL ? 'ذكر' : 'Male'}
+                    </Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity
+                    style={[styles.genderOption, editGender === 'female' && styles.genderOptionSelected]}
+                    onPress={() => setEditGender('female')}
+                  >
+                    <Ionicons 
+                      name={editGender === 'female' ? 'radio-button-on' : 'radio-button-off'} 
+                      size={20} 
+                      color={editGender === 'female' ? theme.colors.primary : theme.colors.textMuted} 
+                    />
+                    <Text style={[styles.genderOptionText, editGender === 'female' && styles.genderOptionTextSelected]}>
+                      {isRTL ? 'أنثى' : 'Female'}
+                    </Text>
+                  </TouchableOpacity>
+                </View>
+              </View>
+
+              <View style={styles.modalButtons}>
+                <TouchableOpacity
+                  style={[styles.modalButton, styles.cancelButton]}
+                  onPress={() => setShowEditModal(false)}
+                  disabled={saving}
+                >
+                  <Text style={styles.cancelButtonText}>{t.common.cancel}</Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={[styles.modalButton, styles.confirmButton]}
+                  onPress={handleSaveProfile}
+                  disabled={saving}
+                >
+                  {saving ? (
+                    <ActivityIndicator color={theme.colors.surface} />
+                  ) : (
+                    <Text style={styles.confirmButtonText}>{t.common.save}</Text>
+                  )}
+                </TouchableOpacity>
+              </View>
+            </TouchableOpacity>
+          </TouchableOpacity>
+        </KeyboardAvoidingView>
       </Modal>
+
+      {/* Date Picker */}
+      {showDatePicker && (
+        <DateTimePicker
+          value={getDatePickerValue()}
+          mode="date"
+          display="spinner"
+          onChange={handleDateChange}
+          maximumDate={new Date()}
+          textColor={theme.colors.textPrimary}
+          accentColor={theme.colors.primary}
+          themeVariant="light"
+        />
+      )}
 
       {/* Doctor Modal */}
       <Modal visible={showDoctorModal} transparent animationType="fade">
@@ -876,6 +1079,12 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     padding: theme.spacing.lg,
   },
+  modalOverlayTouchable: {
+    flex: 1,
+    width: '100%',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
   modalContent: {
     backgroundColor: theme.colors.surface,
     borderRadius: theme.radii.lg,
@@ -886,24 +1095,33 @@ const styles = StyleSheet.create({
     ...theme.shadow.card,
   },
   standardModalContent: { width: '90%', maxWidth: 420 },
-  editModalContent: { width: '95%', maxWidth: 520, alignItems: 'stretch', alignSelf: 'center' },
+  editModalContent: { 
+    width: '95%', 
+    maxWidth: 520, 
+    maxHeight: '92%',
+    alignItems: 'stretch', 
+    alignSelf: 'center',
+    paddingTop: theme.spacing.sm,
+    paddingBottom: theme.spacing.md,
+  },
   modalIcon: { fontSize: 50, marginBottom: 15 },
   modalHeroIcon: {
-    width: 64,
-    height: 64,
+    width: 52,
+    height: 52,
     borderRadius: theme.radii.lg,
     justifyContent: 'center',
     alignItems: 'center',
-    marginBottom: theme.spacing.md,
+    marginBottom: theme.spacing.sm,
   },
   modalHeroPrimary: { backgroundColor: 'rgba(41,98,255,0.16)' },
   modalHeroSuccess: { backgroundColor: 'rgba(34,197,94,0.16)' },
   modalHeroWarning: { backgroundColor: 'rgba(249,115,22,0.16)' },
   modalHeroInfo: { backgroundColor: 'rgba(59,130,246,0.16)' },
-  modalTitle: { fontSize: 20, fontWeight: '700', color: theme.colors.textPrimary, marginBottom: 6, textAlign: 'center' },
-  modalMessage: { fontSize: 14, color: theme.colors.textSecondary, textAlign: 'center', marginBottom: 20, lineHeight: 20 },
-  editModalMessage: { marginBottom: theme.spacing.lg },
-  formField: { width: '100%', alignSelf: 'stretch', marginBottom: theme.spacing.md },
+  modalTitle: { fontSize: 18, fontWeight: '700', color: theme.colors.textPrimary, marginBottom: 4, textAlign: 'center' },
+  modalMessage: { fontSize: 13, color: theme.colors.textSecondary, textAlign: 'center', marginBottom: 16, lineHeight: 18 },
+  editModalMessage: { marginBottom: theme.spacing.sm },
+  formField: { width: '100%', alignSelf: 'stretch', marginBottom: theme.spacing.sm },
+  formFieldCompact: { marginBottom: theme.spacing.xs },
   alertIconWrap: {
     width: 68,
     height: 68,
@@ -925,8 +1143,8 @@ const styles = StyleSheet.create({
   alertButtonSecondaryText: { color: theme.colors.textPrimary, fontSize: 15, fontWeight: '600' },
   alertButtonDanger: { backgroundColor: theme.colors.danger },
   alertButtonDangerText: { color: theme.colors.surface, fontSize: 15, fontWeight: '600' },
-  modalButtons: { flexDirection: 'row', gap: 12, width: '100%', marginTop: theme.spacing.lg },
-  modalButton: { flex: 1, padding: 14, borderRadius: theme.radii.md, alignItems: 'center' },
+  modalButtons: { flexDirection: 'row', gap: 10, width: '100%', marginTop: theme.spacing.md },
+  modalButton: { flex: 1, padding: 12, borderRadius: theme.radii.md, alignItems: 'center' },
   cancelButton: { backgroundColor: theme.colors.elevated },
   cancelButtonText: { color: theme.colors.textPrimary, fontSize: 15, fontWeight: '600' },
   confirmButton: { backgroundColor: theme.colors.primary },
@@ -950,17 +1168,101 @@ const styles = StyleSheet.create({
   doctorModalStatusTextDefault: { color: theme.colors.primary },
   doctorModalStatusTextApproved: { color: theme.colors.success },
   doctorModalStatusTextPending: { color: theme.colors.warning },
-  inputLabel: { fontSize: 14, color: theme.colors.textPrimary, marginBottom: 6, fontWeight: '600', width: '100%' },
+  inputLabel: { fontSize: 13, color: theme.colors.textPrimary, marginBottom: 4, fontWeight: '600', width: '100%' },
   input: {
     backgroundColor: theme.colors.elevated,
     borderWidth: 1,
     borderColor: theme.colors.border,
     borderRadius: theme.radii.md,
-    padding: 12,
-    fontSize: 15,
+    padding: 10,
+    fontSize: 14,
     color: theme.colors.textPrimary,
     width: '100%',
-    marginBottom: 10,
+    marginBottom: 0,
   },
   dangerButton: { backgroundColor: theme.colors.danger },
+  modalFixedHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingBottom: 8,
+    marginBottom: 4,
+  },
+  modalBackButtonInline: {
+    width: 38,
+    height: 38,
+    borderRadius: 19,
+    overflow: 'hidden',
+    shadowColor: theme.colors.primary,
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 8,
+    elevation: 6,
+  },
+  modalBackButtonGradient: {
+    width: '100%',
+    height: '100%',
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderRadius: 22,
+  },
+  genderOptions: {
+    flexDirection: 'row',
+    gap: 12,
+    width: '100%',
+  },
+  genderOption: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    backgroundColor: theme.colors.elevated,
+    borderWidth: 1.5,
+    borderColor: theme.colors.border,
+    borderRadius: theme.radii.md,
+    padding: 10,
+  },
+  genderOptionSelected: {
+    borderColor: theme.colors.primary,
+    backgroundColor: theme.colors.primarySoft,
+  },
+  genderOptionText: {
+    fontSize: 15,
+    fontWeight: '500',
+    color: theme.colors.textPrimary,
+  },
+  genderOptionTextSelected: {
+    fontWeight: '700',
+    color: theme.colors.primary,
+  },
+  datePickerButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: theme.colors.elevated,
+    borderWidth: 1.5,
+    borderColor: theme.colors.border,
+    borderRadius: theme.radii.md,
+    padding: 10,
+    gap: 10,
+  },
+  datePickerIconBox: {
+    width: 36,
+    height: 36,
+    borderRadius: theme.radii.md,
+    backgroundColor: theme.colors.primarySoft,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  datePickerText: {
+    flex: 1,
+    fontSize: 14,
+    fontWeight: '500',
+    color: theme.colors.textPrimary,
+  },
+  datePickerPlaceholder: {
+    color: theme.colors.textMuted,
+    fontWeight: '400',
+  },
+  dateClearButton: {
+    padding: 4,
+  },
 });

@@ -11,6 +11,7 @@ import React, { useEffect, useState } from 'react';
 import {
   ActivityIndicator,
   Alert,
+  BackHandler,
   Linking,
   Modal,
   Platform,
@@ -22,6 +23,7 @@ import {
   TouchableOpacity,
   View
 } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 type TimeSlotData = {
   time: string;
@@ -33,6 +35,7 @@ type TimeSlotData = {
 export default function DailyScheduleScreen() {
   const { t, isRTL } = useI18n();
   const { loading, appointments, clinics, blockedSlots, fetchAppointments, fetchBlockedSlots, doctorData, profile } = useDoctorContext();
+  const insets = useSafeAreaInsets();
   
   const [selectedDate, setSelectedDate] = useState<string>(new Date().toISOString().split('T')[0]);
   const [selectedClinic, setSelectedClinic] = useState<string | null>(null);
@@ -97,6 +100,38 @@ export default function DailyScheduleScreen() {
     }
   }, [selectedDate, selectedClinic, appointments, blockedSlots]);
 
+  // Handle Android back button for modals
+  useEffect(() => {
+    const backAction = () => {
+      // Close modals in priority order
+      if (showRescheduleModal) {
+        setShowRescheduleModal(false);
+        return true;
+      }
+      if (showBlockModal) {
+        setShowBlockModal(false);
+        return true;
+      }
+      if (showWalkInModal) {
+        setShowWalkInModal(false);
+        return true;
+      }
+      if (showEditWalkIn) {
+        setShowEditWalkIn(false);
+        return true;
+      }
+      if (showDatePicker) {
+        setShowDatePicker(false);
+        return true;
+      }
+      // Prevent back navigation from tab screens - stay on the tab
+      return true;
+    };
+
+    const backHandler = BackHandler.addEventListener('hardwareBackPress', backAction);
+    return () => backHandler.remove();
+  }, [showRescheduleModal, showBlockModal, showWalkInModal, showEditWalkIn, showDatePicker]);
+
   const handleRefresh = async () => {
     setRefreshing(true);
     await Promise.all([fetchAppointments(), fetchBlockedSlots()]);
@@ -107,31 +142,90 @@ export default function DailyScheduleScreen() {
     if (!selectedClinic) return;
 
     const clinic = clinics.find(c => c.id === selectedClinic);
-    if (!clinic || !clinic.schedule) return;
+    if (!clinic) return;
 
-    const dayKey = getDayKey(selectedDate);
+    console.log('🔍 Generating slots for clinic:', {
+      clinicId: clinic.id,
+      clinicName: clinic.clinic_name,
+      isActive: clinic.is_active,
+      hasSchedule: !!clinic.schedule,
+      schedule: clinic.schedule,
+      doctorApproved: doctorData?.is_approved
+    });
+
+    // Only generate slots if doctor is approved
+    if (!doctorData?.is_approved) {
+      console.log('❌ Doctor not approved');
+      setTimeSlots([]);
+      return;
+    }
+
+    // Only generate slots if clinic is active
+    if (!clinic.is_active) {
+      console.log('❌ Clinic not active');
+      setTimeSlots([]);
+      return;
+    }
+
+    // Only generate slots if schedule is configured
+    if (!clinic.schedule) {
+      console.log('❌ No schedule configured');
+      setTimeSlots([]);
+      return;
+    }
+
     const schedule = clinic.schedule;
     const slotMinutes = clinic.slot_minutes || 30;
 
+    const dayKey = getDayKey(selectedDate);
+    console.log('📅 Day key:', dayKey, 'Date:', selectedDate);
+
     // Check if day is weekly off
     if (schedule.weekly_off?.includes(dayKey)) {
+      console.log('❌ Day is weekly off');
       setTimeSlots([]);
       return;
     }
 
     // Get schedule for this day
     const daySchedule = (schedule as any)[dayKey] || schedule.default;
+    console.log('📋 Day schedule:', daySchedule);
+    
     if (!daySchedule?.start || !daySchedule?.end) {
+      console.log('❌ No schedule for this day');
       setTimeSlots([]);
       return;
     }
 
-    const startMin = timeToMinutes(daySchedule.start);
-    const endMin = timeToMinutes(daySchedule.end);
-    if (startMin === null || endMin === null) return;
+    // Helper function to normalize time format (handles "9" -> "09:00" and "09:00" -> "09:00")
+    const normalizeTime = (time: string): string => {
+      if (!time) return '';
+      // If already in HH:MM format, return as is
+      if (time.includes(':')) return time;
+      // If just a number, convert to HH:00 format
+      const hour = parseInt(time, 10);
+      return `${String(hour).padStart(2, '0')}:00`;
+    };
 
-    const breakStartMin = daySchedule.break_start ? timeToMinutes(daySchedule.break_start) : null;
-    const breakEndMin = daySchedule.break_end ? timeToMinutes(daySchedule.break_end) : null;
+    const startMin = timeToMinutes(normalizeTime(daySchedule.start));
+    const endMin = timeToMinutes(normalizeTime(daySchedule.end));
+    
+    console.log('⏰ Time conversion:', {
+      startRaw: daySchedule.start,
+      startNormalized: normalizeTime(daySchedule.start),
+      startMin,
+      endRaw: daySchedule.end,
+      endNormalized: normalizeTime(daySchedule.end),
+      endMin
+    });
+    
+    if (startMin === null || endMin === null) {
+      console.log('❌ Failed to parse start/end times');
+      return;
+    }
+
+    const breakStartMin = daySchedule.break_start ? timeToMinutes(normalizeTime(daySchedule.break_start)) : null;
+    const breakEndMin = daySchedule.break_end ? timeToMinutes(normalizeTime(daySchedule.break_end)) : null;
 
     const slots: TimeSlotData[] = [];
 
@@ -180,6 +274,7 @@ export default function DailyScheduleScreen() {
       }
     }
 
+    console.log('✅ Generating', slots.length, 'time slots');
     setTimeSlots(slots);
   };
 
@@ -809,6 +904,24 @@ export default function DailyScheduleScreen() {
     return { confirmed, pending, walkIns, blocked, available, total: timeSlots.length };
   };
 
+  const getEmptyStateReason = () => {
+    if (!selectedClinic) return { icon: 'alert-circle-outline', title: isRTL ? 'اختر عيادة' : 'Select a Clinic', subtitle: isRTL ? 'يرجى اختيار عيادة لعرض المواعيد' : 'Please select a clinic to view appointments' };
+    
+    const clinic = clinics.find(c => c.id === selectedClinic);
+    if (!clinic) return { icon: 'alert-circle-outline', title: isRTL ? 'عيادة غير موجودة' : 'Clinic Not Found', subtitle: isRTL ? 'لم يتم العثور على العيادة المحددة' : 'The selected clinic was not found' };
+    
+    if (!doctorData?.is_approved) return { icon: 'time-outline', title: isRTL ? 'في انتظار الموافقة' : 'Pending Approval', subtitle: isRTL ? 'حسابك قيد المراجعة. سيتم تفعيل المواعيد بعد الموافقة.' : 'Your account is under review. Appointments will be enabled after approval.' };
+    
+    if (!clinic.is_active) return { icon: 'pause-circle-outline', title: isRTL ? 'العيادة غير نشطة' : 'Clinic Inactive', subtitle: isRTL ? 'قم بتفعيل العيادة لبدء استقبال المواعيد' : 'Activate the clinic to start receiving appointments' };
+    
+    if (!clinic.schedule) return { icon: 'settings-outline', title: isRTL ? 'لم يتم تعيين الجدول' : 'Schedule Not Set', subtitle: isRTL ? 'يرجى تكوين جدول العمل للعيادة أولاً' : 'Please configure the clinic schedule first' };
+    
+    const dayKey = getDayKey(selectedDate);
+    if (clinic.schedule.weekly_off?.includes(dayKey)) return { icon: 'calendar-outline', title: isRTL ? 'يوم عطلة' : 'Day Off', subtitle: isRTL ? 'هذا اليوم مخصص كعطلة أسبوعية' : 'This day is set as a weekly off day' };
+    
+    return { icon: 'calendar-outline', title: isRTL ? 'لا توجد مواعيد' : 'No Appointments', subtitle: isRTL ? 'لا توجد مواعيد مجدولة لهذا اليوم.' : 'No appointments scheduled for this day.' };
+  };
+
   const stats = getStats();
   const isToday = selectedDate === new Date().toISOString().split('T')[0];
   const weekdayLabels = isRTL ? ['ح', 'ن', 'ث', 'ر', 'خ', 'ج', 'س'] : ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
@@ -832,7 +945,7 @@ export default function DailyScheduleScreen() {
         colors={[patientTheme.colors.primary, patientTheme.colors.accent]}
         start={{ x: 0, y: 0 }}
         end={{ x: 1, y: 1 }}
-        style={styles.heroBanner}
+        style={[styles.heroBanner, { paddingTop: insets.top + 12 }]}
       >
         {/* Decorative elements */}
         <View style={styles.heroDecorativeCircle1} />
@@ -928,12 +1041,14 @@ export default function DailyScheduleScreen() {
           <Text style={styles.statNumber}>{stats.available}</Text>
           <Text style={styles.statLabel}>{isRTL ? 'متاح' : 'Free'}</Text>
         </View>
-        <TouchableOpacity style={styles.statItem} onPress={scheduleTestNotification}>
-          <Ionicons name="notifications-outline" size={18} color="#2563EB" />
-          <Text style={[styles.statLabel, { color: '#2563EB', marginTop: 4 }]}>
-            {isRTL ? 'اختبار' : 'Test'}
-          </Text>
-        </TouchableOpacity>
+        {__DEV__ && (
+          <TouchableOpacity style={styles.statItem} onPress={scheduleTestNotification}>
+            <Ionicons name="notifications-outline" size={18} color="#2563EB" />
+            <Text style={[styles.statLabel, { color: '#2563EB', marginTop: 4 }]}>
+              {isRTL ? 'اختبار' : 'Test'}
+            </Text>
+          </TouchableOpacity>
+        )}
       </View>
 
       {/* Timeline */}
@@ -944,10 +1059,27 @@ export default function DailyScheduleScreen() {
       >
         {timeSlots.length === 0 ? (
           <View style={styles.emptyState}>
-            <Text style={styles.emptyIcon}>📅</Text>
-            <Text style={styles.emptyText}>
-              {isRTL ? 'لا توجد مواعيد في هذا اليوم' : 'No schedule for this day'}
-            </Text>
+            <LinearGradient
+              colors={['#F0F9FF', '#E0F2FE']}
+              start={{ x: 0, y: 0 }}
+              end={{ x: 1, y: 1 }}
+              style={styles.emptyCard}
+            >
+              <View style={styles.emptyIconContainer}>
+                <View style={styles.emptyIconOuter}>
+                  <View style={styles.emptyIconInner}>
+                    <Ionicons name={getEmptyStateReason().icon as any} size={40} color="#2563EB" />
+                  </View>
+                </View>
+              </View>
+              
+              <Text style={[styles.emptyTitle, isRTL && styles.textRight]}>
+                {getEmptyStateReason().title}
+              </Text>
+              <Text style={[styles.emptySubtitle, isRTL && styles.textRight]}>
+                {getEmptyStateReason().subtitle}
+              </Text>
+            </LinearGradient>
           </View>
         ) : (
           timeSlots.map((slot, index) => (
@@ -1292,7 +1424,6 @@ const styles = StyleSheet.create({
   textRight: { textAlign: 'right' },
   
   heroBanner: {
-    paddingTop: Platform.OS === 'ios' ? 40 : 20,
     paddingBottom: 12,
     paddingHorizontal: 20,
     position: 'relative',
@@ -1726,16 +1857,53 @@ const styles = StyleSheet.create({
   },
   
   emptyState: {
-    padding: 40,
+    padding: 20,
+    paddingTop: 60,
+  },
+  emptyCard: {
+    borderRadius: 24,
+    padding: 32,
+    alignItems: 'center',
+    shadowColor: '#2563EB',
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.1,
+    shadowRadius: 16,
+    elevation: 8,
+    borderWidth: 1,
+    borderColor: 'rgba(37, 99, 235, 0.1)',
+  },
+  emptyIconContainer: {
+    marginBottom: 20,
+  },
+  emptyIconOuter: {
+    width: 100,
+    height: 100,
+    borderRadius: 50,
+    backgroundColor: 'rgba(37, 99, 235, 0.08)',
+    justifyContent: 'center',
     alignItems: 'center',
   },
-  emptyIcon: {
-    fontSize: 64,
-    marginBottom: 16,
+  emptyIconInner: {
+    width: 72,
+    height: 72,
+    borderRadius: 36,
+    backgroundColor: 'rgba(37, 99, 235, 0.12)',
+    justifyContent: 'center',
+    alignItems: 'center',
   },
-  emptyText: {
-    fontSize: 16,
-    color: '#6B7280',
+  emptyTitle: {
+    fontSize: 22,
+    fontWeight: '700',
+    color: '#1E293B',
+    marginBottom: 8,
+    textAlign: 'center',
+  },
+  emptySubtitle: {
+    fontSize: 14,
+    color: '#64748B',
+    textAlign: 'center',
+    lineHeight: 20,
+    paddingHorizontal: 16,
   },
   
   // Modal styles

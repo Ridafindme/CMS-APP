@@ -10,6 +10,7 @@ import React, { useEffect, useState } from 'react';
 import {
   ActivityIndicator,
   Alert,
+  BackHandler,
   Modal,
   Platform,
   ScrollView,
@@ -111,6 +112,20 @@ export default function BookingScreen() {
       fetchClinicHolidays();
     }
   }, [clinicId]);
+
+  // Handle Android back button for modal
+  useEffect(() => {
+    const backAction = () => {
+      if (showSuccessModal) {
+        setShowSuccessModal(false);
+        return true;
+      }
+      return false;
+    };
+
+    const backHandler = BackHandler.addEventListener('hardwareBackPress', backAction);
+    return () => backHandler.remove();
+  }, [showSuccessModal]);
 
   const fetchClinicSchedule = async () => {
     try {
