@@ -9,11 +9,7 @@
     "ios": "expo run:ios",
     "web": "expo start --web",
     "lint": "expo lint",
-    "test": "jest",
-    "test:ids": "node ./scripts/get-test-ids.js",
-    "test:heavy": "node ./scripts/test-heavy-load.js",
-    "test:race": "ts-node ./scripts/test-race-condition.ts",
-    "test:stress": "ts-node ./scripts/stress-test.ts"
+    "test": "jest"
   },
   "dependencies": {
     "@expo/vector-icons": "^15.0.3",
@@ -24,7 +20,6 @@
     "@react-navigation/native": "^7.1.8",
     "@supabase/auth-helpers-react": "^0.14.0",
     "@supabase/supabase-js": "^2.90.1",
-    "cross-fetch": "^4.1.0",
     "expo": "~54.0.32",
     "expo-auth-session": "~7.0.10",
     "expo-constants": "~18.0.13",
