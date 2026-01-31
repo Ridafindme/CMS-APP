@@ -1,6 +1,7 @@
 import { patientTheme } from '@/constants/patientTheme';
 import { useAuth } from '@/lib/AuthContext';
 import { useI18n } from '@/lib/i18n';
+import { sendPatientCancellationNotificationToDoctor } from '@/lib/notifications';
 import { supabase } from '@/lib/supabase';
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -281,14 +282,60 @@ export default function AppointmentsTab() {
           text: t.common.yes,
           style: 'destructive',
           onPress: async () => {
-            const { error } = await supabase
-              .from('appointments')
-              .update({ status: 'cancelled' })
-              .eq('id', appointmentId);
+            try {
+              // Get appointment details before cancelling for notification
+              const appointment = upcomingAppointments.find(apt => apt.id === appointmentId) || 
+                                  pastAppointments.find(apt => apt.id === appointmentId);
 
-            if (!error) {
+              const { error } = await supabase
+                .from('appointments')
+                .update({ status: 'cancelled' })
+                .eq('id', appointmentId);
+
+              if (error) throw error;
+
+              // Send notification to doctor
+              if (appointment && user) {
+                try {
+                  console.log('📨 Sending cancellation notification to doctor');
+                  
+                  // Get doctor's user_id
+                  const { data: doctorData } = await supabase
+                    .from('doctors')
+                    .select('user_id')
+                    .eq('id', appointment.doctor_id)
+                    .single();
+
+                  if (doctorData?.user_id) {
+                    // Get patient name
+                    const { data: profileData } = await supabase
+                      .from('profiles')
+                      .select('full_name')
+                      .eq('id', user.id)
+                      .single();
+
+                    const patientName = profileData?.full_name || 'A patient';
+
+                    await sendPatientCancellationNotificationToDoctor(
+                      doctorData.user_id,
+                      patientName,
+                      appointment.appointment_date,
+                      appointment.appointment_time,
+                      appointment.clinic_name
+                    );
+                    console.log('✅ Doctor notified about patient cancellation');
+                  }
+                } catch (notifError) {
+                  console.error('⚠️ Failed to notify doctor:', notifError);
+                  // Don't fail the cancellation if notification fails
+                }
+              }
+
               Alert.alert(t.common.success, t.appointments.appointmentCancelled);
               fetchAppointments();
+            } catch (err) {
+              console.error('Error cancelling appointment:', err);
+              Alert.alert(t.common.error, 'Failed to cancel appointment');
             }
           },
         },

@@ -607,6 +607,76 @@ export async function sendAppointmentReminderNotification(
 }
 
 /**
+ * Send notification to doctor when patient cancels appointment
+ */
+export async function sendPatientCancellationNotificationToDoctor(
+  doctorUserId: string,
+  patientName: string,
+  appointmentDate: string,
+  timeSlot: string,
+  clinicName: string
+) {
+  try {
+    console.log('📨 Attempting to send patient cancellation notification to doctor:', doctorUserId);
+    
+    // Get doctor's push token
+    const { data: tokenData } = await supabase
+      .from('user_push_tokens')
+      .select('push_token')
+      .eq('user_id', doctorUserId)
+      .single();
+
+    if (!tokenData?.push_token) {
+      console.log('⚠️ No push token for doctor');
+      return;
+    }
+
+    // Format date nicely
+    const date = new Date(appointmentDate);
+    const formattedDate = date.toLocaleDateString('en-US', { 
+      weekday: 'short', 
+      month: 'short', 
+      day: 'numeric' 
+    });
+
+    // Send notification via Expo Push API
+    const message = {
+      to: tokenData.push_token,
+      sound: 'default',
+      title: '❌ Appointment Cancelled by Patient',
+      body: `${patientName} cancelled their appointment on ${formattedDate} at ${timeSlot} - ${clinicName}`,
+      data: { 
+        type: 'patient_cancellation', 
+        date: appointmentDate,
+        time: timeSlot,
+        clinic: clinicName 
+      },
+      categoryIdentifier: 'appointment',
+      priority: 'high',
+    };
+
+    const response = await fetch('https://exp.host/--/api/v2/push/send', {
+      method: 'POST',
+      headers: {
+        Accept: 'application/json',
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify(message),
+    });
+
+    const result = await response.json();
+    
+    if (result.data?.status === 'ok') {
+      console.log('✅ Patient cancellation notification sent to doctor successfully');
+    } else {
+      console.log('⚠️ Doctor notification response:', result);
+    }
+  } catch (error) {
+    console.error('❌ Error sending patient cancellation notification to doctor:', error);
+  }
+}
+
+/**
  * Setup notification listeners
  */
 export function setupNotificationListeners(
