@@ -2,7 +2,7 @@ import PhoneInput from '@/components/ui/phone-input';
 import { patientTheme } from '@/constants/patientTheme';
 import { getDayKey, minutesToTime, timeToMinutes, useDoctorContext } from '@/lib/DoctorContext';
 import { useI18n } from '@/lib/i18n';
-import { scheduleTestNotification, sendAppointmentCancellationNotification, sendAppointmentConfirmationNotification, sendRescheduleNotification } from '@/lib/notifications';
+import { sendAppointmentCancellationNotification, sendAppointmentConfirmationNotification, sendRescheduleNotification } from '@/lib/notifications';
 import { supabase } from '@/lib/supabase';
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -1149,14 +1149,6 @@ export default function DailyScheduleScreen() {
           <Text style={styles.statNumber}>{stats.available}</Text>
           <Text style={styles.statLabel}>{isRTL ? 'متاح' : 'Free'}</Text>
         </View>
-        {__DEV__ && (
-          <TouchableOpacity style={styles.statItem} onPress={scheduleTestNotification}>
-            <Ionicons name="notifications-outline" size={18} color="#2563EB" />
-            <Text style={[styles.statLabel, { color: '#2563EB', marginTop: 4 }]}>
-              {isRTL ? 'اختبار' : 'Test'}
-            </Text>
-          </TouchableOpacity>
-        )}
       </View>
 
       {/* Timeline */}
