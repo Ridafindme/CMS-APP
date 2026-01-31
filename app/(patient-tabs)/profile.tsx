@@ -591,7 +591,8 @@ export default function ProfileTab() {
       >
         <KeyboardAvoidingView 
           style={styles.modalOverlay}
-          behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+          behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+          keyboardVerticalOffset={Platform.OS === 'ios' ? 0 : 20}
         >
           <TouchableOpacity 
             style={styles.modalOverlayTouchable}
@@ -622,16 +623,22 @@ export default function ProfileTab() {
                 </TouchableOpacity>
               </View>
 
-              <View style={[styles.modalHeroIcon, styles.modalHeroPrimary]}>
-                <Ionicons name="create-outline" size={26} color={theme.colors.primary} />
-              </View>
-              <Text style={[styles.modalTitle, isRTL && styles.textRight]}>{t.profile.editProfile}</Text>
-              <Text style={[styles.modalMessage, styles.editModalMessage, isRTL && styles.textRight]}>
-                {t.profile.personalInfo}
-              </Text>
+              <ScrollView 
+                showsVerticalScrollIndicator={false}
+                keyboardShouldPersistTaps="handled"
+                keyboardDismissMode="on-drag"
+                contentContainerStyle={{ paddingBottom: 100 }}
+              >
+                <View style={[styles.modalHeroIcon, styles.modalHeroPrimary]}>
+                  <Ionicons name="create-outline" size={26} color={theme.colors.primary} />
+                </View>
+                <Text style={[styles.modalTitle, isRTL && styles.textRight]}>{t.profile.editProfile}</Text>
+                <Text style={[styles.modalMessage, styles.editModalMessage, isRTL && styles.textRight]}>
+                  {t.profile.personalInfo}
+                </Text>
 
-              <View style={styles.formField}>
-                <Text style={[styles.inputLabel, isRTL && styles.textRight]}>Full Name (English)</Text>
+                <View style={styles.formField}>
+                  <Text style={[styles.inputLabel, isRTL && styles.textRight]}>Full Name (English)</Text>
                 <TextInput
                   style={[styles.input, isRTL && styles.textRight]}
                   value={editName}
@@ -731,6 +738,7 @@ export default function ProfileTab() {
                   </TouchableOpacity>
                 </View>
               </View>
+              </ScrollView>
 
               <View style={styles.modalButtons}>
                 <TouchableOpacity

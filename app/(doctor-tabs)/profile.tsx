@@ -580,7 +580,8 @@ export default function DoctorProfileScreen() {
       <Modal visible={showEditProfileModal} transparent animationType="slide" onRequestClose={() => setShowEditProfileModal(false)}>
         <View style={styles.modalOverlay}>
           <KeyboardAvoidingView
-            behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+            behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+            keyboardVerticalOffset={Platform.OS === 'ios' ? 0 : 20}
             style={styles.editProfileContainer}
           >
             <View style={styles.editProfileCard}>
@@ -621,6 +622,7 @@ export default function DoctorProfileScreen() {
                 contentContainerStyle={styles.editProfileScrollContent}
                 showsVerticalScrollIndicator={false}
                 keyboardShouldPersistTaps="handled"
+                keyboardDismissMode="on-drag"
               >
                 <View style={styles.inputGroup}>
                   <Text style={[styles.label, isRTL && styles.textRight]}>
@@ -1100,7 +1102,7 @@ const styles = StyleSheet.create({
   },
   editProfileScrollContent: {
     padding: theme.spacing.lg,
-    paddingBottom: theme.spacing.md,
+    paddingBottom: 100, // Extra space for keyboard
   },
   modalFooter: {
     flexDirection: 'row',
