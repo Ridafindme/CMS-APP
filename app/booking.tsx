@@ -539,34 +539,45 @@ export default function BookingScreen() {
 
       // Send notification to doctor about new appointment
       try {
-        console.log('📨 Sending notification to doctor:', doctorId);
+        console.log('📨 Sending notification to doctor ID:', doctorId);
         
-        // Get patient name
-        const { data: patientProfile } = await supabase
-          .from('profiles')
-          .select('full_name')
-          .eq('id', user.id)
+        // Get doctor's user_id from doctors table
+        const { data: doctorData } = await supabase
+          .from('doctors')
+          .select('user_id')
+          .eq('id', doctorId)
           .single();
 
-        // Get clinic name
-        const { data: clinicData } = await supabase
-          .from('clinics')
-          .select('name')
-          .eq('id', clinicId)
-          .single();
+        if (!doctorData?.user_id) {
+          console.log('⚠️ Could not find doctor user_id');
+        } else {
+          // Get patient name
+          const { data: patientProfile } = await supabase
+            .from('profiles')
+            .select('full_name')
+            .eq('id', user.id)
+            .single();
 
-        const patientName = patientProfile?.full_name || 'A patient';
-        const clinicName = clinicData?.name || 'Clinic';
+          // Get clinic name
+          const { data: clinicData } = await supabase
+            .from('clinics')
+            .select('name')
+            .eq('id', clinicId)
+            .single();
 
-        // Send notification to doctor
-        await sendNewAppointmentNotificationToDoctor(
-          doctorId,
-          patientName,
-          selectedDate,
-          selectedTime,
-          clinicName
-        );
-        console.log('✅ Notification sent to doctor');
+          const patientName = patientProfile?.full_name || 'A patient';
+          const clinicName = clinicData?.name || 'Clinic';
+
+          // Send notification to doctor (using user_id, not doctor id)
+          await sendNewAppointmentNotificationToDoctor(
+            doctorData.user_id,
+            patientName,
+            selectedDate,
+            selectedTime,
+            clinicName
+          );
+          console.log('✅ Notification sent to doctor user:', doctorData.user_id);
+        }
       } catch (notificationError) {
         console.error('⚠️ Failed to send notification to doctor:', notificationError);
         // Don't fail the booking if notification fails
