@@ -442,11 +442,21 @@ export default function ChatTab() {
           .single();
         
         const patientName = patientProfile?.full_name || 'Patient';
+        
+        console.log('📤 Patient sending chat notification:', {
+          from: 'Patient (user.id=' + user.id + ')',
+          to: 'Doctor (user_id=' + selectedConversation.doctor_user_id + ')',
+          senderName: patientName,
+          message: messageContent.substring(0, 30)
+        });
+        
         await sendMessageNotification(
           selectedConversation.doctor_user_id,
           patientName,
           messageContent
         );
+        
+        console.log('✅ Patient chat notification sent');
       }
       // Real-time subscription will add the message automatically
 

@@ -638,7 +638,14 @@ export default function DailyScheduleScreen() {
               
               // Send cancellation notification to patient (skip for walk-ins)
               if (appointment && appointment.booking_type !== 'walk-in' && appointment.patient_id) {
-                console.log('📨 Sending cancellation notification to patient:', appointment.patient_id);
+                console.log('� Sending cancellation notification to patient:', {
+                  patientUserId: appointment.patient_id,
+                  doctorName: profile?.full_name || 'the doctor',
+                  date: appointment.appointment_date,
+                  time: appointment.appointment_time,
+                  clinic: appointment.clinic_name || 'the clinic'
+                });
+                
                 const doctorName = profile?.full_name || 'the doctor';
                 const clinicName = appointment.clinic_name || 'the clinic';
                 await sendAppointmentCancellationNotification(
@@ -648,6 +655,9 @@ export default function DailyScheduleScreen() {
                   appointment.appointment_time,
                   clinicName,
                   'Cancelled by doctor'
+                );
+                
+                console.log('✅ Cancellation notification sent successfully');
                 );
                 console.log('✅ Cancellation notification sent');
               }

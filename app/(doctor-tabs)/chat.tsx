@@ -138,11 +138,21 @@ export default function DoctorChatScreen() {
         .single();
       
       const doctorName = doctorProfile?.full_name ? `Dr. ${doctorProfile.full_name}` : 'Doctor';
+      
+      console.log('📤 Doctor sending chat notification:', {
+        from: 'Doctor (user.id=' + user.id + ')',
+        to: 'Patient (user_id=' + selectedConversation.patient_id + ')',
+        senderName: doctorName,
+        message: messageContent.substring(0, 30)
+      });
+      
       await sendMessageNotification(
         selectedConversation.patient_id,
         doctorName,
         messageContent
       );
+      
+      console.log('✅ Doctor chat notification sent');
 
       setNewMessage('');
       await fetchMessages(selectedConversation.patient_id);

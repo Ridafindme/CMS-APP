@@ -272,6 +272,31 @@ export default function BookingScreen() {
       } catch {
         // Optional table, ignore if missing
       }
+
+      // Fetch walk-in appointments and mark as unavailable
+      try {
+        const { data: walkIns } = await supabase
+          .from('walk_in_appointments')
+          .select('appointment_date, time_slot')
+          .eq('doctor_id', doctorId)
+          .eq('clinic_id', clinicId)
+          .gte('appointment_date', new Date().toISOString().split('T')[0]);
+
+        if (walkIns && walkIns.length > 0) {
+          console.log('🚶 Walk-in appointments found:', walkIns.length);
+          // Add walk-ins to blocked slots so they appear as unavailable
+          setBlockedSlots(prev => [
+            ...prev,
+            ...walkIns.map(w => ({
+              appointment_date: w.appointment_date,
+              time_slot: w.time_slot,
+            }))
+          ]);
+        }
+      } catch (error) {
+        console.log('Walk-in appointments table not available:', error);
+        // Optional table, ignore if missing
+      }
     } catch (error) {
       console.error('Error fetching slots:', error);
     } finally {
@@ -535,7 +560,15 @@ export default function BookingScreen() {
         return;
       }
 
-      console.log('Appointment created:', data);
+      console.log('✅ Appointment created successfully:', {
+        appointmentId: data.id,
+        doctorId: doctorId,
+        clinicId: clinicId,
+        patientId: user.id,
+        date: selectedDate,
+        timeSlot: selectedTime,
+        status: 'pending'
+      });
 
       // Send notification to doctor about new appointment
       try {
