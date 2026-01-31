@@ -5,9 +5,9 @@ import { sendNewAppointmentNotificationToDoctor } from '@/lib/notifications';
 import { supabase } from '@/lib/supabase';
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
-import { useLocalSearchParams, useRouter } from 'expo-router';
+import { useFocusEffect, useLocalSearchParams, useRouter } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
-import React, { useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useState } from 'react';
 import {
   ActivityIndicator,
   Alert,
@@ -159,19 +159,29 @@ export default function BookingScreen() {
     }
   }, [clinicId]);
 
-  // Handle Android back button for modal
-  useEffect(() => {
-    const backAction = () => {
-      if (showSuccessModal) {
-        setShowSuccessModal(false);
+  // Handle Android back button
+  useFocusEffect(
+    useCallback(() => {
+      const backAction = () => {
+        if (showSuccessModal) {
+          setShowSuccessModal(false);
+          return true;
+        }
+        if (router.canGoBack()) {
+          router.back();
+        } else {
+          router.replace('/(patient-tabs)/home');
+        }
         return true;
-      }
-      return false;
-    };
+      };
 
-    const backHandler = BackHandler.addEventListener('hardwareBackPress', backAction);
-    return () => backHandler.remove();
-  }, [showSuccessModal]);
+      const backHandler = BackHandler.addEventListener('hardwareBackPress', backAction);
+      
+      return () => {
+        backHandler.remove();
+      };
+    }, [showSuccessModal, router])
+  );
 
   const fetchClinicSchedule = async () => {
     try {
@@ -1106,7 +1116,7 @@ export default function BookingScreen() {
                 <View style={[styles.modalSecondaryContent, isRTL && styles.rowReverse]}>
                   <Ionicons name="list-outline" size={18} color={theme.colors.textPrimary} />
                   <Text style={[styles.modalSecondaryText, isRTL && styles.textRight]}>
-                    {isRTL ? 'عرض المواعيد' : 'View appointments'}
+                    {isRTL ? 'معاينة' : 'Preview'}
                   </Text>
                 </View>
               </TouchableOpacity>
@@ -1428,15 +1438,18 @@ const styles = StyleSheet.create({
   },
   modalSecondary: {
     flex: 1,
+    minWidth: 0,
     borderRadius: theme.radii.lg,
     paddingVertical: theme.spacing.md,
+    paddingHorizontal: theme.spacing.sm,
     borderWidth: 1,
     borderColor: theme.colors.cardBorder,
     alignItems: 'center',
+    justifyContent: 'center',
   },
-  modalSecondaryContent: { flexDirection: 'row', alignItems: 'center', gap: 8 },
-  modalSecondaryText: { color: theme.colors.textPrimary, fontWeight: '600' },
-  modalPrimary: { flex: 1, borderRadius: theme.radii.lg, overflow: 'hidden' },
+  modalSecondaryContent: { flexDirection: 'row', alignItems: 'center', gap: 8, flexShrink: 1 },
+  modalSecondaryText: { color: theme.colors.textPrimary, fontWeight: '600', fontSize: 14, flexShrink: 1 },
+  modalPrimary: { flex: 1, minWidth: 0, borderRadius: theme.radii.lg, overflow: 'hidden' },
   modalPrimaryGradient: { paddingVertical: theme.spacing.md, alignItems: 'center' },
   modalPrimaryContent: { flexDirection: 'row', alignItems: 'center', gap: 8 },
   modalPrimaryText: { color: theme.colors.surface, fontWeight: '700', fontSize: 16 },

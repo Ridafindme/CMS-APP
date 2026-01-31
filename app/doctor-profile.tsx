@@ -3,10 +3,10 @@ import { useI18n } from '@/lib/i18n';
 import { supabase } from '@/lib/supabase';
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
-import { useLocalSearchParams, useRouter } from 'expo-router';
+import { useFocusEffect, useLocalSearchParams, useRouter } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
-import React, { useEffect, useState } from 'react';
-import { ActivityIndicator, Image, Linking, Platform, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import React, { useCallback, useEffect, useState } from 'react';
+import { ActivityIndicator, BackHandler, Image, Linking, Platform, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 
 type HeroHighlight = {
   key: string;
@@ -68,6 +68,26 @@ export default function DoctorProfileScreen() {
   useEffect(() => {
     fetchClinicSchedule();
   }, [clinicId]);
+
+  // Handle Android back button
+  useFocusEffect(
+    useCallback(() => {
+      const backAction = () => {
+        if (router.canGoBack()) {
+          router.back();
+        } else {
+          router.replace('/(patient-tabs)/home');
+        }
+        return true;
+      };
+
+      const backHandler = BackHandler.addEventListener('hardwareBackPress', backAction);
+      
+      return () => {
+        backHandler.remove();
+      };
+    }, [router])
+  );
 
   const fetchClinicSchedule = async () => {
     if (!clinicId) {
@@ -553,17 +573,9 @@ export default function DoctorProfileScreen() {
             end={{ x: 1, y: 0 }}
             style={styles.bookButton}
           >
-            <View style={[styles.bookButtonContent, isRTL && styles.rowReverse]}>
-              <View style={isRTL ? styles.alignEnd : undefined}>
-                <Text style={[styles.bookButtonLabel, isRTL && styles.textRight]}>
-                  {isRTL ? 'احجز موعداً' : 'Book Appointment'}
-                </Text>
-                <Text style={[styles.bookButtonSub, isRTL && styles.textRight]}>
-                  {isRTL ? 'يشمل رسوم الاستشارة' : 'Includes consultation fee'}
-                </Text>
-              </View>
-              <Text style={styles.bookButtonPrice}>{fee}</Text>
-            </View>
+            <Text style={[styles.bookButtonLabel, isRTL && styles.textRight]}>
+              {isRTL ? 'احجز موعداً' : 'Book Appointment'}
+            </Text>
           </LinearGradient>
         </TouchableOpacity>
       </View>
@@ -772,9 +784,6 @@ const styles = StyleSheet.create({
     elevation: 12,
     marginHorizontal: theme.spacing.lg,
   },
-  bookButton: { borderRadius: theme.radii.lg, padding: theme.spacing.lg },
-  bookButtonContent: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', gap: 16 },
-  bookButtonLabel: { color: theme.colors.surface, fontSize: 18, fontWeight: '700' },
-  bookButtonSub: { color: 'rgba(255,255,255,0.85)', fontSize: 13, marginTop: 4 },
-  bookButtonPrice: { color: theme.colors.surface, fontSize: 22, fontWeight: '800' },
+  bookButton: { borderRadius: theme.radii.lg, padding: theme.spacing.lg, alignItems: 'center', justifyContent: 'center' },
+  bookButtonLabel: { color: theme.colors.surface, fontSize: 18, fontWeight: '700', textAlign: 'center' },
 });
