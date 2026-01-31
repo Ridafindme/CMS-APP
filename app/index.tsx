@@ -377,8 +377,9 @@ const styles = StyleSheet.create({
     width: '100%',
   },
   highlightCard: {
-    width: '28%',
-    minWidth: 90,
+    flex: 1,
+    minWidth: 100,
+    maxWidth: 140,
     alignItems: 'center',
     gap: theme.spacing.sm,
     padding: theme.spacing.md,

@@ -153,7 +153,7 @@ type DoctorContextType = {
   holidays: ClinicHoliday[];
   chatConversations: ChatConversation[];
   unreadChatCount: number;
-  fetchDoctorData: () => Promise<void>;
+  fetchDoctorData: (forceRefresh?: boolean) => Promise<void>;
   fetchAppointments: (lookbackDays?: number, forceRefresh?: boolean) => Promise<void>;
   fetchClinics: () => Promise<void>;
   fetchBlockedSlots: () => Promise<void>;
@@ -221,14 +221,14 @@ export const DoctorProvider = ({ children }: { children: ReactNode }) => {
     return Date.now() - cacheRef.current[key] < CACHE_TTL;
   };
 
-  const fetchDoctorData = async () => {
+  const fetchDoctorData = async (forceRefresh: boolean = false) => {
     if (!user) {
       console.log('❌ fetchDoctorData: No user');
       return;
     }
 
-    // Check cache first
-    if (isCacheValid('doctorData')) {
+    // Check cache first (unless forceRefresh)
+    if (!forceRefresh && isCacheValid('doctorData')) {
       console.log('✅ Using cached doctor data');
       return;
     }
@@ -391,6 +391,7 @@ export const DoctorProvider = ({ children }: { children: ReactNode }) => {
         .from('appointments')
         .select('id, appointment_date, time_slot, status, clinic_id, patient_id, booking_type, walk_in_name, walk_in_phone')
         .eq('doctor_id', doctorData.id)
+        .in('status', ['pending', 'confirmed']) // Only show pending and confirmed, exclude cancelled
         .gte('appointment_date', startStr)
         .lte('appointment_date', futureStr)
         .order('appointment_date', { ascending: true });

@@ -293,6 +293,8 @@ export default function AppointmentsTab() {
                 .eq('id', appointmentId);
 
               if (error) throw error;
+              
+              console.log('✅ Appointment cancelled successfully:', appointmentId);
 
               // Send notification to doctor
               if (appointment && user) {

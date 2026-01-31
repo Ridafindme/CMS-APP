@@ -200,9 +200,11 @@ export default function DailyScheduleScreen() {
   }, [showRescheduleModal, showBlockModal, showWalkInModal, showEditWalkIn, showDatePicker]);
 
   const handleRefresh = async () => {
+    console.log('🔄 Manual refresh triggered...');
     setRefreshing(true);
-    await Promise.all([fetchAppointments(), fetchBlockedSlots()]);
+    await Promise.all([fetchAppointments(7, true), fetchBlockedSlots()]);
     setRefreshing(false);
+    console.log('✅ Manual refresh complete');
   };
 
   const generateTimeSlots = () => {
@@ -658,8 +660,6 @@ export default function DailyScheduleScreen() {
                 );
                 
                 console.log('✅ Cancellation notification sent successfully');
-                );
-                console.log('✅ Cancellation notification sent');
               }
               
               Alert.alert(t.common.success, isRTL ? 'تم إلغاء الموعد وتحرير الوقت' : 'Appointment cancelled and slot freed');

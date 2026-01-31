@@ -323,7 +323,7 @@ export default function DoctorProfileScreen() {
       if (profileSuccess && socialSuccess && doctorFieldsSuccess) {
         Alert.alert(t.common.success, isRTL ? 'تم تحديث الملف الشخصي' : 'Profile updated');
         setShowEditProfileModal(false);
-        await fetchDoctorData(); // Refresh data
+        await fetchDoctorData(true); // Force refresh to bypass cache
       } else {
         Alert.alert(t.common.error, isRTL ? 'فشل التحديث' : 'Failed to update');
       }
