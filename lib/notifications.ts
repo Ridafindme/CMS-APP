@@ -108,10 +108,13 @@ export async function registerForPushNotificationsAsync() {
   try {
     if (Platform.OS === 'android') {
       await Notifications.setNotificationChannelAsync('default', {
-        name: 'default',
+        name: 'CMS Appointments',
         importance: Notifications.AndroidImportance.MAX,
         vibrationPattern: [0, 250, 250, 250],
         lightColor: '#2563EB',
+        sound: 'default',
+        enableVibrate: true,
+        showBadge: true,
       });
     }
 
@@ -215,9 +218,14 @@ export async function sendMessageNotification(
       sound: 'default',
       title: `💬 ${senderName}`,
       body: messageContent.substring(0, 100),
-      data: { type: 'message', userId: recipientUserId },
+      data: { 
+        type: 'message', 
+        userId: recipientUserId,
+        experienceId: '@aliridaexpo/cms-app',
+      },
       categoryIdentifier: 'message',
       priority: 'high',
+      channelId: 'default',
     };
 
     const response = await fetch('https://exp.host/--/api/v2/push/send', {
@@ -297,10 +305,12 @@ export async function sendRescheduleNotification(
         type: 'appointment_reschedule', 
         date: newDate,
         time: newTime,
-        clinic: clinicName 
+        clinic: clinicName,
+        experienceId: '@aliridaexpo/cms-app',
       },
       categoryIdentifier: 'appointment',
       priority: 'high',
+      channelId: 'default',
     };
 
     const response = await fetch('https://exp.host/--/api/v2/push/send', {
@@ -372,10 +382,12 @@ export async function sendAppointmentConfirmationNotification(
         type: 'appointment_confirmation', 
         date: appointmentDate,
         time: timeSlot,
-        clinic: clinicName 
+        clinic: clinicName,
+        experienceId: '@aliridaexpo/cms-app',
       },
       categoryIdentifier: 'appointment',
       priority: 'high',
+      channelId: 'default',
     };
 
     const response = await fetch('https://exp.host/--/api/v2/push/send', {
@@ -437,10 +449,12 @@ export async function sendNewAppointmentNotificationToDoctor(
         type: 'new_appointment', 
         date: appointmentDate,
         time: timeSlot,
-        clinic: clinicName 
+        clinic: clinicName,
+        experienceId: '@aliridaexpo/cms-app',
       },
       categoryIdentifier: 'appointment',
       priority: 'high',
+      channelId: 'default',
     };
 
     const response = await fetch('https://exp.host/--/api/v2/push/send', {
@@ -516,10 +530,12 @@ export async function sendAppointmentCancellationNotification(
         date: appointmentDate,
         time: timeSlot,
         clinic: clinicName,
-        reason: reason || '' 
+        reason: reason || '',
+        experienceId: '@aliridaexpo/cms-app',
       },
       categoryIdentifier: 'appointment',
       priority: 'high',
+      channelId: 'default',
     };
 
     const response = await fetch('https://exp.host/--/api/v2/push/send', {
@@ -584,10 +600,12 @@ export async function sendAppointmentReminderNotification(
         type: 'appointment_reminder', 
         date: appointmentDate,
         time: timeSlot,
-        clinic: clinicName 
+        clinic: clinicName,
+        experienceId: '@aliridaexpo/cms-app',
       },
       categoryIdentifier: 'appointment',
       priority: 'high',
+      channelId: 'default',
     };
 
     const response = await fetch('https://exp.host/--/api/v2/push/send', {
@@ -649,10 +667,12 @@ export async function sendPatientCancellationNotificationToDoctor(
         type: 'patient_cancellation', 
         date: appointmentDate,
         time: timeSlot,
-        clinic: clinicName 
+        clinic: clinicName,
+        experienceId: '@aliridaexpo/cms-app',
       },
       categoryIdentifier: 'appointment',
       priority: 'high',
+      channelId: 'default',
     };
 
     const response = await fetch('https://exp.host/--/api/v2/push/send', {
