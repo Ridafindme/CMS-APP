@@ -11,6 +11,7 @@ import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   ActivityIndicator,
   Alert,
+  Dimensions,
   Image,
   Linking,
   ScrollView,
@@ -198,30 +199,36 @@ export default function WelcomeScreen() {
             <Text style={styles.languageToggleText}>{languageLabel}</Text>
           </TouchableOpacity>
         </View>
-        <View style={styles.heroCard}>
-          <Text style={[styles.heroEyebrow, isRTL && styles.textRight]}>{t.welcome.heroEyebrow}</Text>
-          <View style={styles.heroLogoShell}>
-            <Image source={require('@/assets/images/icon.png')} style={styles.heroLogo} />
-          </View>
-          <Text style={[styles.heroTitle, isRTL && styles.textRight]}>{t.welcome.heroTitle}</Text>
-          <Text style={[styles.heroSubtitle, isRTL && styles.textRight]}>
-            {t.welcome.heroSubtitle}
-          </Text>
-          <View style={styles.highlightGrid}>
-            {heroHighlights.map((item) => (
-              <View key={item.icon} style={styles.highlightCard}>
-                <LinearGradient
-                  colors={[theme.colors.primary, theme.colors.primaryDark]}
-                  start={{ x: 0, y: 0 }}
-                  end={{ x: 1, y: 1 }}
-                  style={styles.highlightIconGradient}
-                >
-                  <Ionicons name={item.icon} size={24} color={theme.colors.surface} />
-                </LinearGradient>
-                <Text style={[styles.highlightCardLabel, isRTL && styles.textRight]}>{item.label}</Text>
-              </View>
-            ))}
-          </View>
+        <View style={styles.heroContainer}>
+          <ScrollView
+            style={styles.heroCard}
+            contentContainerStyle={styles.heroScrollContent}
+            showsVerticalScrollIndicator={true}
+          >
+            <Text style={[styles.heroEyebrow, isRTL && styles.textRight]}>{t.welcome.heroEyebrow}</Text>
+            <View style={styles.heroLogoShell}>
+              <Image source={require('@/assets/images/icon.png')} style={styles.heroLogo} />
+            </View>
+            <Text style={[styles.heroTitle, isRTL && styles.textRight]}>{t.welcome.heroTitle}</Text>
+            <Text style={[styles.heroSubtitle, isRTL && styles.textRight]}>
+              {t.welcome.heroSubtitle}
+            </Text>
+            <View style={styles.highlightGrid}>
+              {heroHighlights.map((item) => (
+                <View key={item.icon} style={styles.highlightCard}>
+                  <LinearGradient
+                    colors={[theme.colors.primary, theme.colors.primaryDark]}
+                    start={{ x: 0, y: 0 }}
+                    end={{ x: 1, y: 1 }}
+                    style={styles.highlightIconGradient}
+                  >
+                      <Ionicons name={item.icon} size={20} color={theme.colors.surface} />
+                  </LinearGradient>
+                  <Text style={[styles.highlightCardLabel, isRTL && styles.textRight]}>{item.label}</Text>
+                </View>
+              ))}
+            </View>
+          </ScrollView>
         </View>
 
         <View style={styles.actionCard}>
@@ -319,15 +326,20 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     fontSize: 13,
   },
+  heroContainer: {
+    height: Dimensions.get('window').height * 0.45,
+  },
   heroCard: {
     backgroundColor: theme.colors.surface,
     borderRadius: 32,
-    padding: theme.spacing.lg,
-    gap: theme.spacing.sm,
-    alignItems: 'center',
     ...theme.shadow.card,
     borderWidth: 1,
     borderColor: theme.colors.cardBorder,
+  },
+  heroScrollContent: {
+    padding: theme.spacing.lg,
+    gap: theme.spacing.sm,
+    alignItems: 'center',
   },
   heroLogoShell: {
     width: 80,
@@ -370,37 +382,36 @@ const styles = StyleSheet.create({
   },
   highlightGrid: {
     flexDirection: 'row',
-    flexWrap: 'wrap',
-    justifyContent: 'center',
-    gap: theme.spacing.md,
-    marginTop: theme.spacing.md,
+    gap: theme.spacing.xs,
+    marginTop: theme.spacing.sm,
     width: '100%',
+    justifyContent: 'space-between',
   },
   highlightCard: {
     flex: 1,
-    minWidth: 100,
-    maxWidth: 140,
     alignItems: 'center',
-    gap: theme.spacing.sm,
-    padding: theme.spacing.md,
-    borderRadius: theme.radii.lg,
+    gap: 6,
+    padding: theme.spacing.xs,
+    paddingVertical: theme.spacing.sm,
+    borderRadius: theme.radii.md,
     backgroundColor: theme.colors.elevated,
     borderWidth: 1,
     borderColor: theme.colors.border,
   },
   highlightIconGradient: {
-    width: 52,
-    height: 52,
-    borderRadius: 26,
+    width: 40,
+    height: 40,
+    borderRadius: 20,
     justifyContent: 'center',
     alignItems: 'center',
   },
   highlightCardLabel: {
-    fontSize: 12,
+    fontSize: 9,
     fontWeight: '600',
     color: theme.colors.textPrimary,
     textAlign: 'center',
-    lineHeight: 16,
+    lineHeight: 12,
+    width: '100%',
   },
   actionCard: {
     backgroundColor: theme.colors.surface,
