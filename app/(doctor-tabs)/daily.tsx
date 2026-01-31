@@ -24,6 +24,7 @@ import {
   View
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { useFocusEffect } from '@react-navigation/native';
 
 type TimeSlotData = {
   time: string;
@@ -72,6 +73,58 @@ export default function DailyScheduleScreen() {
   const [rescheduleDate, setRescheduleDate] = useState('');
   const [rescheduleTime, setRescheduleTime] = useState('');
   const [rescheduling, setRescheduling] = useState(false);
+
+  // Refresh appointments when screen comes into focus
+  useFocusEffect(
+    React.useCallback(() => {
+      console.log('📱 Daily screen focused - refreshing data...');
+      fetchAppointments();
+      fetchBlockedSlots();
+    }, [])
+  );
+
+  // Real-time subscription for appointments
+  useEffect(() => {
+    console.log('🔄 Setting up real-time appointment subscription...');
+    
+    const appointmentSubscription = supabase
+      .channel('daily-appointments')
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'appointments'
+        },
+        (payload) => {
+          console.log('🔔 Real-time appointment change:', payload);
+          fetchAppointments();
+        }
+      )
+      .subscribe();
+
+    const blockedSlotsSubscription = supabase
+      .channel('daily-blocked-slots')
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'blocked_slots'
+        },
+        (payload) => {
+          console.log('🔔 Real-time blocked slot change:', payload);
+          fetchBlockedSlots();
+        }
+      )
+      .subscribe();
+
+    return () => {
+      console.log('🔌 Cleaning up real-time subscriptions...');
+      appointmentSubscription.unsubscribe();
+      blockedSlotsSubscription.unsubscribe();
+    };
+  }, []);
 
   useEffect(() => {
     console.log('🔄 Daily screen mounted, fetching appointments...');
@@ -444,20 +497,24 @@ export default function DailyScheduleScreen() {
   };
 
   const handleApprove = async (appointmentId: string) => {
+    console.log('✅ Approve button pressed for:', appointmentId);
     try {
       // Find the appointment to get patient info
       const appointment = appointments.find(apt => apt.id === appointmentId);
       if (!appointment) {
+        console.log('❌ Appointment not found:', appointmentId);
         Alert.alert(t.common.error, 'Appointment not found');
         return;
       }
 
+      console.log('📝 Updating appointment status to confirmed...');
       const { error } = await supabase
         .from('appointments')
         .update({ status: 'confirmed' })
         .eq('id', appointmentId);
 
       if (error) throw error;
+      console.log('✅ Appointment status updated');
 
       // Send confirmation notification to patient (skip for walk-ins)
       if (appointment.booking_type !== 'walk-in' && appointment.patient_id) {
@@ -473,17 +530,22 @@ export default function DailyScheduleScreen() {
       }
 
       Alert.alert(t.common.success, isRTL ? 'تم تأكيد الموعد' : 'Appointment confirmed');
+      console.log('🔄 Fetching appointments...');
       await fetchAppointments();
+      console.log('🔄 Regenerating time slots...');
+      generateTimeSlots();
     } catch (error) {
-      console.error('Approve error:', error);
+      console.error('❌ Approve error:', error);
       Alert.alert(t.common.error, isRTL ? 'فشل التأكيد' : 'Failed to confirm');
     }
   };
 
   const handleReject = async (appointmentId: string) => {
+    console.log('❌ Reject button pressed for:', appointmentId);
     // Find the appointment to get patient info
     const appointment = appointments.find(apt => apt.id === appointmentId);
     if (!appointment) {
+      console.log('❌ Appointment not found:', appointmentId);
       Alert.alert(t.common.error, 'Appointment not found');
       return;
     }
@@ -498,12 +560,14 @@ export default function DailyScheduleScreen() {
           style: 'destructive',
           onPress: async () => {
             try {
+              console.log('📝 Updating appointment status to cancelled...');
               const { error } = await supabase
                 .from('appointments')
                 .update({ status: 'cancelled' })
                 .eq('id', appointmentId);
 
               if (error) throw error;
+              console.log('✅ Appointment status updated');
 
               // Send cancellation notification to patient (skip for walk-ins)
               if (appointment.booking_type !== 'walk-in' && appointment.patient_id) {
@@ -519,9 +583,12 @@ export default function DailyScheduleScreen() {
               }
 
               Alert.alert(t.common.success, isRTL ? 'تم رفض الموعد' : 'Appointment rejected');
+              console.log('🔄 Fetching appointments...');
               await fetchAppointments();
+              console.log('🔄 Regenerating time slots...');
+              generateTimeSlots();
             } catch (error) {
-              console.error('Reject error:', error);
+              console.error('❌ Reject error:', error);
               Alert.alert(t.common.error, isRTL ? 'فشل الرفض' : 'Failed to reject');
             }
           }
@@ -531,6 +598,7 @@ export default function DailyScheduleScreen() {
   };
 
   const handleCancelAppointment = async (appointmentId: string) => {
+    console.log('🗑️ Cancel button pressed for:', appointmentId);
     Alert.alert(
       isRTL ? 'إلغاء الموعد' : 'Cancel Appointment',
       isRTL ? 'سيتم حذف الموعد وتحرير الوقت. هل أنت متأكد؟' : 'This will delete the appointment and free up the slot. Are you sure?',
@@ -541,16 +609,21 @@ export default function DailyScheduleScreen() {
           style: 'destructive',
           onPress: async () => {
             try {
+              console.log('🗑️ Deleting appointment...');
               const { error } = await supabase
                 .from('appointments')
                 .delete()
                 .eq('id', appointmentId);
 
               if (error) throw error;
+              console.log('✅ Appointment deleted');
               Alert.alert(t.common.success, isRTL ? 'تم إلغاء الموعد وتحرير الوقت' : 'Appointment cancelled and slot freed');
+              console.log('🔄 Fetching appointments...');
               await fetchAppointments();
+              console.log('🔄 Regenerating time slots...');
+              generateTimeSlots();
             } catch (error) {
-              console.error('Cancel error:', error);
+              console.error('❌ Cancel error:', error);
               Alert.alert(t.common.error, isRTL ? 'فشل الإلغاء' : 'Failed to cancel');
             }
           }

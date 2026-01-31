@@ -1,0 +1,48 @@
+{
+  "project_info": {
+    "project_number": "629147493631",
+    "project_id": "clinic-scheduler-app",
+    "storage_bucket": "clinic-scheduler-app.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:629147493631:android:2ac825a8d04326f6b5d8ca",
+        "android_client_info": {
+          "package_name": "com.Rida.clinicscheduler"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyBIrlFDY0cYYjT7QiQNNzHuQa3ysnzqpJY"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    },
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:629147493631:android:def03a8102bcf32cb5d8ca",
+        "android_client_info": {
+          "package_name": "com.cms.app"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyBIrlFDY0cYYjT7QiQNNzHuQa3ysnzqpJY"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

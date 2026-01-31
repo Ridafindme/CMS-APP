@@ -237,7 +237,7 @@ export default function BookingScreen() {
     const days = [];
     const today = new Date();
 
-    for (let i = 1; i < 15; i++) {
+    for (let i = 0; i < 14; i++) {
       const date = new Date(today);
       date.setDate(today.getDate() + i);
 
@@ -246,7 +246,7 @@ export default function BookingScreen() {
         dayName: date.toLocaleDateString(isRTL ? 'ar-SA' : 'en-US', { weekday: 'short' }),
         dayNum: date.getDate(),
         month: date.toLocaleDateString(isRTL ? 'ar-SA' : 'en-US', { month: 'short' }),
-        isToday: false,
+        isToday: i === 0,
       });
     }
     return days;
@@ -347,6 +347,48 @@ export default function BookingScreen() {
       return;
     }
 
+    // Check if user has phone number before booking
+    try {
+      const { data: profileData, error: profileError } = await supabase
+        .from('profiles')
+        .select('phone')
+        .eq('id', user.id)
+        .single();
+
+      if (profileError) {
+        console.error('Error fetching profile:', profileError);
+        Alert.alert(
+          isRTL ? 'خطأ' : 'Error',
+          isRTL ? 'حدث خطأ أثناء التحقق من ملفك الشخصي' : 'Error verifying your profile',
+        );
+        return;
+      }
+
+      if (!profileData?.phone) {
+        Alert.alert(
+          isRTL ? 'رقم الهاتف مطلوب' : 'Phone Number Required',
+          isRTL
+            ? 'يرجى إضافة رقم هاتفك في ملفك الشخصي قبل حجز موعد'
+            : 'Please add your phone number in your profile before booking an appointment. This is required for appointment confirmation and reminders.',
+          [
+            { text: isRTL ? 'إلغاء' : 'Cancel', style: 'cancel' },
+            {
+              text: isRTL ? 'إضافة رقم الهاتف' : 'Add Phone Number',
+              onPress: () => router.push('/(patient-tabs)/profile'),
+            },
+          ],
+        );
+        return;
+      }
+    } catch (err) {
+      console.error('Error checking phone number:', err);
+      Alert.alert(
+        isRTL ? 'خطأ' : 'Error',
+        isRTL ? 'حدث خطأ أثناء التحقق' : 'An error occurred while verifying your information',
+      );
+      return;
+    }
+
     if (!doctorId || !clinicId) {
       Alert.alert(
         isRTL ? 'خطأ' : 'Error',
@@ -438,7 +480,22 @@ export default function BookingScreen() {
   };
 
   const days = getNextDays();
-  const daySlots = selectedDate ? getSlotsForDate(selectedDate) : [];
+  
+  // Filter out past slots if selected date is today
+  const isSlotInPast = (dateString: string, timeString: string) => {
+    const today = new Date().toISOString().split('T')[0];
+    if (dateString !== today) return false;
+    
+    const now = new Date();
+    const currentMinutes = now.getHours() * 60 + now.getMinutes();
+    const slotMinutes = timeToMinutes(timeString);
+    
+    return slotMinutes !== null && slotMinutes <= currentMinutes;
+  };
+  
+  const allDaySlots = selectedDate ? getSlotsForDate(selectedDate) : [];
+  const daySlots = allDaySlots.filter(slot => !isSlotInPast(selectedDate || '', slot.time));
+  
   const morningSlots = daySlots.filter(s => s.period === 'morning');
   const afternoonSlots = daySlots.filter(s => s.period === 'afternoon');
   const eveningSlots = daySlots.filter(s => s.period === 'evening');

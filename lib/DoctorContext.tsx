@@ -1,4 +1,4 @@
-import React, { createContext, ReactNode, useContext, useEffect, useState } from 'react';
+import React, { createContext, ReactNode, useContext, useEffect, useRef, useState } from 'react';
 import { useAuth } from './AuthContext';
 import { supabase } from './supabase';
 
@@ -195,13 +195,52 @@ export const DoctorProvider = ({ children }: { children: ReactNode }) => {
   const [chatConversations, setChatConversations] = useState<ChatConversation[]>([]);
   const [unreadChatCount, setUnreadChatCount] = useState(0);
 
+  // Request deduplication flags
+  const fetchingRef = useRef({
+    doctorData: false,
+    clinics: false,
+    appointments: false,
+    blockedSlots: false,
+    holidays: false,
+    chat: false,
+  });
+
+  // Data cache with timestamps (5 min TTL)
+  const cacheRef = useRef({
+    doctorData: 0,
+    clinics: 0,
+    appointments: 0,
+    blockedSlots: 0,
+    holidays: 0,
+    chat: 0,
+  });
+
+  const CACHE_TTL = 5 * 60 * 1000; // 5 minutes
+
+  const isCacheValid = (key: keyof typeof cacheRef.current) => {
+    return Date.now() - cacheRef.current[key] < CACHE_TTL;
+  };
+
   const fetchDoctorData = async () => {
     if (!user) {
       console.log('❌ fetchDoctorData: No user');
       return;
     }
 
+    // Check cache first
+    if (isCacheValid('doctorData')) {
+      console.log('✅ Using cached doctor data');
+      return;
+    }
+
+    // Prevent duplicate requests
+    if (fetchingRef.current.doctorData) {
+      console.log('⏳ Doctor data fetch already in progress');
+      return;
+    }
+
     try {
+      fetchingRef.current.doctorData = true;
       setLoading(true);
       console.log('🔍 Fetching doctor data for user:', user.id);
 
@@ -249,38 +288,57 @@ export const DoctorProvider = ({ children }: { children: ReactNode }) => {
         };
         
         setDoctorData(newDoctorData);
+        cacheRef.current.doctorData = Date.now();
         console.log('✅ Doctor data set:', newDoctorData.id);
       }
     } catch (error) {
       console.error('Error fetching doctor data:', error);
     } finally {
       setLoading(false);
+      fetchingRef.current.doctorData = false;
     }
   };
 
   // Auto-fetch doctor data when user is available
   useEffect(() => {
+    console.log('🔄 DoctorContext useEffect [user]:', { hasUser: !!user, userId: user?.id });
     if (user) {
+      console.log('✅ User exists, fetching doctor data...');
       fetchDoctorData();
+    } else {
+      // Clear all data when user signs out
+      console.log('🧹 No user, clearing doctor data...');
+      setDoctorData(null);
+      setProfile(null);
+      setAppointments([]);
+      setClinics([]);
+      setBlockedSlots([]);
+      setHolidays([]);
+      setChatConversations([]);
+      setUnreadChatCount(0);
     }
   }, [user]);
 
   // Auto-fetch related data when doctorData is available
   useEffect(() => {
-    if (doctorData) {
+    console.log('🔄 DoctorContext useEffect [doctorData]:', { hasUser: !!user, hasDoctorData: !!doctorData, doctorId: doctorData?.id });
+    if (user && doctorData) {
+      console.log('✅ User and doctorData exist, fetching clinics/appointments/chat...');
       fetchClinics();
       fetchAppointments(7);
       fetchChatConversations();
     }
-  }, [doctorData]);
+  }, [doctorData, user]);
 
   // Auto-fetch blocked slots and holidays when clinics are loaded
   useEffect(() => {
-    if (doctorData && clinics.length > 0) {
+    console.log('🔄 DoctorContext useEffect [clinics]:', { hasUser: !!user, hasDoctorData: !!doctorData, clinicsCount: clinics.length });
+    if (user && doctorData && clinics.length > 0) {
+      console.log('✅ User, doctorData, and clinics exist, fetching blocked slots/holidays...');
       fetchBlockedSlots();
       fetchHolidays();
     }
-  }, [clinics, doctorData]);
+  }, [clinics, doctorData, user]);
 
   const fetchAppointments = async (lookbackDays: number = 7) => {
     if (!doctorData) {
@@ -288,7 +346,18 @@ export const DoctorProvider = ({ children }: { children: ReactNode }) => {
       return;
     }
 
+    if (isCacheValid('appointments')) {
+      console.log('✅ Using cached appointments');
+      return;
+    }
+
+    if (fetchingRef.current.appointments) {
+      console.log('⏳ Appointments fetch already in progress');
+      return;
+    }
+
     try {
+      fetchingRef.current.appointments = true;
       console.log('🔍 Fetching appointments for doctor:', doctorData.id, 'lookbackDays:', lookbackDays);
       
       // Auto-expire pending appointments older than 15 minutes
@@ -348,7 +417,7 @@ export const DoctorProvider = ({ children }: { children: ReactNode }) => {
           if (patientsError) {
             console.error('Error fetching patient profiles:', patientsError);
           } else {
-            console.log('👥 Fetched patient profiles:', patients);
+            console.log('👥 Fetched', patients?.length || 0, 'patient profiles');
           }
           
           patientsMap = new Map(patients?.map(p => [p.id, p]) || []);
@@ -392,6 +461,7 @@ export const DoctorProvider = ({ children }: { children: ReactNode }) => {
         });
 
         setAppointments(transformed);
+        cacheRef.current.appointments = Date.now();
         console.log('✅ Appointments loaded:', transformed.length);
       } else {
         setAppointments([]);
@@ -399,21 +469,39 @@ export const DoctorProvider = ({ children }: { children: ReactNode }) => {
       }
     } catch (error) {
       console.error('Error fetching appointments:', error);
+    } finally {
+      fetchingRef.current.appointments = false;
     }
   };
 
   const fetchClinics = async () => {
     if (!doctorData) return;
 
+    if (isCacheValid('clinics')) {
+      console.log('✅ Using cached clinics');
+      return;
+    }
+
+    if (fetchingRef.current.clinics) {
+      console.log('⏳ Clinics fetch already in progress');
+      return;
+    }
+
     try {
+      fetchingRef.current.clinics = true;
       const { data: clinicsData } = await supabase
         .from('clinics')
         .select('id, clinic_name, address, consultation_fee, consultation_currency, is_active, latitude, longitude, schedule, slot_minutes, mobile, landline, whatsapp')
         .eq('doctor_id', doctorData.id);
 
-      if (clinicsData) setClinics(clinicsData);
+      if (clinicsData) {
+        setClinics(clinicsData);
+        cacheRef.current.clinics = Date.now();
+      }
     } catch (error) {
       console.error('Error fetching clinics:', error);
+    } finally {
+      fetchingRef.current.clinics = false;
     }
   };
 
@@ -423,7 +511,18 @@ export const DoctorProvider = ({ children }: { children: ReactNode }) => {
       return;
     }
 
+    if (isCacheValid('blockedSlots')) {
+      console.log('✅ Using cached blocked slots');
+      return;
+    }
+
+    if (fetchingRef.current.blockedSlots) {
+      console.log('⏳ Blocked slots fetch already in progress');
+      return;
+    }
+
     try {
+      fetchingRef.current.blockedSlots = true;
       const today = new Date().toISOString().split('T')[0];
       const clinicIds = clinics.map(c => c.id);
       
@@ -447,6 +546,7 @@ export const DoctorProvider = ({ children }: { children: ReactNode }) => {
           return true;
         });
         setBlockedSlots(deduped);
+        cacheRef.current.blockedSlots = Date.now();
         console.log('✅ Blocked slots loaded:', deduped.length);
       } else {
         setBlockedSlots([]);
@@ -454,6 +554,8 @@ export const DoctorProvider = ({ children }: { children: ReactNode }) => {
       }
     } catch (error) {
       console.error('Error fetching blocked slots:', error);
+    } finally {
+      fetchingRef.current.blockedSlots = false;
     }
   };
 
@@ -463,7 +565,18 @@ export const DoctorProvider = ({ children }: { children: ReactNode }) => {
       return;
     }
 
+    if (isCacheValid('holidays')) {
+      console.log('✅ Using cached holidays');
+      return;
+    }
+
+    if (fetchingRef.current.holidays) {
+      console.log('⏳ Holidays fetch already in progress');
+      return;
+    }
+
     try {
+      fetchingRef.current.holidays = true;
       const today = new Date().toISOString().split('T')[0];
       const clinicIds = clinics.map(c => c.id);
       
@@ -480,6 +593,7 @@ export const DoctorProvider = ({ children }: { children: ReactNode }) => {
 
       if (data) {
         setHolidays(data);
+        cacheRef.current.holidays = Date.now();
         console.log('✅ Holidays loaded:', data.length);
       } else {
         setHolidays([]);
@@ -487,6 +601,8 @@ export const DoctorProvider = ({ children }: { children: ReactNode }) => {
       }
     } catch (error) {
       console.error('Error fetching holidays:', error);
+    } finally {
+      fetchingRef.current.holidays = false;
     }
   };
 
@@ -496,7 +612,18 @@ export const DoctorProvider = ({ children }: { children: ReactNode }) => {
       return;
     }
 
+    if (isCacheValid('chat')) {
+      console.log('✅ Using cached chat conversations');
+      return;
+    }
+
+    if (fetchingRef.current.chat) {
+      console.log('⏳ Chat fetch already in progress');
+      return;
+    }
+
     try {
+      fetchingRef.current.chat = true;
       console.log('💬 Fetching chat conversations for user:', user?.id);
       // Fetch conversations where doctor has messages
       const { data: messages, error } = await supabase
@@ -567,9 +694,12 @@ export const DoctorProvider = ({ children }: { children: ReactNode }) => {
       });
 
       setChatConversations(conversations);
+      cacheRef.current.chat = Date.now();
       setUnreadChatCount(totalUnread);
     } catch (error) {
       console.error('Error fetching chat conversations:', error);
+    } finally {
+      fetchingRef.current.chat = false;
     }
   };
 
@@ -582,7 +712,8 @@ export const DoctorProvider = ({ children }: { children: ReactNode }) => {
 
       if (error) throw error;
       
-      // Update local state
+      // Invalidate cache and update local state
+      cacheRef.current.appointments = 0;
       setAppointments(prev => 
         prev.map(apt => apt.id === appointmentId ? { ...apt, status } : apt)
       );
@@ -621,6 +752,8 @@ export const DoctorProvider = ({ children }: { children: ReactNode }) => {
 
       if (error) throw error;
       
+      // Invalidate cache to refetch fresh data
+      cacheRef.current.clinics = 0;
       await fetchClinics();
       return true;
     } catch (error) {
@@ -638,6 +771,8 @@ export const DoctorProvider = ({ children }: { children: ReactNode }) => {
 
       if (error) throw error;
       
+      // Invalidate cache to refetch fresh data
+      cacheRef.current.clinics = 0;
       await fetchClinics();
       return true;
     } catch (error) {
@@ -655,6 +790,8 @@ export const DoctorProvider = ({ children }: { children: ReactNode }) => {
 
       if (error) throw error;
       
+      // Invalidate cache to refetch fresh data
+      cacheRef.current.clinics = 0;
       await fetchClinics();
       return true;
     } catch (error) {

@@ -105,38 +105,44 @@ export async function registerForPushNotificationsAsync() {
     return null;
   }
 
-  if (Platform.OS === 'android') {
-    await Notifications.setNotificationChannelAsync('default', {
-      name: 'default',
-      importance: Notifications.AndroidImportance.MAX,
-      vibrationPattern: [0, 250, 250, 250],
-      lightColor: '#2563EB',
-    });
-  }
-
-  if (Device.isDevice) {
-    const { status: existingStatus } = await Notifications.getPermissionsAsync();
-    let finalStatus = existingStatus;
-    
-    if (existingStatus !== 'granted') {
-      const { status } = await Notifications.requestPermissionsAsync();
-      finalStatus = status;
+  try {
+    if (Platform.OS === 'android') {
+      await Notifications.setNotificationChannelAsync('default', {
+        name: 'default',
+        importance: Notifications.AndroidImportance.MAX,
+        vibrationPattern: [0, 250, 250, 250],
+        lightColor: '#2563EB',
+      });
     }
-    
-    if (finalStatus !== 'granted') {
-      console.log('Failed to get push token for push notification!');
-      return null;
-    }
-    
-    token = (await Notifications.getExpoPushTokenAsync({
-      projectId: '071beeff-64f2-4989-8fdf-f7e478d74765',
-    })).data;
-    console.log('📱 Push token:', token);
-  } else {
-    console.log('Must use physical device for Push Notifications');
-  }
 
-  return token;
+    if (Device.isDevice) {
+      const { status: existingStatus } = await Notifications.getPermissionsAsync();
+      let finalStatus = existingStatus;
+      
+      if (existingStatus !== 'granted') {
+        const { status } = await Notifications.requestPermissionsAsync();
+        finalStatus = status;
+      }
+      
+      if (finalStatus !== 'granted') {
+        console.log('Failed to get push token for push notification!');
+        return null;
+      }
+      
+      token = (await Notifications.getExpoPushTokenAsync({
+        projectId: '071beeff-64f2-4989-8fdf-f7e478d74765',
+      })).data;
+      console.log('📱 Push token:', token);
+    } else {
+      console.log('Must use physical device for Push Notifications');
+    }
+
+    return token;
+  } catch (error: any) {
+    console.log('⚠️ Push notification registration failed (this is OK - FCM not configured):', error.message);
+    // Return null instead of throwing - app will work without push notifications
+    return null;
+  }
 }
 
 /**
@@ -173,15 +179,27 @@ export async function sendMessageNotification(
   messageContent: string
 ) {
   try {
+    console.log('📨 Attempting to send message notification to:', recipientUserId);
+    
     // Get recipient's push token
-    const { data: tokenData } = await supabase
+    const { data: tokenData, error: tokenError } = await supabase
       .from('user_push_tokens')
       .select('push_token')
       .eq('user_id', recipientUserId)
       .single();
 
+    if (tokenError) {
+      console.log('⚠️ Error fetching push token:', tokenError.message);
+    }
+
     if (!tokenData?.push_token) {
-      console.log('No push token for user');
+      console.log('⚠️ No push token for user - using local notification fallback');
+      // Fallback to local notification if user is active in app
+      await sendLocalNotification(
+        `💬 ${senderName}`,
+        messageContent.substring(0, 100),
+        { type: 'message', userId: recipientUserId }
+      );
       return;
     }
 
@@ -206,9 +224,24 @@ export async function sendMessageNotification(
     });
 
     const result = await response.json();
-    console.log('📨 Notification sent:', result);
+    
+    if (result.data?.status === 'ok') {
+      console.log('✅ Message notification sent successfully');
+    } else {
+      console.log('⚠️ Notification response:', result);
+    }
   } catch (error) {
-    console.error('Error sending notification:', error);
+    console.error('❌ Error sending message notification:', error);
+    // Try local notification as fallback
+    try {
+      await sendLocalNotification(
+        `💬 ${senderName}`,
+        messageContent.substring(0, 100),
+        { type: 'message', userId: recipientUserId }
+      );
+    } catch (localError) {
+      console.error('Local notification fallback also failed:', localError);
+    }
   }
 }
 
@@ -274,9 +307,14 @@ export async function sendRescheduleNotification(
     });
 
     const result = await response.json();
-    console.log('📨 Reschedule notification sent:', result);
+    
+    if (result.data?.status === 'ok') {
+      console.log('✅ Reschedule notification sent successfully');
+    } else {
+      console.log('⚠️ Reschedule notification response:', result);
+    }
   } catch (error) {
-    console.error('Error sending reschedule notification:', error);
+    console.error('❌ Error sending reschedule notification:', error);
   }
 }
 

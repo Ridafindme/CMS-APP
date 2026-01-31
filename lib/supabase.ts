@@ -14,3 +14,26 @@ export const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
     flowType: 'implicit', // Use implicit flow for mobile OAuth
   },
 });
+
+// Helper function to clear all cached session data (for testing)
+export const clearAllSessionData = async () => {
+  console.log('🧹 Clearing all session data...');
+  try {
+    // Sign out from Supabase
+    await supabase.auth.signOut();
+    
+    // Clear all AsyncStorage keys related to Supabase
+    const keys = await AsyncStorage.getAllKeys();
+    const supabaseKeys = keys.filter(key => key.includes('supabase'));
+    if (supabaseKeys.length > 0) {
+      await AsyncStorage.multiRemove(supabaseKeys);
+      console.log('✅ Cleared session keys:', supabaseKeys);
+    }
+    
+    console.log('✅ All session data cleared');
+    return true;
+  } catch (error) {
+    console.error('❌ Error clearing session data:', error);
+    return false;
+  }
+};

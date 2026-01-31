@@ -18,6 +18,7 @@
       },
       "package": "com.cms.app",
       "softwareKeyboardLayoutMode": "pan",
+      "googleServicesFile": "./google-services.json",
       "notification": {
         "icon": "./assets/icon.png",
         "color": "#2563EB"
@@ -47,7 +48,12 @@
         "android.permission.ACCESS_FINE_LOCATION",
         "android.permission.ACCESS_COARSE_LOCATION",
         "android.permission.RECORD_AUDIO"
-      ]
+      ],
+      "config": {
+        "googleMaps": {
+          "apiKey": "AIzaSyBxKysxV5MNeukbU2rmXEwmu-9T7TGPULo"
+        }
+      }
     },
     "plugins": [
       [
