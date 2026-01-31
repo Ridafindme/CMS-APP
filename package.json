@@ -9,7 +9,11 @@
     "ios": "expo run:ios",
     "web": "expo start --web",
     "lint": "expo lint",
-    "test": "jest"
+    "test": "jest",
+    "test:ids": "node ./scripts/get-test-ids.js",
+    "test:heavy": "node ./scripts/test-heavy-load.js",
+    "test:race": "ts-node ./scripts/test-race-condition.ts",
+    "test:stress": "ts-node ./scripts/stress-test.ts"
   },
   "dependencies": {
     "@expo/vector-icons": "^15.0.3",
