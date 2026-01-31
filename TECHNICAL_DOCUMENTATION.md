@@ -160,6 +160,24 @@ CREATE TABLE specialties (
 );
 ```
 
+#### **currencies** (Consultation Currency Registry)
+```sql
+CREATE TABLE currencies (
+  currency_code TEXT PRIMARY KEY,
+  currency_name_en TEXT NOT NULL,
+  currency_name_ar TEXT NOT NULL,
+  currency_symbol TEXT NOT NULL,
+  is_active BOOLEAN NOT NULL DEFAULT TRUE,
+  sort_order INTEGER NOT NULL DEFAULT 100,
+  created_at TIMESTAMPTZ DEFAULT NOW(),
+  updated_at TIMESTAMPTZ DEFAULT NOW()
+);
+```
+
+> Admins toggle availability by flipping `is_active`. Only active currencies appear inside the doctor dashboard forms.
+
+Seed data ships with USD ($) and LBP (ل.ل.) and can be extended later without code changes.
+
 #### **clinics** (Clinic Locations)
 ```sql
 CREATE TABLE clinics (
@@ -176,6 +194,7 @@ CREATE TABLE clinics (
   whatsapp TEXT,
   whatsapp_local TEXT,
   consultation_fee TEXT,
+  consultation_currency TEXT,
   is_active BOOLEAN DEFAULT TRUE,
   schedule JSONB,
   slot_minutes INTEGER DEFAULT 30,
@@ -183,6 +202,12 @@ CREATE TABLE clinics (
   updated_at TIMESTAMPTZ DEFAULT NOW()
 );
 ```
+
+**Consultation Currency Behavior**
+
+- `consultation_currency` always stores one of the active `currencies.currency_code` values (e.g., `USD`, `LBP`).
+- When doctors type a consultation fee inside the clinics screen, the UI auto-picks USD for any numeric value greater than 1000 and LBP otherwise. Doctors can still override the auto-selection via the currency toggle before saving.
+- During doctor sign-up we silently apply the same >1000 rule so every newly created clinic persists a consistent currency without exposing the selector upfront.
 
 **Schedule JSONB Structure**:
 ```json
@@ -267,7 +292,10 @@ CREATE TABLE countries (
   dial_code TEXT NOT NULL,
   flag_emoji TEXT,
   mobile_format TEXT,
-  landline_format TEXT
+  landline_format TEXT,
+  currency_code TEXT,
+  currency_name TEXT,
+  currency_symbol TEXT
 );
 ```
 

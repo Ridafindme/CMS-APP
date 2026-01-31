@@ -1,9 +1,11 @@
 import PhoneInput from '@/components/ui/phone-input';
+import { patientTheme } from '@/constants/patientTheme';
 import { getDayKey, minutesToTime, timeToMinutes, useDoctorContext } from '@/lib/DoctorContext';
 import { useI18n } from '@/lib/i18n';
 import { scheduleTestNotification, sendAppointmentCancellationNotification, sendAppointmentConfirmationNotification, sendRescheduleNotification } from '@/lib/notifications';
 import { supabase } from '@/lib/supabase';
 import { Ionicons } from '@expo/vector-icons';
+import { LinearGradient } from 'expo-linear-gradient';
 import { StatusBar } from 'expo-status-bar';
 import React, { useEffect, useState } from 'react';
 import {
@@ -606,10 +608,29 @@ export default function DailyScheduleScreen() {
     if (slot.type === 'available') {
       return (
         <View style={[styles.slotCardSurface, styles.availableSurface]}>
-          <View style={styles.slotMetaRow}>
-            <View style={[styles.slotTypeChip, meta.chipStyle]}>
-              <Ionicons name={meta.icon} size={14} color={meta.iconColor} />
-              <Text style={styles.slotTypeChipText}>{meta.label}</Text>
+          <View style={[styles.slotMetaRow, isRTL && styles.slotMetaRowRtl]}>
+            <View style={styles.slotLeftContent}>
+              <View style={[styles.slotTypeChip, meta.chipStyle]}>
+                <Ionicons name={meta.icon} size={14} color={meta.iconColor} />
+                <Text style={styles.slotTypeChipText}>{meta.label}</Text>
+              </View>
+            </View>
+            
+            <View style={styles.inlineActions}>
+              <TouchableOpacity 
+                style={styles.iconChip}
+                onPress={() => handleBookWalkIn(slot.time)}
+              >
+                <Ionicons name="person-add-outline" size={16} color="#1D4ED8" />
+                <Text style={styles.iconChipText}>{isRTL ? 'زائر' : 'Walk-in'}</Text>
+              </TouchableOpacity>
+              <TouchableOpacity 
+                style={[styles.iconChip, styles.iconChipDanger]}
+                onPress={() => handleOpenBlockModal(slot.time)}
+              >
+                <Ionicons name="remove-circle-outline" size={16} color="#B91C1C" />
+                <Text style={[styles.iconChipText, styles.iconChipTextDanger]}>{isRTL ? 'حظر' : 'Block'}</Text>
+              </TouchableOpacity>
             </View>
           </View>
 
@@ -618,23 +639,6 @@ export default function DailyScheduleScreen() {
             <Text style={styles.availableLabel}>
               {isRTL ? 'أضف زائر أو احجز كتلة زمنية' : 'Add a walk-in or block this time'}
             </Text>
-          </View>
-
-          <View style={styles.inlineActions}>
-            <TouchableOpacity 
-              style={styles.iconChip}
-              onPress={() => handleBookWalkIn(slot.time)}
-            >
-              <Ionicons name="person-add-outline" size={16} color="#1D4ED8" />
-              <Text style={styles.iconChipText}>{isRTL ? 'زائر' : 'Walk-in'}</Text>
-            </TouchableOpacity>
-            <TouchableOpacity 
-              style={[styles.iconChip, styles.iconChipDanger]}
-              onPress={() => handleOpenBlockModal(slot.time)}
-            >
-              <Ionicons name="remove-circle-outline" size={16} color="#B91C1C" />
-              <Text style={[styles.iconChipText, styles.iconChipTextDanger]}>{isRTL ? 'حظر' : 'Block'}</Text>
-            </TouchableOpacity>
           </View>
         </View>
       );
@@ -823,38 +827,61 @@ export default function DailyScheduleScreen() {
     <View style={styles.container}>
       <StatusBar style="light" />
       
-      {/* Header */}
-      <View style={styles.header}>
-        <Text style={[styles.headerTitle, isRTL && styles.textRight]}>
-          {isRTL ? 'الجدول اليومي' : 'Daily Schedule'}
-        </Text>
-      </View>
-
-      {/* Date Navigator */}
-      <View style={styles.dateNavigator}>
-        <TouchableOpacity style={styles.navButton} onPress={() => changeDate(-1)}>
-          <Ionicons name="chevron-back" size={24} color="#2563EB" />
-        </TouchableOpacity>
+      {/* Hero Banner */}
+      <LinearGradient
+        colors={[patientTheme.colors.primary, patientTheme.colors.accent]}
+        start={{ x: 0, y: 0 }}
+        end={{ x: 1, y: 1 }}
+        style={styles.heroBanner}
+      >
+        {/* Decorative elements */}
+        <View style={styles.heroDecorativeCircle1} />
+        <View style={styles.heroDecorativeCircle2} />
         
-        <TouchableOpacity style={styles.dateDisplay} onPress={openDatePicker}>
-          <Ionicons name="calendar-outline" size={24} color="#2563EB" style={styles.dateIcon} />
-          <Text style={styles.dateDivider}>-</Text>
-          <View style={styles.dateDisplayText}>
-            <Text style={[styles.dateText, isRTL && styles.textRight]}>{formatDate(selectedDate)}</Text>
-            <Text style={[styles.todayHint, isRTL && styles.textRight]}>{isRTL ? 'اضغط لاختيار تاريخ' : 'Pick a date'}</Text>
+        <View style={[styles.heroContent, isRTL && styles.heroContentRtl]}>
+          <View style={styles.heroTextSection}>
+            <View style={[styles.heroBadge, isRTL && styles.heroBadgeRtl]}>
+              <Ionicons name="calendar" size={12} color="#FFFFFF" />
+              <Text style={styles.heroBadgeText}>{isRTL ? 'الجدول اليومي' : 'Daily Schedule'}</Text>
+            </View>
+            <Text style={[styles.heroTitle, isRTL && styles.textRight]}>
+              {isRTL ? 'إدارة المواعيد اليومية' : 'Manage Daily Appointments'}
+            </Text>
+            <Text style={[styles.heroSubtitle, isRTL && styles.textRight]}>
+              {isRTL ? 'راجع وأكّد حجوزات اليوم' : 'Review and confirm today\'s bookings'}
+            </Text>
           </View>
-        </TouchableOpacity>
+          
+          <View style={styles.heroIconBubble}>
+            <View style={styles.heroIconInner}>
+              <Ionicons name="calendar-outline" size={28} color="#FFFFFF" />
+            </View>
+          </View>
+        </View>
 
-        {!isToday && (
-          <TouchableOpacity style={styles.todayPill} onPress={goToToday}>
-            <Text style={styles.todayPillText}>{isRTL ? 'اليوم' : 'Today'}</Text>
+        {/* Date Navigator */}
+        <View style={[styles.dateNavigator, isRTL && styles.dateNavigatorRtl]}>
+          <TouchableOpacity style={styles.navButton} onPress={() => changeDate(-1)}>
+            <Ionicons name={isRTL ? "chevron-forward" : "chevron-back"} size={20} color="#FFFFFF" />
           </TouchableOpacity>
-        )}
-        
-        <TouchableOpacity style={styles.navButton} onPress={() => changeDate(1)}>
-          <Ionicons name="chevron-forward" size={24} color="#2563EB" />
-        </TouchableOpacity>
-      </View>
+          
+          <TouchableOpacity style={styles.dateDisplay} onPress={openDatePicker}>
+            <View style={[styles.dateCard, isRTL && styles.dateCardRtl]}>
+              <Ionicons name="calendar" size={18} color={patientTheme.colors.primary} />
+              <View style={styles.dateLabelGroup}>
+                <Text style={[styles.dateText, isRTL && styles.textRight]}>{formatDate(selectedDate)}</Text>
+                <Text style={[styles.dateHint, isRTL && styles.textRight]}>
+                  {isToday ? (isRTL ? 'اليوم' : 'Today') : (isRTL ? 'انقر للتغيير' : 'Tap to change')}
+                </Text>
+              </View>
+            </View>
+          </TouchableOpacity>
+          
+          <TouchableOpacity style={styles.navButton} onPress={() => changeDate(1)}>
+            <Ionicons name={isRTL ? "chevron-back" : "chevron-forward"} size={20} color="#FFFFFF" />
+          </TouchableOpacity>
+        </View>
+      </LinearGradient>
 
       {/* Clinic Filter */}
       {clinics.length > 1 && (
@@ -1264,65 +1291,118 @@ const styles = StyleSheet.create({
   loadingText: { marginTop: 10, color: '#6B7280', fontSize: 16 },
   textRight: { textAlign: 'right' },
   
-  header: {
-    backgroundColor: '#2563EB',
-    padding: 20,
-    paddingTop: Platform.OS === 'ios' ? 60 : 40,
+  heroBanner: {
+    paddingTop: Platform.OS === 'ios' ? 40 : 20,
+    paddingBottom: 12,
+    paddingHorizontal: 20,
+    position: 'relative',
+    overflow: 'hidden',
   },
-  headerTitle: { fontSize: 24, fontWeight: 'bold', color: '#fff' },
-  
+  heroDecorativeCircle1: {
+    position: 'absolute',
+    width: 180,
+    height: 180,
+    borderRadius: 90,
+    backgroundColor: 'rgba(255, 255, 255, 0.08)',
+    top: -90,
+    right: -40,
+  },
+  heroDecorativeCircle2: {
+    position: 'absolute',
+    width: 120,
+    height: 120,
+    borderRadius: 60,
+    backgroundColor: 'rgba(255, 255, 255, 0.05)',
+    bottom: -40,
+    left: -30,
+  },
+  heroContent: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'flex-start',
+    marginBottom: 10,
+    zIndex: 1,
+  },
+  heroContentRtl: { flexDirection: 'row-reverse' },
+  heroTextSection: { flex: 1 },
+  heroBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    backgroundColor: 'rgba(255, 255, 255, 0.2)',
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 16,
+    alignSelf: 'flex-start',
+    marginBottom: 4,
+  },
+  heroBadgeRtl: { alignSelf: 'flex-end', flexDirection: 'row-reverse' },
+  heroBadgeText: { color: '#FFFFFF', fontSize: 10, fontWeight: '600', textTransform: 'uppercase', letterSpacing: 0.5 },
+  heroTitle: { color: '#FFFFFF', fontSize: 18, fontWeight: '800', lineHeight: 22, marginBottom: 3 },
+  heroSubtitle: { color: 'rgba(255,255,255,0.85)', fontSize: 12, lineHeight: 16, fontWeight: '400' },
+  heroIconBubble: { 
+    width: 44, 
+    height: 44, 
+    borderRadius: 10, 
+    backgroundColor: 'rgba(255,255,255,0.15)', 
+    alignItems: 'center', 
+    justifyContent: 'center', 
+    marginLeft: 12,
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.2)',
+  },
+  heroIconInner: {
+    width: 36,
+    height: 36,
+    borderRadius: 8,
+    backgroundColor: 'rgba(255,255,255,0.1)',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
   dateNavigator: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#fff',
-    paddingVertical: 12,
-    paddingHorizontal: 16,
-    borderBottomWidth: 1,
-    borderBottomColor: '#E5E7EB',
+    justifyContent: 'space-between',
+    zIndex: 1,
   },
+  dateNavigatorRtl: { flexDirection: 'row-reverse' },
   navButton: {
-    padding: 8,
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    backgroundColor: 'rgba(255, 255, 255, 0.2)',
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   dateDisplay: {
     flex: 1,
+    marginHorizontal: 8,
+  },
+  dateCard: {
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'center',
-    marginHorizontal: 8,
+    backgroundColor: '#FFFFFF',
+    borderRadius: 10,
+    padding: 10,
+    gap: 8,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+    elevation: 3,
   },
-  dateIcon: {
-    marginRight: 14,
-  },
-  dateDivider: {
-    fontSize: 16,
-    fontWeight: '600',
-    color: '#94A3B8',
-    marginRight: 10,
-  },
-  dateDisplayText: {
-    alignItems: 'center',
-  },
+  dateCardRtl: { flexDirection: 'row-reverse' },
+  dateLabelGroup: { flex: 1 },
   dateText: {
-    fontSize: 18,
-    fontWeight: '600',
+    fontSize: 14,
+    fontWeight: '700',
     color: '#1F2937',
+    marginBottom: 1,
   },
-  todayHint: {
-    fontSize: 11,
-    color: '#2563EB',
-    marginTop: 2,
-  },
-  todayPill: {
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderRadius: 999,
-    backgroundColor: '#E0E7FF',
-    marginHorizontal: 8,
-  },
-  todayPillText: {
-    fontSize: 12,
-    fontWeight: '600',
-    color: '#1D4ED8',
+  dateHint: {
+    fontSize: 10,
+    color: '#6B7280',
+    fontWeight: '500',
   },
   
   clinicFilter: {
@@ -1422,8 +1502,8 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: '#E5E7EB',
     backgroundColor: '#fff',
-    padding: 12,
-    gap: 10,
+    padding: 8,
+    gap: 6,
   },
   availableSurface: {
     borderStyle: 'dashed',
@@ -1438,21 +1518,26 @@ const styles = StyleSheet.create({
   },
   slotMetaRow: {
     flexDirection: 'row',
-    alignItems: 'center',
+    alignItems: 'flex-start',
     justifyContent: 'space-between',
-    flexWrap: 'wrap',
     gap: 8,
+  },
+  slotMetaRowRtl: {
+    flexDirection: 'row-reverse',
+  },
+  slotLeftContent: {
+    flex: 1,
   },
   slotTypeChip: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingHorizontal: 12,
-    paddingVertical: 4,
+    paddingHorizontal: 8,
+    paddingVertical: 3,
     borderRadius: 999,
-    gap: 6,
+    gap: 4,
   },
   slotTypeChipText: {
-    fontSize: 12,
+    fontSize: 11,
     fontWeight: '600',
     color: '#111827',
   },
@@ -1494,28 +1579,29 @@ const styles = StyleSheet.create({
   availableRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 8,
+    gap: 6,
   },
   availableLabel: {
     flex: 1,
-    fontSize: 13,
+    fontSize: 12,
     color: '#6B7280',
   },
   inlineActions: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: 8,
+    flexDirection: 'column',
+    gap: 4,
   },
   iconChip: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 6,
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderRadius: 999,
+    justifyContent: 'center',
+    gap: 4,
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 6,
     borderWidth: 1,
     borderColor: '#BFDBFE',
     backgroundColor: '#EFF6FF',
+    minWidth: 80,
   },
   iconChipDanger: {
     borderColor: '#FECACA',

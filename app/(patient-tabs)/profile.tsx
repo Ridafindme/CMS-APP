@@ -108,10 +108,13 @@ export default function ProfileTab() {
   const handleDoctorAction = () => {
     setShowDoctorModal(false);
     if (doctorInfo) {
-      router.push('/doctor-dashboard');
-    } else {
-      router.push('/sign-up-doctor');
+      if (!doctorInfo.is_approved) {
+        return;
+      }
+      router.push('/(doctor-tabs)/daily');
+      return;
     }
+    router.push('/sign-up-doctor');
   };
 
   const handleSignOut = async () => {
@@ -302,8 +305,35 @@ export default function ProfileTab() {
       : styles.doctorStatusTextPatient,
   ];
 
-  const doctorActionTitle = doctorInfo ? t.profile.switchToDoctorMode : t.profile.areYouDoctor;
-  const doctorActionSubtitle = doctorInfo ? t.profile.accessDoctorDashboard : t.profile.joinDoctorNetwork;
+  const hasDoctorRecord = Boolean(doctorInfo);
+  const doctorIsApproved = Boolean(doctorInfo?.is_approved);
+  const doctorIsPending = hasDoctorRecord && !doctorIsApproved;
+  const doctorActionTitle = doctorIsApproved
+    ? t.profile.approvedDoctorTitle
+    : doctorIsPending
+      ? t.profile.pendingDoctorTitle
+      : t.profile.areYouDoctor;
+  const doctorActionSubtitle = doctorIsApproved
+    ? t.profile.accessDoctorDashboard
+    : doctorIsPending
+      ? t.profile.pendingDoctorSubtitle
+      : t.profile.joinDoctorNetwork;
+  const doctorModalTitle = doctorInfo
+    ? doctorInfo.is_approved
+      ? t.profile.switchToDoctorMode
+      : t.profile.pendingDoctorTitle
+    : t.profile.applyAsDoctor;
+  const doctorModalSubtitle = doctorInfo
+    ? doctorInfo.is_approved
+      ? t.profile.accessDoctorDashboard
+      : t.profile.pendingDoctorSubtitle
+    : t.profile.joinDoctorNetwork;
+  const doctorModalPrimaryLabel = doctorInfo
+    ? doctorInfo.is_approved
+      ? t.profile.switchNow
+      : t.common.ok
+    : t.profile.applyNow;
+  const showDoctorModalSecondaryButton = !doctorInfo || Boolean(doctorInfo?.is_approved);
   const chevronIcon: IconName = isRTL ? 'chevron-back' : 'chevron-forward';
   const scrollContentStyle = [styles.scrollContent, { paddingTop: theme.spacing.lg + insets.top }];
 
@@ -542,28 +572,89 @@ export default function ProfileTab() {
       <Modal visible={showDoctorModal} transparent animationType="fade">
         <View style={styles.modalOverlay}>
           <View style={[styles.modalContent, styles.standardModalContent]}>
-            <Text style={styles.modalIcon}>👨‍⚕️</Text>
-            <Text style={[styles.modalTitle, isRTL && styles.textRight]}>
-              {doctorInfo ? t.profile.switchToDoctorMode : t.profile.applyAsDoctor}
-            </Text>
-            <Text style={[styles.modalMessage, isRTL && styles.textRight]}>
-              {doctorInfo 
-                ? t.profile.accessDoctorDashboard
-                : t.profile.joinDoctorNetwork}
-            </Text>
+            <View style={[
+              styles.modalHeroIcon, 
+              doctorIsApproved 
+                ? styles.modalHeroSuccess 
+                : doctorIsPending 
+                  ? styles.modalHeroWarning 
+                  : styles.modalHeroInfo
+            ]}>
+              <Ionicons 
+                name={doctorIsApproved ? "checkmark-circle" : doctorIsPending ? "time" : "medkit"} 
+                size={32} 
+                color={
+                  doctorIsApproved 
+                    ? theme.colors.success 
+                    : doctorIsPending 
+                      ? theme.colors.warning 
+                      : theme.colors.primary
+                } 
+              />
+            </View>
+            <Text style={[styles.modalTitle, isRTL && styles.textRight]}>{doctorModalTitle}</Text>
+            <Text style={[styles.modalMessage, isRTL && styles.textRight]}>{doctorModalSubtitle}</Text>
+            
+            {/* Status Badge */}
+            <View style={[
+              styles.doctorModalStatusBadge,
+              doctorIsApproved 
+                ? styles.doctorModalStatusApproved 
+                : doctorIsPending 
+                  ? styles.doctorModalStatusPending 
+                  : styles.doctorModalStatusDefault
+            ]}>
+              <Ionicons 
+                name={doctorIsApproved ? "checkmark-circle" : doctorIsPending ? "time-outline" : "information-circle-outline"} 
+                size={16} 
+                color={
+                  doctorIsApproved 
+                    ? theme.colors.success 
+                    : doctorIsPending 
+                      ? theme.colors.warning 
+                      : theme.colors.primary
+                }
+              />
+              <Text style={[
+                styles.doctorModalStatusText,
+                doctorIsApproved 
+                  ? styles.doctorModalStatusTextApproved 
+                  : doctorIsPending 
+                    ? styles.doctorModalStatusTextPending 
+                    : styles.doctorModalStatusTextDefault
+              ]}>
+                {doctorStatusLabel}
+              </Text>
+            </View>
+
             <View style={styles.modalButtons}>
+              {showDoctorModalSecondaryButton && (
+                <TouchableOpacity 
+                  style={[styles.modalButton, styles.cancelButton]}
+                  onPress={() => setShowDoctorModal(false)}
+                >
+                  <Text style={styles.cancelButtonText}>{t.common.cancel}</Text>
+                </TouchableOpacity>
+              )}
               <TouchableOpacity 
-                style={styles.modalButtonSecondary}
-                onPress={() => setShowDoctorModal(false)}
-              >
-                <Text style={styles.modalButtonSecondaryText}>{t.common.cancel}</Text>
-              </TouchableOpacity>
-              <TouchableOpacity 
-                style={styles.modalButtonPrimary}
+                style={[
+                  styles.modalButton, 
+                  doctorIsApproved 
+                    ? styles.confirmButton 
+                    : doctorIsPending 
+                      ? styles.okButton 
+                      : styles.confirmButton
+                ]}
                 onPress={handleDoctorAction}
               >
-                <Text style={styles.modalButtonPrimaryText}>
-                  {doctorInfo ? t.profile.switchNow : t.profile.applyNow}
+                <Text style={[
+                  doctorIsApproved 
+                    ? styles.confirmButtonText 
+                    : doctorIsPending 
+                      ? styles.okButtonText 
+                      : styles.confirmButtonText
+                ]}>
+                  {doctorModalPrimaryLabel}
                 </Text>
               </TouchableOpacity>
             </View>
@@ -806,6 +897,9 @@ const styles = StyleSheet.create({
     marginBottom: theme.spacing.md,
   },
   modalHeroPrimary: { backgroundColor: 'rgba(41,98,255,0.16)' },
+  modalHeroSuccess: { backgroundColor: 'rgba(34,197,94,0.16)' },
+  modalHeroWarning: { backgroundColor: 'rgba(249,115,22,0.16)' },
+  modalHeroInfo: { backgroundColor: 'rgba(59,130,246,0.16)' },
   modalTitle: { fontSize: 20, fontWeight: '700', color: theme.colors.textPrimary, marginBottom: 6, textAlign: 'center' },
   modalMessage: { fontSize: 14, color: theme.colors.textSecondary, textAlign: 'center', marginBottom: 20, lineHeight: 20 },
   editModalMessage: { marginBottom: theme.spacing.lg },
@@ -837,6 +931,25 @@ const styles = StyleSheet.create({
   cancelButtonText: { color: theme.colors.textPrimary, fontSize: 15, fontWeight: '600' },
   confirmButton: { backgroundColor: theme.colors.primary },
   confirmButtonText: { color: theme.colors.surface, fontSize: 15, fontWeight: '600' },
+  okButton: { backgroundColor: theme.colors.elevated, borderWidth: 1, borderColor: theme.colors.border },
+  okButtonText: { color: theme.colors.textPrimary, fontSize: 15, fontWeight: '600' },
+  doctorModalStatusBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    paddingHorizontal: 14,
+    paddingVertical: 8,
+    borderRadius: theme.radii.pill,
+    marginTop: theme.spacing.sm,
+    marginBottom: theme.spacing.md,
+  },
+  doctorModalStatusDefault: { backgroundColor: 'rgba(59,130,246,0.16)' },
+  doctorModalStatusApproved: { backgroundColor: 'rgba(34,197,94,0.16)' },
+  doctorModalStatusPending: { backgroundColor: 'rgba(249,115,22,0.16)' },
+  doctorModalStatusText: { fontSize: 13, fontWeight: '600' },
+  doctorModalStatusTextDefault: { color: theme.colors.primary },
+  doctorModalStatusTextApproved: { color: theme.colors.success },
+  doctorModalStatusTextPending: { color: theme.colors.warning },
   inputLabel: { fontSize: 14, color: theme.colors.textPrimary, marginBottom: 6, fontWeight: '600', width: '100%' },
   input: {
     backgroundColor: theme.colors.elevated,
@@ -849,9 +962,5 @@ const styles = StyleSheet.create({
     width: '100%',
     marginBottom: 10,
   },
-  modalButtonSecondary: { flex: 1, backgroundColor: theme.colors.elevated, padding: 14, borderRadius: theme.radii.md, alignItems: 'center' },
-  modalButtonSecondaryText: { color: theme.colors.textPrimary, fontSize: 15, fontWeight: '600' },
-  modalButtonPrimary: { flex: 1, backgroundColor: theme.colors.primary, padding: 14, borderRadius: theme.radii.md, alignItems: 'center' },
-  modalButtonPrimaryText: { color: theme.colors.surface, fontSize: 15, fontWeight: '600' },
   dangerButton: { backgroundColor: theme.colors.danger },
 });

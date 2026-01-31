@@ -84,11 +84,11 @@ export default function WelcomeScreen() {
           if (user) {
             const { data: doctorData } = await supabase
               .from('doctors')
-              .select('id')
+              .select('id, is_approved')
               .eq('user_id', user.id)
               .maybeSingle();
 
-            if (doctorData) {
+            if (doctorData && doctorData.is_approved) {
               router.replace('/doctor-dashboard');
             } else {
               router.replace('/(patient-tabs)/home');

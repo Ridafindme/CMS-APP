@@ -77,22 +77,6 @@ export default function DoctorProfileScreen() {
 
   const quickStats: Array<{ key: string; icon: IconName; label: string; value: string }> = [
     {
-      key: 'experience',
-      icon: 'briefcase-outline',
-      label: isRTL ? 'الخبرة' : 'Experience',
-      value: doctorData?.experience_years
-        ? `${doctorData.experience_years} ${isRTL ? 'سنة' : 'yrs'}`
-        : t.profile.notProvided,
-    },
-    {
-      key: 'graduate',
-      icon: 'school-outline',
-      label: isRTL ? 'سنة التخرج' : 'Graduate year',
-      value: doctorData?.graduate_year
-        ? String(doctorData.graduate_year)
-        : t.profile.notProvided,
-    },
-    {
       key: 'reviews',
       icon: 'chatbubbles-outline',
       label: isRTL ? 'المراجعات' : 'Reviews',
@@ -108,16 +92,10 @@ export default function DoctorProfileScreen() {
       value: doctorDisplayName,
     },
     {
-      key: 'email',
-      icon: 'mail-outline',
-      label: t.profile.emailLabel,
-      value: user?.email || t.profile.notProvided,
-    },
-    {
-      key: 'phone',
-      icon: 'call-outline',
-      label: t.profile.phoneLabel,
-      value: profile?.phone || t.profile.notProvided,
+      key: 'nameAr',
+      icon: 'text-outline',
+      label: isRTL ? 'الاسم الكامل بالعربي' : 'Full Name (Arabic)',
+      value: profile?.full_name_ar || t.profile.notProvided,
     },
     {
       key: 'specialty',
@@ -146,6 +124,21 @@ export default function DoctorProfileScreen() {
       icon: 'document-text-outline',
       label: isRTL ? 'نبذة تعريفية' : 'Bio',
       value: doctorData?.bio || t.profile.notProvided,
+    },
+  ];
+
+  const contactRows: Array<{ key: string; icon: IconName; label: string; value: string }> = [
+    {
+      key: 'email',
+      icon: 'mail-outline',
+      label: t.profile.emailLabel,
+      value: user?.email || t.profile.notProvided,
+    },
+    {
+      key: 'phone',
+      icon: 'call-outline',
+      label: t.profile.phoneLabel,
+      value: profile?.phone || t.profile.notProvided,
     },
     {
       key: 'instagram',
@@ -343,11 +336,15 @@ export default function DoctorProfileScreen() {
       >
         <View style={styles.heroSection}>
           <LinearGradient
-            colors={[theme.colors.primaryDark, theme.colors.primary]}
+            colors={[theme.colors.primary, theme.colors.accent]}
             start={{ x: 0, y: 0 }}
             end={{ x: 1, y: 1 }}
             style={[styles.heroCard, isRTL && styles.alignEnd]}
           >
+            {/* Decorative circles */}
+            <View style={styles.heroDecorativeCircle1} />
+            <View style={styles.heroDecorativeCircle2} />
+
             <View style={[styles.heroTopRow, isRTL && styles.rowReverse]}>
               <TouchableOpacity
                 style={styles.languageButton}
@@ -372,7 +369,9 @@ export default function DoctorProfileScreen() {
               onPress={() => router.replace('/(patient-tabs)/home')}
             >
               <View style={[styles.switchButtonContent, isRTL && styles.rowReverse]}>
-                <Ionicons name="person-outline" size={16} color={theme.colors.surface} />
+                <View style={styles.switchIconBox}>
+                  <Ionicons name="person-outline" size={16} color="#FFFFFF" />
+                </View>
                 <Text style={styles.switchButtonText}>
                   {t.doctorDashboard?.patientMode || 'Patient Mode'}
                 </Text>
@@ -380,7 +379,7 @@ export default function DoctorProfileScreen() {
               <Ionicons
                 name={isRTL ? 'arrow-back' : 'arrow-forward'}
                 size={16}
-                color={theme.colors.surface}
+                color="#FFFFFF"
               />
             </TouchableOpacity>
 
@@ -402,31 +401,61 @@ export default function DoctorProfileScreen() {
                   </View>
                 )}
                 <View style={styles.editAvatarBadge}>
-                  <Text style={styles.editAvatarIcon}>📷</Text>
+                  <Ionicons name="camera" size={16} color={theme.colors.primary} />
                 </View>
               </TouchableOpacity>
 
-              <View style={isRTL ? styles.alignEnd : undefined}>
-                <Text style={[styles.heroEyebrow, isRTL && styles.textRight]}>
-                  {isRTL ? 'ملف الطبيب' : 'Doctor profile'}
-                </Text>
+              <View style={[styles.heroTextContent, isRTL && styles.alignEnd]}>
+                <View style={[styles.heroBadge, isRTL && styles.heroBadgeRtl]}>
+                  <Ionicons name="medical" size={12} color="#FFFFFF" />
+                  <Text style={styles.heroBadgeText}>
+                    {isRTL ? 'ملف الطبيب' : 'Doctor profile'}
+                  </Text>
+                </View>
                 <Text style={[styles.heroName, isRTL && styles.textRight]}>
                   {isRTL ? `د. ${doctorDisplayName}` : `Dr. ${doctorDisplayName}`}
                 </Text>
-                <Text style={[styles.heroSpecialty, isRTL && styles.textRight]}>
-                  {specialtyIcon} {specialtyLabel}
-                </Text>
+                <View style={[styles.heroSpecialtyRow, isRTL && styles.rowReverse]}>
+                  <View style={styles.specialtyIconBox}>
+                    <Text style={styles.specialtyIconText}>{specialtyIcon}</Text>
+                  </View>
+                  <Text style={[styles.heroSpecialty, isRTL && styles.textRight]}>
+                    {specialtyLabel}
+                  </Text>
+                </View>
+                
+                {/* Experience and Graduate Year */}
+                <View style={[styles.heroInfoGrid, isRTL && styles.rowReverse]}>
+                  {doctorData?.experience_years && (
+                    <View style={[styles.heroInfoItem, isRTL && styles.rowReverse]}>
+                      <View style={styles.heroInfoIconBox}>
+                        <Ionicons name="briefcase" size={12} color="#FFFFFF" />
+                      </View>
+                      <View>
+                        <Text style={styles.heroInfoLabel}>{isRTL ? 'الخبرة' : 'Experience'}</Text>
+                        <Text style={styles.heroInfoValue}>{doctorData.experience_years} {isRTL ? 'سنة' : 'years'}</Text>
+                      </View>
+                    </View>
+                  )}
+                  {doctorData?.graduate_year && (
+                    <View style={[styles.heroInfoItem, isRTL && styles.rowReverse]}>
+                      <View style={styles.heroInfoIconBox}>
+                        <Ionicons name="school" size={12} color="#FFFFFF" />
+                      </View>
+                      <View>
+                        <Text style={styles.heroInfoLabel}>{isRTL ? 'التخرج' : 'Graduate'}</Text>
+                        <Text style={styles.heroInfoValue}>{doctorData.graduate_year}</Text>
+                      </View>
+                    </View>
+                  )}
+                </View>
               </View>
             </View>
 
             <View style={[styles.heroMetaRow, isRTL && styles.rowReverse]}>
               <View style={[styles.heroMetaBadge, isRTL && styles.rowReverse]}>
-                <Ionicons name="star" size={14} color={theme.colors.surface} />
+                <Ionicons name="star" size={14} color="#FCD34D" />
                 <Text style={styles.heroMetaText}>{ratingValue}</Text>
-              </View>
-              <View style={[styles.heroMetaBadge, isRTL && styles.rowReverse]}>
-                <Ionicons name="briefcase-outline" size={14} color={theme.colors.surface} />
-                <Text style={styles.heroMetaText}>{experienceChip}</Text>
               </View>
               <View style={[styles.heroMetaBadge, isRTL && styles.rowReverse]}>
                 <Ionicons name="chatbubble-ellipses-outline" size={14} color={theme.colors.surface} />
@@ -434,18 +463,6 @@ export default function DoctorProfileScreen() {
               </View>
             </View>
           </LinearGradient>
-        </View>
-
-        <View style={[styles.statsGrid, isRTL && styles.rowReverse]}>
-          {quickStats.map(stat => (
-            <View key={stat.key} style={styles.statCard}>
-              <View style={styles.statIconWrapper}>
-                <Ionicons name={stat.icon} size={18} color={theme.colors.primary} />
-              </View>
-              <Text style={[styles.statLabel, isRTL && styles.textRight]}>{stat.label}</Text>
-              <Text style={[styles.statValue, isRTL && styles.textRight]}>{stat.value}</Text>
-            </View>
-          ))}
         </View>
 
         <View style={styles.sectionCard}>
@@ -470,6 +487,31 @@ export default function DoctorProfileScreen() {
                   </View>
                 </View>
                 {index < infoRows.length - 1 && <View style={styles.infoDivider} />}
+              </React.Fragment>
+            ))}
+          </View>
+        </View>
+
+        <View style={styles.sectionCard}>
+          <View style={[styles.sectionHeaderRow, isRTL && styles.rowReverse]}>
+            <Text style={[styles.sectionTitle, isRTL && styles.textRight]}>
+              {isRTL ? 'معلومات التواصل والسوشيال ميديا' : 'Contact & Social Media'}
+            </Text>
+          </View>
+
+          <View style={styles.infoList}>
+            {contactRows.map((row, index) => (
+              <React.Fragment key={row.key}>
+                <View style={[styles.infoRow, isRTL && styles.rowReverse]}>
+                  <View style={styles.infoIconCircle}>
+                    <Ionicons name={row.icon} size={18} color={theme.colors.primaryDark} />
+                  </View>
+                  <View style={[styles.infoTextGroup, isRTL && styles.alignEnd]}>
+                    <Text style={[styles.infoLabel, isRTL && styles.textRight]}>{row.label}</Text>
+                    <Text style={[styles.infoValue, isRTL && styles.textRight]}>{row.value}</Text>
+                  </View>
+                </View>
+                {index < contactRows.length - 1 && <View style={styles.infoDivider} />}
               </React.Fragment>
             ))}
           </View>
@@ -516,121 +558,151 @@ export default function DoctorProfileScreen() {
       </Modal>
 
       {/* Edit Profile Modal */}
-      <Modal visible={showEditProfileModal} transparent animationType="fade" onRequestClose={() => setShowEditProfileModal(false)}>
-        <KeyboardAvoidingView
-          behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-          style={[styles.modalOverlay, styles.editProfileModalOverlay]}
-        >
-          <ScrollView
-            style={styles.editProfileModalScroll}
-            contentContainerStyle={[styles.modalScrollContent, styles.editProfileModalScrollContent]}
-            keyboardShouldPersistTaps="handled"
+      <Modal visible={showEditProfileModal} transparent animationType="slide" onRequestClose={() => setShowEditProfileModal(false)}>
+        <View style={styles.modalOverlay}>
+          <KeyboardAvoidingView
+            behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+            style={styles.editProfileContainer}
           >
-            <View style={[styles.modalContent, styles.editProfileModalContent]}>
-              <Text style={[styles.modalTitle, isRTL && styles.textRight]}>Edit Profile</Text>
-              
-              <View style={styles.inputGroup}>
-                <Text style={[styles.label, isRTL && styles.textRight]}>Full Name (English)</Text>
-                <TextInput
-                  style={[styles.input, isRTL && styles.textRight]}
-                  value={editName}
-                  onChangeText={setEditName}
-                  placeholder="Enter your full name"
-                  placeholderTextColor="#9CA3AF"
-                />
+            <View style={styles.editProfileCard}>
+              {/* Modal Header */}
+              <View style={[styles.modalHeader, isRTL && styles.rowReverse]}>
+                <View style={styles.modalHeaderLeft}>
+                  <View style={styles.modalIconBox}>
+                    <Ionicons name="create" size={20} color={theme.colors.primary} />
+                  </View>
+                  <Text style={[styles.modalTitle, isRTL && styles.textRight]}>
+                    {isRTL ? 'تعديل الملف الشخصي' : 'Edit Profile'}
+                  </Text>
+                </View>
+                <TouchableOpacity
+                  style={styles.closeButton}
+                  onPress={() => setShowEditProfileModal(false)}
+                  disabled={savingProfile}
+                >
+                  <Ionicons name="close" size={24} color={theme.colors.textSecondary} />
+                </TouchableOpacity>
               </View>
 
-              <View style={styles.inputGroup}>
-                <Text style={[styles.label, isRTL && styles.textRight]}>Full Name (Arabic)</Text>
-                <TextInput
-                  style={[styles.input, isRTL && styles.textRight]}
-                  value={editNameAr}
-                  onChangeText={setEditNameAr}
-                  placeholder="أدخل اسمك الكامل"
-                  placeholderTextColor="#9CA3AF"
+              {/* Scrollable Content */}
+              <ScrollView
+                style={styles.editProfileScroll}
+                contentContainerStyle={styles.editProfileScrollContent}
+                showsVerticalScrollIndicator={false}
+                keyboardShouldPersistTaps="handled"
+              >
+                <View style={styles.inputGroup}>
+                  <Text style={[styles.label, isRTL && styles.textRight]}>
+                    <Ionicons name="person" size={14} color={theme.colors.textMuted} /> Full Name (English)
+                  </Text>
+                  <TextInput
+                    style={[styles.input, isRTL && styles.textRight]}
+                    value={editName}
+                    onChangeText={setEditName}
+                    placeholder="Enter your full name"
+                    placeholderTextColor="#9CA3AF"
+                  />
+                </View>
+
+                <View style={styles.inputGroup}>
+                  <Text style={[styles.label, isRTL && styles.textRight]}>
+                    <Ionicons name="text" size={14} color={theme.colors.textMuted} /> Full Name (Arabic)
+                  </Text>
+                  <TextInput
+                    style={[styles.input, isRTL && styles.textRight]}
+                    value={editNameAr}
+                    onChangeText={setEditNameAr}
+                    placeholder="أدخل اسمك الكامل"
+                    placeholderTextColor="#9CA3AF"
+                  />
+                </View>
+
+                <PhoneInput
+                  value={editPhone}
+                  onChangeValue={(e164, local) => {
+                    setEditPhone(e164);
+                    setEditPhoneLocal(local);
+                  }}
+                  type="mobile"
+                  label={isRTL ? 'رقم الموبايل' : 'Mobile'}
+                  placeholder="70 123 456"
+                  icon="call-outline"
+                  isRTL={isRTL}
                 />
-              </View>
 
-              <PhoneInput
-                value={editPhone}
-                onChangeValue={(e164, local) => {
-                  setEditPhone(e164);
-                  setEditPhoneLocal(local);
-                }}
-                type="mobile"
-                label={isRTL ? 'رقم الموبايل' : 'Mobile'}
-                placeholder="70 123 456"
-                icon="call-outline"
-                isRTL={isRTL}
-              />
+                <View style={styles.inputGroup}>
+                  <Text style={[styles.label, isRTL && styles.textRight]}>
+                    <Ionicons name="logo-instagram" size={14} color={theme.colors.textMuted} /> Instagram
+                  </Text>
+                  <TextInput
+                    style={[styles.input, isRTL && styles.textRight]}
+                    value={editInstagram}
+                    onChangeText={setEditInstagram}
+                    placeholder="instagram.com/username"
+                    placeholderTextColor="#9CA3AF"
+                  />
+                </View>
 
-              <View style={styles.inputGroup}>
-                <Text style={[styles.label, isRTL && styles.textRight]}>Instagram</Text>
-                <TextInput
-                  style={[styles.input, isRTL && styles.textRight]}
-                  value={editInstagram}
-                  onChangeText={setEditInstagram}
-                  placeholder="instagram.com/username"
-                  placeholderTextColor="#9CA3AF"
-                />
-              </View>
+                <View style={styles.inputGroup}>
+                  <Text style={[styles.label, isRTL && styles.textRight]}>
+                    <Ionicons name="logo-facebook" size={14} color={theme.colors.textMuted} /> Facebook
+                  </Text>
+                  <TextInput
+                    style={[styles.input, isRTL && styles.textRight]}
+                    value={editFacebook}
+                    onChangeText={setEditFacebook}
+                    placeholder="facebook.com/page"
+                    placeholderTextColor="#9CA3AF"
+                  />
+                </View>
 
-              <View style={styles.inputGroup}>
-                <Text style={[styles.label, isRTL && styles.textRight]}>Facebook</Text>
-                <TextInput
-                  style={[styles.input, isRTL && styles.textRight]}
-                  value={editFacebook}
-                  onChangeText={setEditFacebook}
-                  placeholder="facebook.com/page"
-                  placeholderTextColor="#9CA3AF"
-                />
-              </View>
+                <View style={styles.inputGroup}>
+                  <Text style={[styles.label, isRTL && styles.textRight]}>
+                    <Ionicons name="briefcase" size={14} color={theme.colors.textMuted} /> {isRTL ? 'سنوات الخبرة' : 'Experience Years'}
+                  </Text>
+                  <TextInput
+                    style={[styles.input, isRTL && styles.textRight]}
+                    value={editExperienceYears}
+                    onChangeText={setEditExperienceYears}
+                    placeholder={isRTL ? 'مثال: 5' : 'e.g., 5'}
+                    placeholderTextColor="#9CA3AF"
+                    keyboardType="numeric"
+                  />
+                </View>
 
-              <View style={styles.inputGroup}>
-                <Text style={[styles.label, isRTL && styles.textRight]}>
-                  {isRTL ? 'سنوات الخبرة' : 'Experience Years'}
-                </Text>
-                <TextInput
-                  style={[styles.input, isRTL && styles.textRight]}
-                  value={editExperienceYears}
-                  onChangeText={setEditExperienceYears}
-                  placeholder={isRTL ? 'مثال: 5' : 'e.g., 5'}
-                  placeholderTextColor="#9CA3AF"
-                  keyboardType="numeric"
-                />
-              </View>
+                <View style={styles.inputGroup}>
+                  <Text style={[styles.label, isRTL && styles.textRight]}>
+                    <Ionicons name="school" size={14} color={theme.colors.textMuted} /> {isRTL ? 'سنة التخرج' : 'Graduate Year'}
+                  </Text>
+                  <TextInput
+                    style={[styles.input, isRTL && styles.textRight]}
+                    value={editGraduateYear}
+                    onChangeText={setEditGraduateYear}
+                    placeholder={isRTL ? 'مثال: 2018' : 'e.g., 2018'}
+                    placeholderTextColor="#9CA3AF"
+                    keyboardType="numeric"
+                  />
+                </View>
 
-              <View style={styles.inputGroup}>
-                <Text style={[styles.label, isRTL && styles.textRight]}>
-                  {isRTL ? 'سنة التخرج' : 'Graduate Year'}
-                </Text>
-                <TextInput
-                  style={[styles.input, isRTL && styles.textRight]}
-                  value={editGraduateYear}
-                  onChangeText={setEditGraduateYear}
-                  placeholder={isRTL ? 'مثال: 2018' : 'e.g., 2018'}
-                  placeholderTextColor="#9CA3AF"
-                  keyboardType="numeric"
-                />
-              </View>
+                <View style={styles.inputGroup}>
+                  <Text style={[styles.label, isRTL && styles.textRight]}>
+                    <Ionicons name="document-text" size={14} color={theme.colors.textMuted} /> {isRTL ? 'نبذة تعريفية' : 'Bio'}
+                  </Text>
+                  <TextInput
+                    style={[styles.input, styles.textArea, isRTL && styles.textRight]}
+                    value={editBio}
+                    onChangeText={setEditBio}
+                    placeholder={isRTL ? 'أخبرنا المزيد عنك...' : 'Tell us about yourself...'}
+                    placeholderTextColor="#9CA3AF"
+                    multiline
+                    numberOfLines={4}
+                    textAlignVertical="top"
+                  />
+                </View>
+              </ScrollView>
 
-              <View style={styles.inputGroup}>
-                <Text style={[styles.label, isRTL && styles.textRight]}>
-                  {isRTL ? 'نبذة تعريفية' : 'Bio'}
-                </Text>
-                <TextInput
-                  style={[styles.input, styles.textArea, isRTL && styles.textRight]}
-                  value={editBio}
-                  onChangeText={setEditBio}
-                  placeholder={isRTL ? 'أخبرنا المزيد عنك...' : 'Tell us about yourself...'}
-                  placeholderTextColor="#9CA3AF"
-                  multiline
-                  numberOfLines={4}
-                  textAlignVertical="top"
-                />
-              </View>
-
-              <View style={styles.modalButtons}>
+              {/* Fixed Footer with Buttons */}
+              <View style={styles.modalFooter}>
                 <TouchableOpacity
                   style={styles.modalButtonSecondary}
                   onPress={() => setShowEditProfileModal(false)}
@@ -651,8 +723,8 @@ export default function DoctorProfileScreen() {
                 </TouchableOpacity>
               </View>
             </View>
-          </ScrollView>
-        </KeyboardAvoidingView>
+          </KeyboardAvoidingView>
+        </View>
       </Modal>
     </View>
   );
@@ -674,8 +746,28 @@ const styles = StyleSheet.create({
     shadowRadius: 28,
     elevation: 10,
     gap: theme.spacing.md,
+    position: 'relative',
+    overflow: 'hidden',
   },
-  heroTopRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
+  heroDecorativeCircle1: {
+    position: 'absolute',
+    width: 200,
+    height: 200,
+    borderRadius: 100,
+    backgroundColor: 'rgba(255, 255, 255, 0.08)',
+    top: -100,
+    right: -50,
+  },
+  heroDecorativeCircle2: {
+    position: 'absolute',
+    width: 140,
+    height: 140,
+    borderRadius: 70,
+    backgroundColor: 'rgba(255, 255, 255, 0.05)',
+    bottom: -50,
+    left: -40,
+  },
+  heroTopRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', zIndex: 1 },
   languageButton: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -702,13 +794,24 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     borderRadius: theme.radii.lg,
     paddingVertical: 10,
-    paddingHorizontal: 16,
-    backgroundColor: 'rgba(15,23,42,0.18)',
+    paddingHorizontal: 14,
+    backgroundColor: 'rgba(255,255,255,0.12)',
     marginTop: theme.spacing.sm,
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.2)',
+    zIndex: 1,
   },
-  switchButtonContent: { flexDirection: 'row', alignItems: 'center', gap: 8 },
-  switchButtonText: { color: theme.colors.surface, fontWeight: '600' },
-  heroProfileRow: { flexDirection: 'row', alignItems: 'center', gap: theme.spacing.md },
+  switchButtonContent: { flexDirection: 'row', alignItems: 'center', gap: 10 },
+  switchIconBox: {
+    width: 28,
+    height: 28,
+    borderRadius: 7,
+    backgroundColor: 'rgba(255,255,255,0.2)',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  switchButtonText: { color: '#FFFFFF', fontWeight: '700', fontSize: 14 },
+  heroProfileRow: { flexDirection: 'row', alignItems: 'center', gap: theme.spacing.md, marginTop: theme.spacing.sm, zIndex: 1 },
   heroAvatarContainer: { position: 'relative' },
   heroAvatar: {
     width: 92,
@@ -728,8 +831,8 @@ const styles = StyleSheet.create({
   heroAvatarText: { fontSize: 38, fontWeight: '700', color: theme.colors.surface },
   editAvatarBadge: {
     position: 'absolute',
-    bottom: -2,
-    right: -2,
+    bottom: 0,
+    right: 0,
     backgroundColor: theme.colors.surface,
     width: 32,
     height: 32,
@@ -737,32 +840,96 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
     shadowColor: '#000',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.2,
-    shadowRadius: 6,
-    elevation: 6,
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.15,
+    shadowRadius: 4,
+    elevation: 4,
+    borderWidth: 2,
+    borderColor: theme.colors.primary,
   },
-  editAvatarIcon: { fontSize: 16 },
-  heroEyebrow: {
-    color: 'rgba(255,255,255,0.8)',
-    letterSpacing: 0.6,
+  heroTextContent: {
+    flex: 1,
+  },
+  heroBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    backgroundColor: 'rgba(255, 255, 255, 0.2)',
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    borderRadius: 16,
+    alignSelf: 'flex-start',
+    marginBottom: 6,
+  },
+  heroBadgeRtl: { alignSelf: 'flex-end', flexDirection: 'row-reverse' },
+  heroBadgeText: { color: '#FFFFFF', fontSize: 10, fontWeight: '600', textTransform: 'uppercase', letterSpacing: 0.5 },
+  heroName: { color: theme.colors.surface, fontSize: 24, fontWeight: '800', lineHeight: 30, marginBottom: 6 },
+  heroSpecialtyRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  specialtyIconBox: {
+    width: 28,
+    height: 28,
+    borderRadius: 6,
+    backgroundColor: 'rgba(255,255,255,0.15)',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  specialtyIconText: { fontSize: 14 },
+  heroSpecialty: { color: 'rgba(255,255,255,0.9)', fontSize: 15, fontWeight: '600' },
+  heroInfoGrid: {
+    flexDirection: 'row',
+    gap: 12,
+    marginTop: 10,
+    flexWrap: 'wrap',
+  },
+  heroInfoItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    backgroundColor: 'rgba(255,255,255,0.12)',
+    paddingHorizontal: 10,
+    paddingVertical: 7,
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.15)',
+  },
+  heroInfoIconBox: {
+    width: 24,
+    height: 24,
+    borderRadius: 6,
+    backgroundColor: 'rgba(255,255,255,0.15)',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  heroInfoLabel: {
+    fontSize: 9,
+    color: 'rgba(255,255,255,0.7)',
+    fontWeight: '600',
     textTransform: 'uppercase',
-    fontSize: 12,
-    marginBottom: 4,
+    letterSpacing: 0.5,
   },
-  heroName: { color: theme.colors.surface, fontSize: 28, fontWeight: '700' },
-  heroSpecialty: { color: 'rgba(255,255,255,0.85)', fontSize: 16 },
-  heroMetaRow: { flexDirection: 'row', gap: 10, flexWrap: 'wrap' },
+  heroInfoValue: {
+    fontSize: 13,
+    color: '#FFFFFF',
+    fontWeight: '800',
+    marginTop: 1,
+  },
+  heroMetaRow: { flexDirection: 'row', gap: 8, flexWrap: 'wrap', zIndex: 1 },
   heroMetaBadge: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 6,
-    paddingHorizontal: 12,
+    gap: 5,
+    paddingHorizontal: 10,
     paddingVertical: 6,
     borderRadius: theme.radii.pill,
-    backgroundColor: 'rgba(255,255,255,0.18)',
+    backgroundColor: 'rgba(255,255,255,0.2)',
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.15)',
   },
-  heroMetaText: { color: theme.colors.surface, fontWeight: '600' },
+  heroMetaText: { color: theme.colors.surface, fontWeight: '700', fontSize: 13 },
   rowReverse: { flexDirection: 'row-reverse' },
   textRight: { textAlign: 'right' },
   alignEnd: { alignItems: 'flex-end' },
@@ -777,50 +944,51 @@ const styles = StyleSheet.create({
     flex: 1,
     minWidth: 150,
     backgroundColor: theme.colors.surface,
-    borderRadius: theme.radii.md,
-    padding: theme.spacing.md,
+    borderRadius: theme.radii.lg,
+    padding: theme.spacing.md + 2,
     borderWidth: 1,
     borderColor: theme.colors.cardBorder,
     shadowColor: theme.colors.shadow,
-    shadowOffset: { width: 0, height: 8 },
-    shadowOpacity: 0.08,
-    shadowRadius: 18,
-    elevation: 4,
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.12,
+    shadowRadius: 12,
+    elevation: 5,
   },
   statIconWrapper: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
+    width: 40,
+    height: 40,
+    borderRadius: 10,
     backgroundColor: theme.colors.primarySoft,
     justifyContent: 'center',
     alignItems: 'center',
-    marginBottom: 10,
+    marginBottom: 12,
   },
   statLabel: {
     color: theme.colors.textMuted,
-    fontSize: 12,
+    fontSize: 11,
     textTransform: 'uppercase',
-    letterSpacing: 0.6,
+    letterSpacing: 0.8,
+    fontWeight: '600',
   },
-  statValue: { color: theme.colors.textPrimary, fontSize: 18, fontWeight: '700', marginTop: 4 },
+  statValue: { color: theme.colors.textPrimary, fontSize: 20, fontWeight: '800', marginTop: 6 },
   sectionCard: {
     marginTop: theme.spacing.lg,
     marginHorizontal: theme.spacing.lg,
     backgroundColor: theme.colors.surface,
-    borderRadius: theme.radii.lg,
+    borderRadius: theme.radii.lg + 4,
     padding: theme.spacing.lg,
     borderWidth: 1,
     borderColor: theme.colors.cardBorder,
     shadowColor: theme.colors.shadow,
-    shadowOffset: { width: 0, height: 12 },
-    shadowOpacity: 0.08,
-    shadowRadius: 22,
-    elevation: 5,
+    shadowOffset: { width: 0, height: 6 },
+    shadowOpacity: 0.12,
+    shadowRadius: 16,
+    elevation: 6,
   },
-  sectionHeaderRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: theme.spacing.md },
-  sectionTitle: { fontSize: 20, fontWeight: '700', color: theme.colors.textPrimary },
-  editButton: { flexDirection: 'row', alignItems: 'center', gap: 6 },
-  editButtonText: { color: theme.colors.primary, fontWeight: '600' },
+  sectionHeaderRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: theme.spacing.md + 4 },
+  sectionTitle: { fontSize: 20, fontWeight: '800', color: theme.colors.textPrimary },
+  editButton: { flexDirection: 'row', alignItems: 'center', gap: 6, backgroundColor: theme.colors.primarySoft, paddingHorizontal: 12, paddingVertical: 6, borderRadius: theme.radii.md },
+  editButtonText: { color: theme.colors.primary, fontWeight: '700', fontSize: 13 },
   infoList: {},
   infoRow: { flexDirection: 'row', alignItems: 'flex-start', gap: 12, paddingVertical: 14 },
   infoIconCircle: {
@@ -843,10 +1011,73 @@ const styles = StyleSheet.create({
   bottomSpacer: { height: 120 },
   modalOverlay: {
     flex: 1,
-    backgroundColor: 'rgba(5,8,20,0.65)',
+    backgroundColor: 'rgba(5,8,20,0.75)',
     justifyContent: 'center',
     alignItems: 'center',
+  },
+  editProfileContainer: {
+    width: '90%',
+    maxWidth: 500,
+    height: '85%',
+  },
+  editProfileCard: {
+    backgroundColor: theme.colors.surface,
+    borderRadius: theme.radii.lg + 4,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 20 },
+    shadowOpacity: 0.3,
+    shadowRadius: 30,
+    elevation: 15,
+    overflow: 'hidden',
+    height: '100%',
+  },
+  modalHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: theme.spacing.lg,
+    paddingTop: theme.spacing.lg,
+    paddingBottom: theme.spacing.md,
+    borderBottomWidth: 1,
+    borderBottomColor: theme.colors.border,
+    backgroundColor: theme.colors.surface,
+  },
+  modalHeaderLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+  },
+  modalIconBox: {
+    width: 40,
+    height: 40,
+    borderRadius: 10,
+    backgroundColor: theme.colors.primarySoft,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  closeButton: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    backgroundColor: theme.colors.elevated,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  editProfileScroll: {
+    flex: 1,
+  },
+  editProfileScrollContent: {
     padding: theme.spacing.lg,
+    paddingBottom: theme.spacing.md,
+  },
+  modalFooter: {
+    flexDirection: 'row',
+    gap: 12,
+    padding: theme.spacing.lg,
+    paddingTop: theme.spacing.md,
+    borderTopWidth: 1,
+    borderTopColor: theme.colors.border,
+    backgroundColor: theme.colors.surface,
   },
   avatarConfirmContent: {
     width: '90%',
@@ -856,52 +1087,46 @@ const styles = StyleSheet.create({
     padding: theme.spacing.lg,
     alignItems: 'center',
   },
-  modalTitle: { fontSize: 20, fontWeight: '700', color: theme.colors.textPrimary, marginBottom: theme.spacing.md },
+  modalTitle: { fontSize: 20, fontWeight: '800', color: theme.colors.textPrimary },
   previewImage: { width: 220, height: 220, borderRadius: 110, marginBottom: theme.spacing.md },
   emptyText: { fontSize: 14, color: theme.colors.textMuted, textAlign: 'center', marginVertical: theme.spacing.md },
-  modalButtons: { flexDirection: 'row', gap: 12, marginTop: theme.spacing.lg, width: '100%' },
+  modalButtons: { flexDirection: 'row', gap: 12, width: '100%' },
   modalButtonSecondary: {
     flex: 1,
     paddingVertical: 14,
-    borderRadius: theme.radii.md,
-    borderWidth: 1,
-    borderColor: theme.colors.cardBorder,
+    borderRadius: theme.radii.lg,
+    borderWidth: 1.5,
+    borderColor: theme.colors.border,
     backgroundColor: theme.colors.elevated,
     alignItems: 'center',
   },
-  modalButtonSecondaryText: { fontSize: 16, fontWeight: '600', color: theme.colors.textPrimary },
+  modalButtonSecondaryText: { fontSize: 15, fontWeight: '700', color: theme.colors.textPrimary },
   modalButtonPrimary: {
     flex: 1,
     paddingVertical: 14,
-    borderRadius: theme.radii.md,
+    borderRadius: theme.radii.lg,
     backgroundColor: theme.colors.primary,
     alignItems: 'center',
+    shadowColor: theme.colors.primary,
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 8,
+    elevation: 6,
   },
-  modalButtonPrimaryText: { fontSize: 16, fontWeight: '700', color: theme.colors.surface },
+  modalButtonPrimaryText: { fontSize: 15, fontWeight: '800', color: theme.colors.surface },
   buttonDisabled: { opacity: 0.5 },
-  modalContent: {
-    backgroundColor: theme.colors.surface,
-    borderRadius: theme.radii.lg,
-    padding: theme.spacing.lg,
-    width: '100%',
-    maxWidth: 420,
-  },
-  editProfileModalOverlay: { justifyContent: 'flex-end' },
-  editProfileModalScroll: { maxHeight: '92%', width: '100%' },
-  modalScrollContent: { paddingBottom: theme.spacing.xl },
-  editProfileModalScrollContent: { alignItems: 'center' },
-  editProfileModalContent: { width: '100%' },
   inputGroup: { marginBottom: theme.spacing.md },
-  label: { fontSize: 14, fontWeight: '600', color: theme.colors.textSecondary, marginBottom: 6 },
+  label: { fontSize: 13, fontWeight: '700', color: theme.colors.textSecondary, marginBottom: 8, letterSpacing: 0.3 },
   input: {
     backgroundColor: theme.colors.elevated,
-    borderWidth: 1,
+    borderWidth: 1.5,
     borderColor: theme.colors.border,
-    borderRadius: theme.radii.md,
-    paddingHorizontal: 14,
-    paddingVertical: 12,
+    borderRadius: theme.radii.lg,
+    paddingHorizontal: 16,
+    paddingVertical: 14,
     fontSize: 15,
     color: theme.colors.textPrimary,
+    fontWeight: '500',
   },
-  textArea: { minHeight: 110, paddingTop: 12 },
+  textArea: { minHeight: 120, paddingTop: 14 },
 });

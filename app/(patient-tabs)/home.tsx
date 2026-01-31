@@ -31,6 +31,7 @@ type Clinic = {
   clinic_name: string;
   address: string;
   consultation_fee: string;
+  consultation_currency: string | null;
   mobile: string;
   whatsapp: string;
   instagram: string;
@@ -80,6 +81,7 @@ export default function PatientHomeTab() {
   const [selectedSpecialty, setSelectedSpecialty] = useState<string | null>(null);
   const [userLocation, setUserLocation] = useState<UserLocation | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
+  const [currencyMap, setCurrencyMap] = useState<Record<string, { code: string; symbol: string }>>({});
 
   useEffect(() => {
     const initializeData = async () => {
@@ -89,38 +91,87 @@ export default function PatientHomeTab() {
     initializeData();
   }, [user]);
 
-  // Recalculate distances when location is obtained
+  // Recalculate distances when location is obtained or clinics change
   useEffect(() => {
-    if (userLocation && clinics.length > 0) {
-      const updatedClinics = clinics.map(clinic => {
-        const distance = calculateDistance(
+    if (clinics.length === 0) return;
+    
+    const updatedClinics = clinics.map(clinic => {
+      let distance: number | null = null;
+      
+      if (userLocation && clinic.latitude && clinic.longitude) {
+        distance = calculateDistance(
           userLocation.latitude, 
           userLocation.longitude, 
           clinic.latitude, 
           clinic.longitude
         );
-        return {
-          ...clinic,
-          distance,
-          distance_text: distance ? `${distance.toFixed(1)} km` : 'N/A',
-        };
-      });
+      }
       
-      // Sort by distance
-      updatedClinics.sort((a, b) => {
-        if (a.distance === null && b.distance === null) return 0;
-        if (a.distance === null) return 1;
-        if (b.distance === null) return -1;
-        return a.distance - b.distance;
-      });
-      
+      return {
+        ...clinic,
+        distance,
+        distance_text: distance ? `${distance.toFixed(1)} km` : 'N/A',
+      };
+    });
+    
+    // Sort by distance
+    updatedClinics.sort((a, b) => {
+      if (a.distance === null && b.distance === null) return 0;
+      if (a.distance === null) return 1;
+      if (b.distance === null) return -1;
+      return a.distance - b.distance;
+    });
+    
+    // Only update if distances actually changed
+    const hasDistanceChanges = updatedClinics.some((clinic, index) => 
+      clinic.distance !== clinics[index]?.distance
+    );
+    
+    if (hasDistanceChanges) {
       setClinics(updatedClinics);
     }
-  }, [userLocation]);
+  }, [userLocation, clinics.length]);
 
   useEffect(() => {
     filterClinics();
   }, [selectedSpecialty, clinics, searchQuery]);
+
+  useEffect(() => {
+    const fetchCurrencyMetadata = async () => {
+      const fallback = {
+        USD: { code: 'USD', symbol: '$' },
+        LBP: { code: 'LBP', symbol: 'ل.ل.' },
+      };
+
+      try {
+        const { data, error } = await supabase
+          .from('currencies')
+          .select('currency_code, currency_symbol')
+          .eq('is_active', true);
+
+        if (error) throw error;
+
+        if (data && data.length > 0) {
+          const map = data.reduce((acc, curr) => {
+            acc[curr.currency_code] = {
+              code: curr.currency_code,
+              symbol: curr.currency_symbol || curr.currency_code,
+            };
+            return acc;
+          }, {} as Record<string, { code: string; symbol: string }>);
+
+          setCurrencyMap(map);
+        } else {
+          setCurrencyMap(fallback);
+        }
+      } catch (currencyError) {
+        console.log('Error fetching currency metadata:', currencyError);
+        setCurrencyMap(fallback);
+      }
+    };
+
+    fetchCurrencyMetadata();
+  }, []);
 
   const getUserLocation = async () => {
     try {
@@ -151,6 +202,42 @@ export default function PatientHomeTab() {
     return R * c;
   };
 
+  const getCurrencyMeta = (currencyCode?: string | null) => {
+    if (!currencyCode) return null;
+    if (currencyMap[currencyCode]) return currencyMap[currencyCode];
+    if (currencyCode === 'USD') {
+      return { code: 'USD', symbol: '$' };
+    }
+    if (currencyCode === 'LBP') {
+      return { code: 'LBP', symbol: 'ل.ل.' };
+    }
+    return { code: currencyCode, symbol: currencyCode };
+  };
+
+  const formatConsultationFeeValue = (
+    amount?: string | null,
+    currencyCode?: string | null
+  ) => {
+    if (!amount || !amount.trim()) return null;
+    const currencyMeta = getCurrencyMeta(currencyCode);
+    if (!currencyMeta) return amount.trim();
+    
+    // Remove any existing formatting and parse the number
+    const cleanAmount = amount.trim().replace(/[^0-9]/g, '');
+    if (!cleanAmount) return amount.trim();
+    
+    // Format with thousands separator
+    const numericAmount = parseInt(cleanAmount, 10);
+    if (isNaN(numericAmount)) return amount.trim();
+    
+    const formattedAmount = numericAmount.toLocaleString('en-US');
+    
+    if (currencyMeta.code === 'USD') {
+      return `${currencyMeta.symbol}${formattedAmount}`;
+    }
+    return `${formattedAmount} ${currencyMeta.symbol}`;
+  };
+
   const fetchData = async () => {
     try {
       setLoading(true);
@@ -177,7 +264,7 @@ export default function PatientHomeTab() {
       const { data: clinicsData, error: clinicsError } = await supabase
         .from('clinics')
         .select(`
-          id, clinic_name, address, consultation_fee, mobile, whatsapp, latitude, longitude, doctor_id,
+          id, clinic_name, address, consultation_fee, consultation_currency, mobile, whatsapp, latitude, longitude, doctor_id,
           doctors!inner (id, user_id, specialty_code, experience_years, rating, total_reviews, is_approved, instagram, facebook, bio)
         `)
         .eq('is_active', true)
@@ -212,15 +299,24 @@ export default function PatientHomeTab() {
         const specialty = specialtiesMap.get(doctor?.specialty_code);
         
         let distance: number | null = null;
-        if (userLocation) {
-          distance = calculateDistance(userLocation.latitude, userLocation.longitude, clinic.latitude, clinic.longitude);
+        let distance_text = 'N/A';
+        
+        if (userLocation && clinic.latitude && clinic.longitude) {
+          distance = calculateDistance(
+            userLocation.latitude, 
+            userLocation.longitude, 
+            clinic.latitude, 
+            clinic.longitude
+          );
+          distance_text = distance ? `${distance.toFixed(1)} km` : 'N/A';
         }
 
         return {
           id: clinic.id,
           clinic_name: clinic.clinic_name,
           address: clinic.address || '',
-          consultation_fee: clinic.consultation_fee || t.home.consultationFee,
+          consultation_fee: clinic.consultation_fee || '',
+          consultation_currency: clinic.consultation_currency || null,
           mobile: clinic.mobile || '',
           whatsapp: clinic.whatsapp || '',
           instagram: doctor?.instagram || '',
@@ -228,7 +324,7 @@ export default function PatientHomeTab() {
           latitude: clinic.latitude,
           longitude: clinic.longitude,
           distance,
-          distance_text: distance ? `${distance.toFixed(1)} km` : 'N/A',
+          distance_text,
           doctor_id: doctor?.id,
           doctor_name: doctorProfile?.full_name ? `Dr. ${doctorProfile.full_name}` : 'Doctor',
           doctor_name_ar: doctorProfile?.full_name_ar ? `د. ${doctorProfile.full_name_ar}` : 'طبيب',
@@ -499,7 +595,11 @@ export default function PatientHomeTab() {
             </Text>
           </View>
         ) : (
-          filteredClinics.map((clinic) => (
+          filteredClinics.map((clinic) => {
+            const formattedFee =
+              formatConsultationFeeValue(clinic.consultation_fee, clinic.consultation_currency) ||
+              t.common.notAvailable;
+            return (
             <TouchableOpacity
               key={clinic.id}
               style={styles.clinicCard}
@@ -515,7 +615,9 @@ export default function PatientHomeTab() {
                   rating: clinic.rating,
                   reviews: clinic.reviews,
                   distance: clinic.distance_text,
-                  fee: clinic.consultation_fee,
+                  fee: formattedFee,
+                  fee_currency: clinic.consultation_currency || '',
+                  fee_amount: clinic.consultation_fee || '',
                   icon: clinic.specialty_icon,
                   clinic: clinic.clinic_name,
                   address: clinic.address,
@@ -596,10 +698,11 @@ export default function PatientHomeTab() {
                   <Ionicons name="card-outline" size={16} color={theme.colors.textMuted} />
                   <Text style={styles.feeLabel}>{t.home.consultationFee}</Text>
                 </View>
-                <Text style={styles.feeAmount}>{clinic.consultation_fee}</Text>
+                <Text style={styles.feeAmount}>{formattedFee}</Text>
               </View>
             </TouchableOpacity>
-          ))
+          );
+          })
         )}
 
         <View style={{ height: 100 }} />
@@ -762,7 +865,7 @@ const styles = StyleSheet.create({
   clinicFooter: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingTop: 12, borderTopWidth: 1, borderColor: theme.colors.border },
   feeLabelRow: { flexDirection: 'row', alignItems: 'center', gap: 6 },
   feeLabel: { fontSize: 13, color: theme.colors.textSecondary },
-  feeAmount: { fontSize: 16, fontWeight: '700', color: theme.colors.primaryDark },
+  feeAmount: { fontSize: 16, fontWeight: '700', color: theme.colors.primaryDark, writingDirection: 'ltr' },
   errorContainer: {
     alignItems: 'center',
     padding: theme.spacing.lg,

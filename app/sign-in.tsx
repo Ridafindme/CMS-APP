@@ -123,7 +123,7 @@ export default function SignInScreen() {
           .eq('user_id', user.id)
           .maybeSingle();
 
-        if (doctorData) {
+        if (doctorData && doctorData.is_approved) {
           router.replace('/(doctor-tabs)/daily');
         } else {
           router.replace('/(patient-tabs)/home');

@@ -23,6 +23,7 @@ export type Clinic = {
   clinic_name: string;
   address: string;
   consultation_fee: string;
+  consultation_currency?: string | null;
   is_active: boolean;
   latitude?: number;
   longitude?: number;
@@ -407,7 +408,7 @@ export const DoctorProvider = ({ children }: { children: ReactNode }) => {
     try {
       const { data: clinicsData } = await supabase
         .from('clinics')
-        .select('id, clinic_name, address, consultation_fee, is_active, latitude, longitude, schedule, slot_minutes, mobile, landline, whatsapp')
+        .select('id, clinic_name, address, consultation_fee, consultation_currency, is_active, latitude, longitude, schedule, slot_minutes, mobile, landline, whatsapp')
         .eq('doctor_id', doctorData.id);
 
       if (clinicsData) setClinics(clinicsData);
