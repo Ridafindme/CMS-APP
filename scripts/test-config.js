@@ -10,22 +10,22 @@ module.exports = {
   supabaseUrl: 'https://awqywawapwkpfpcxlbcl.supabase.co',
   supabaseAnonKey: 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImF3cXl3YXdhcHdrcGZwY3hsYmNsIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Mzc3MzQxMTMsImV4cCI6MjA1MzMxMDExM30.j-kgGJ0Ln9W3JqGdMW7vO_m7UhP7p0nYRd_b1L5s4To',
 
-  // Test IDs - UPDATE THESE WITH YOUR ACTUAL VALUES
+  // Test IDs - CONFIGURED WITH YOUR ACTUAL VALUES
   testData: {
-    // Doctor ID (from doctors table)
-    doctorId: 'YOUR_DOCTOR_ID_HERE',
+    // Doctor ID (from doctors table) - Dr. Sarah Ahmed
+    doctorId: '5038c62c-2265-49eb-a3ec-26d22a8f1e89',
     
-    // Clinic ID (from clinics table)
-    clinicId: 'YOUR_CLINIC_ID_HERE',
+    // Clinic ID (from clinics table) - Clinic 1
+    clinicId: 'bc7815e9-ce77-4ac7-958b-3b3f178699d0',
     
-    // Patient/User ID (from profiles table)
-    patientId: 'YOUR_PATIENT_ID_HERE',
+    // Patient/User ID (from profiles table) - Ahmad 1
+    patientId: '57d0d565-e638-4154-93b4-25030f8021fc',
     
     // Additional test patient IDs for concurrent tests
     additionalPatientIds: [
-      'PATIENT_ID_2',
-      'PATIENT_ID_3',
-      'PATIENT_ID_4',
+      '79304246-013b-4f3d-b7c7-d2138dcf1f6b', // Patient 2
+      '33fc8d4d-b777-4f7c-bb2b-0fcae4190738', // Patient 3
+      'e060efb7-b8b9-4033-9866-c2186b57981c', // Patient 4
     ],
   },
 
